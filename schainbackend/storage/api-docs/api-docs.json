@@ -1,0 +1,246 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Schains ERP API",
+        "description": "Schains ERP Laravel REST API Documentation",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://127.0.0.1:8000",
+            "description": "Local Laravel Development Server"
+        }
+    ],
+    "paths": {
+        "/api/items": {
+            "get": {
+                "tags": [
+                    "Items"
+                ],
+                "summary": "Get all items",
+                "description": "Returns all items from the database",
+                "operationId": "getItems",
+                "responses": {
+                    "200": {
+                        "description": "Items retrieved successfully"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Items"
+                ],
+                "summary": "Create a new item",
+                "description": "Create a new item in the database",
+                "operationId": "createItem",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "item_name"
+                                ],
+                                "properties": {
+                                    "item_name": {
+                                        "type": "string",
+                                        "example": "Gold Ring"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "default_touch": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 92
+                                    },
+                                    "item_touch": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 90
+                                    },
+                                    "added_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-07-23 10:30:00"
+                                    },
+                                    "is_need_fitem_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "mtouch": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 91.5,
+                                        "nullable": true
+                                    },
+                                    "is_barcode": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_no_barcode": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Item created successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
+        "/api/items/{id}": {
+            "get": {
+                "tags": [
+                    "Items"
+                ],
+                "summary": "Get item by ID",
+                "description": "Returns a single item by item ID",
+                "operationId": "getItemById",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Item ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Item retrieved successfully"
+                    },
+                    "404": {
+                        "description": "Item not found"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Items"
+                ],
+                "summary": "Update an item",
+                "description": "Update an existing item by item ID",
+                "operationId": "updateItem",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Item ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "item_name": {
+                                        "type": "string",
+                                        "example": "Updated Gold Ring"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "default_touch": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 92
+                                    },
+                                    "item_touch": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 91
+                                    },
+                                    "is_need_fitem_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "mtouch": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 91.5,
+                                        "nullable": true
+                                    },
+                                    "is_barcode": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_no_barcode": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Item updated successfully"
+                    },
+                    "404": {
+                        "description": "Item not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Items"
+                ],
+                "summary": "Delete an item",
+                "description": "Delete an item by item ID",
+                "operationId": "deleteItem",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Item ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Item deleted successfully"
+                    },
+                    "404": {
+                        "description": "Item not found"
+                    }
+                }
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Items",
+            "description": "Items CRUD API"
+        }
+    ]
+}
