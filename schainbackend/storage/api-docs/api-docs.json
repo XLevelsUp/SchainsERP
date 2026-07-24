@@ -1,0 +1,1298 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Schains ERP API",
+        "description": "Schains ERP Laravel REST API Documentation",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://127.0.0.1:8000",
+            "description": "Local Laravel Development Server"
+        }
+    ],
+    "paths": {
+        "/api/fitem-boxes": {
+            "get": {
+                "tags": [
+                    "Fitem Boxes"
+                ],
+                "summary": "Get all Fitem boxes",
+                "description": "Returns a list of all Fitem boxes.",
+                "operationId": "getFitemBoxes",
+                "responses": {
+                    "200": {
+                        "description": "Fitem boxes retrieved successfully"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Fitem Boxes"
+                ],
+                "summary": "Create a new Fitem box",
+                "description": "Creates a new Fitem box.",
+                "operationId": "createFitemBox",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "box_name",
+                                    "item_id",
+                                    "added_by"
+                                ],
+                                "properties": {
+                                    "box_name": {
+                                        "type": "string",
+                                        "example": "Gold Box",
+                                        "maxLength": 100
+                                    },
+                                    "item_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "added_by": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "updated_by": {
+                                        "type": "integer",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "added_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-07-23 10:30:00",
+                                        "nullable": true
+                                    },
+                                    "updated_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-07-23 10:30:00",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Fitem box created successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
+        "/api/fitem-boxes/{id}": {
+            "get": {
+                "tags": [
+                    "Fitem Boxes"
+                ],
+                "summary": "Get Fitem box by ID",
+                "description": "Returns a single Fitem box by its ID.",
+                "operationId": "getFitemBoxById",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Fitem Box ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Fitem box retrieved successfully"
+                    },
+                    "404": {
+                        "description": "Fitem box not found"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Fitem Boxes"
+                ],
+                "summary": "Update an Fitem box",
+                "description": "Updates an existing Fitem box.",
+                "operationId": "updateFitemBox",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Fitem Box ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "box_name": {
+                                        "type": "string",
+                                        "example": "Updated Gold Box",
+                                        "maxLength": 100
+                                    },
+                                    "item_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "added_by": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "updated_by": {
+                                        "type": "integer",
+                                        "example": 2,
+                                        "nullable": true
+                                    },
+                                    "updated_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-07-23 11:30:00",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Fitem box updated successfully"
+                    },
+                    "404": {
+                        "description": "Fitem box not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Fitem Boxes"
+                ],
+                "summary": "Delete an Fitem box",
+                "description": "Deletes an existing Fitem box.",
+                "operationId": "deleteFitemBox",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Fitem Box ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Fitem box deleted successfully"
+                    },
+                    "404": {
+                        "description": "Fitem box not found"
+                    }
+                }
+            }
+        },
+        "/api/items": {
+            "get": {
+                "tags": [
+                    "Items"
+                ],
+                "summary": "Get all items",
+                "description": "Returns all items from the database",
+                "operationId": "getItems",
+                "responses": {
+                    "200": {
+                        "description": "Items retrieved successfully"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Items"
+                ],
+                "summary": "Create a new item",
+                "description": "Create a new item in the database",
+                "operationId": "createItem",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "item_name"
+                                ],
+                                "properties": {
+                                    "item_name": {
+                                        "type": "string",
+                                        "example": "Gold Ring"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "default_touch": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 92
+                                    },
+                                    "item_touch": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 90
+                                    },
+                                    "added_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-07-23 10:30:00"
+                                    },
+                                    "is_need_fitem_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "mtouch": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 91.5,
+                                        "nullable": true
+                                    },
+                                    "is_barcode": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_no_barcode": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Item created successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
+        "/api/items/{id}": {
+            "get": {
+                "tags": [
+                    "Items"
+                ],
+                "summary": "Get item by ID",
+                "description": "Returns a single item by item ID",
+                "operationId": "getItemById",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Item ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Item retrieved successfully"
+                    },
+                    "404": {
+                        "description": "Item not found"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Items"
+                ],
+                "summary": "Update an item",
+                "description": "Update an existing item by item ID",
+                "operationId": "updateItem",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Item ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "item_name": {
+                                        "type": "string",
+                                        "example": "Updated Gold Ring"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "default_touch": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 92
+                                    },
+                                    "item_touch": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 91
+                                    },
+                                    "is_need_fitem_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "mtouch": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 91.5,
+                                        "nullable": true
+                                    },
+                                    "is_barcode": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_no_barcode": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Item updated successfully"
+                    },
+                    "404": {
+                        "description": "Item not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Items"
+                ],
+                "summary": "Delete an item",
+                "description": "Delete an item by item ID",
+                "operationId": "deleteItem",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Item ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Item deleted successfully"
+                    },
+                    "404": {
+                        "description": "Item not found"
+                    }
+                }
+            }
+        },
+        "/api/roles": {
+            "get": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Get all roles",
+                "description": "Returns all roles from the database",
+                "operationId": "getRoles",
+                "responses": {
+                    "200": {
+                        "description": "Roles retrieved successfully"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Create a new role",
+                "description": "Create a new role in the database",
+                "operationId": "createRole",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "role"
+                                ],
+                                "properties": {
+                                    "role": {
+                                        "type": "string",
+                                        "example": "Admin",
+                                        "maxLength": 50
+                                    },
+                                    "added_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-07-23 10:30:00"
+                                    },
+                                    "touch": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 92.5,
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Role created successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
+        "/api/roles/{id}": {
+            "get": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Get role by ID",
+                "description": "Returns a single role by ID",
+                "operationId": "getRoleById",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Role ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Role retrieved successfully"
+                    },
+                    "404": {
+                        "description": "Role not found"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Update a role",
+                "description": "Update an existing role by ID",
+                "operationId": "updateRole",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Role ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "role": {
+                                        "type": "string",
+                                        "example": "Manager",
+                                        "maxLength": 50
+                                    },
+                                    "added_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-07-23 10:30:00"
+                                    },
+                                    "touch": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 90.5,
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Role updated successfully"
+                    },
+                    "404": {
+                        "description": "Role not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Roles"
+                ],
+                "summary": "Delete a role",
+                "description": "Delete a role by ID",
+                "operationId": "deleteRole",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Role ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Role deleted successfully"
+                    },
+                    "404": {
+                        "description": "Role not found"
+                    }
+                }
+            }
+        },
+        "/api/user-details": {
+            "get": {
+                "tags": [
+                    "User Details"
+                ],
+                "summary": "Get all user details",
+                "description": "Returns all user details from the database",
+                "operationId": "getUserDetails",
+                "responses": {
+                    "200": {
+                        "description": "User details retrieved successfully"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "User Details"
+                ],
+                "summary": "Create a new user detail",
+                "description": "Creates a new user detail record",
+                "operationId": "createUserDetail",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "user_name",
+                                    "password_hash",
+                                    "address",
+                                    "signature",
+                                    "code",
+                                    "phone_no",
+                                    "proff",
+                                    "role",
+                                    "mailing_name",
+                                    "category_name",
+                                    "system_id"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Mohamed Azar"
+                                    },
+                                    "user_name": {
+                                        "type": "string",
+                                        "example": "azar"
+                                    },
+                                    "password_hash": {
+                                        "type": "string",
+                                        "example": "123456"
+                                    },
+                                    "address": {
+                                        "type": "string",
+                                        "example": "Chennai"
+                                    },
+                                    "signature": {
+                                        "type": "string",
+                                        "example": "AZ"
+                                    },
+                                    "code": {
+                                        "type": "string",
+                                        "example": "EMP001"
+                                    },
+                                    "phone_no": {
+                                        "type": "string",
+                                        "example": "9876543210"
+                                    },
+                                    "remarks": {
+                                        "type": "string",
+                                        "example": "Testing",
+                                        "nullable": true
+                                    },
+                                    "proff": {
+                                        "type": "string",
+                                        "example": "Developer"
+                                    },
+                                    "role": {
+                                        "type": "string",
+                                        "example": "Admin"
+                                    },
+                                    "customer_commants": {
+                                        "type": "string",
+                                        "example": "Customer related comments",
+                                        "nullable": true
+                                    },
+                                    "mailing_name": {
+                                        "type": "string",
+                                        "example": "Mohamed Azar"
+                                    },
+                                    "image_url": {
+                                        "type": "string",
+                                        "example": "https://example.com/image.jpg",
+                                        "nullable": true
+                                    },
+                                    "profile_image": {
+                                        "type": "string",
+                                        "example": "profile.jpg",
+                                        "nullable": true
+                                    },
+                                    "category_name": {
+                                        "type": "string",
+                                        "example": "BOTH",
+                                        "enum": [
+                                            "GRAMS",
+                                            "PURITY",
+                                            "BOTH"
+                                        ]
+                                    },
+                                    "system_id": {
+                                        "type": "string",
+                                        "example": "SYS001"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_delete": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_billable": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_create_order_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "grams_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0
+                                    },
+                                    "purity_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0
+                                    },
+                                    "stone_weight_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0,
+                                        "nullable": true
+                                    },
+                                    "beads_weight_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0,
+                                        "nullable": true
+                                    },
+                                    "net_weight_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0,
+                                        "nullable": true
+                                    },
+                                    "gross_weight_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0,
+                                        "nullable": true
+                                    },
+                                    "beads_stone_weight_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0,
+                                        "nullable": true
+                                    },
+                                    "stone_cost_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0,
+                                        "nullable": true
+                                    },
+                                    "beads_cost_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0,
+                                        "nullable": true
+                                    },
+                                    "beads_stone_cost_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0,
+                                        "nullable": true
+                                    },
+                                    "order_grand_total": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0
+                                    },
+                                    "order_grand_no_of_pcs": {
+                                        "type": "integer",
+                                        "example": 0
+                                    },
+                                    "last_txn_date": {
+                                        "type": "string",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "is_salary_person": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "per_day_salary": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0
+                                    },
+                                    "rak_cash_balance": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0
+                                    },
+                                    "last_cash_txn_date": {
+                                        "type": "string",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "is_gold_cal_enabled": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_cash_cal_enabled": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_wastage_cal_enabled": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_customerfitem_cal_enabled": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_customerfitem_cal_in_enabled": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "report_password": {
+                                        "type": "string",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "otp": {
+                                        "type": "string",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "is_otp_verified": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "allot_value": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "is_remainder_shown": {
+                                        "type": "boolean",
+                                        "example": false,
+                                        "nullable": true
+                                    },
+                                    "is_delivery_item_shown": {
+                                        "type": "boolean",
+                                        "example": false,
+                                        "nullable": true
+                                    },
+                                    "rak_rtgs_balance": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": 0
+                                    },
+                                    "last_rtgs_txn_date": {
+                                        "type": "string",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "is_polish_needed": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_wa_delivery_stock_needed": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_polish_chk_need_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_delivery_chk_need_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_cashamt_thermal_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_customer_touch_need_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_complete_history_need_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_create_order_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_cash_mngmt_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_freeze_entry_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_admin_login_otp_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_customer_cmts_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_outside_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_tally_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_die_num_search_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_con_box_rpt_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_box_tot_rpt_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_ob_cb_rpt_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_gallery_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_worker_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_emp_group_task_need_to_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_day_grand_rpt_need_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_need_pink_box_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_need_order_status_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_need_role_wise_cash_rpt_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "need_roles_in_rpt_shown": {
+                                        "type": "string",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "is_need_to_retailer_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_need_grosswgt_print_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_cus_fitem_pur_out_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_cus_fitem_pur_in_shown": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_need_show_order_display_in_head_login": {
+                                        "type": "boolean",
+                                        "example": false,
+                                        "nullable": true
+                                    },
+                                    "attendance_user_id": {
+                                        "type": "integer",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "is_metal_stock_shown": {
+                                        "type": "boolean",
+                                        "example": false,
+                                        "nullable": true
+                                    },
+                                    "top_print_out": {
+                                        "type": "string",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "incentive_sent_to": {
+                                        "type": "integer",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "vendor_barcode_group_id": {
+                                        "type": "integer",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "vendor_short_name": {
+                                        "type": "string",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "credit_out_limit": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "credit_in_limit": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "credit_limit_remarks": {
+                                        "type": "string",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "credit_limit_updated_at": {
+                                        "type": "string",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "credit_limit_updated_by": {
+                                        "type": "integer",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "temp_gram_credit_limit": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "temp_purity_credit_limit": {
+                                        "type": "number",
+                                        "format": "double",
+                                        "example": null,
+                                        "nullable": true
+                                    },
+                                    "default_mc_choice": {
+                                        "type": "string",
+                                        "example": "RETAILER",
+                                        "nullable": true,
+                                        "enum": [
+                                            "RETAILER",
+                                            "WHOLESALER"
+                                        ]
+                                    },
+                                    "page_access": {
+                                        "type": "string",
+                                        "example": "{\"dashboard\":true,\"users\":true}",
+                                        "nullable": true
+                                    },
+                                    "is_admin_head": {
+                                        "type": "integer",
+                                        "example": 0
+                                    },
+                                    "main_head_id": {
+                                        "type": "integer",
+                                        "example": null,
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "User detail created successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
+        "/api/user-details/{user_id}": {
+            "get": {
+                "tags": [
+                    "User Details"
+                ],
+                "summary": "Get user detail by ID",
+                "operationId": "getUserDetailById",
+                "parameters": [
+                    {
+                        "name": "user_id",
+                        "in": "path",
+                        "description": "User ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User detail retrieved successfully"
+                    },
+                    "404": {
+                        "description": "User detail not found"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "User Details"
+                ],
+                "summary": "Update user detail",
+                "operationId": "updateUserDetail",
+                "parameters": [
+                    {
+                        "name": "user_id",
+                        "in": "path",
+                        "description": "User ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "Mohamed Azar Updated"
+                                    },
+                                    "user_name": {
+                                        "type": "string",
+                                        "example": "azar"
+                                    },
+                                    "phone_no": {
+                                        "type": "string",
+                                        "example": "9876543210"
+                                    },
+                                    "role": {
+                                        "type": "string",
+                                        "example": "Manager"
+                                    },
+                                    "category_name": {
+                                        "type": "string",
+                                        "example": "BOTH",
+                                        "enum": [
+                                            "GRAMS",
+                                            "PURITY",
+                                            "BOTH"
+                                        ]
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "is_customerfitem_cal_enabled": {
+                                        "type": "boolean",
+                                        "example": false
+                                    },
+                                    "is_customerfitem_cal_in_enabled": {
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "User detail updated successfully"
+                    },
+                    "404": {
+                        "description": "User detail not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "User Details"
+                ],
+                "summary": "Delete user detail",
+                "operationId": "deleteUserDetail",
+                "parameters": [
+                    {
+                        "name": "user_id",
+                        "in": "path",
+                        "description": "User ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User detail deleted successfully"
+                    },
+                    "404": {
+                        "description": "User detail not found"
+                    }
+                }
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Fitem Boxes",
+            "description": "Fitem Boxes CRUD API"
+        },
+        {
+            "name": "Items",
+            "description": "Items CRUD API"
+        },
+        {
+            "name": "Roles",
+            "description": "Roles CRUD API"
+        },
+        {
+            "name": "User Details",
+            "description": "User Details CRUD API"
+        }
+    ]
+}
