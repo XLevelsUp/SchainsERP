@@ -12,217 +12,6 @@
         }
     ],
     "paths": {
-        "/api/fitem-boxes": {
-            "get": {
-                "tags": [
-                    "Fitem Boxes"
-                ],
-                "summary": "Get all Fitem boxes",
-                "description": "Returns a list of all Fitem boxes.",
-                "operationId": "getFitemBoxes",
-                "responses": {
-                    "200": {
-                        "description": "Fitem boxes retrieved successfully"
-                    }
-                }
-            },
-            "post": {
-                "tags": [
-                    "Fitem Boxes"
-                ],
-                "summary": "Create a new Fitem box",
-                "description": "Creates a new Fitem box.",
-                "operationId": "createFitemBox",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "box_name",
-                                    "item_id",
-                                    "added_by"
-                                ],
-                                "properties": {
-                                    "box_name": {
-                                        "type": "string",
-                                        "example": "Gold Box",
-                                        "maxLength": 100
-                                    },
-                                    "item_id": {
-                                        "type": "integer",
-                                        "example": 1
-                                    },
-                                    "is_active": {
-                                        "type": "boolean",
-                                        "example": true
-                                    },
-                                    "added_by": {
-                                        "type": "integer",
-                                        "example": 1
-                                    },
-                                    "updated_by": {
-                                        "type": "integer",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "added_at": {
-                                        "type": "string",
-                                        "format": "date-time",
-                                        "example": "2026-07-23 10:30:00",
-                                        "nullable": true
-                                    },
-                                    "updated_at": {
-                                        "type": "string",
-                                        "format": "date-time",
-                                        "example": "2026-07-23 10:30:00",
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "201": {
-                        "description": "Fitem box created successfully"
-                    },
-                    "422": {
-                        "description": "Validation error"
-                    }
-                }
-            }
-        },
-        "/api/fitem-boxes/{id}": {
-            "get": {
-                "tags": [
-                    "Fitem Boxes"
-                ],
-                "summary": "Get Fitem box by ID",
-                "description": "Returns a single Fitem box by its ID.",
-                "operationId": "getFitemBoxById",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "Fitem Box ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        },
-                        "example": 1
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Fitem box retrieved successfully"
-                    },
-                    "404": {
-                        "description": "Fitem box not found"
-                    }
-                }
-            },
-            "put": {
-                "tags": [
-                    "Fitem Boxes"
-                ],
-                "summary": "Update an Fitem box",
-                "description": "Updates an existing Fitem box.",
-                "operationId": "updateFitemBox",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "Fitem Box ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        },
-                        "example": 1
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "box_name": {
-                                        "type": "string",
-                                        "example": "Updated Gold Box",
-                                        "maxLength": 100
-                                    },
-                                    "item_id": {
-                                        "type": "integer",
-                                        "example": 1
-                                    },
-                                    "is_active": {
-                                        "type": "boolean",
-                                        "example": true
-                                    },
-                                    "added_by": {
-                                        "type": "integer",
-                                        "example": 1
-                                    },
-                                    "updated_by": {
-                                        "type": "integer",
-                                        "example": 2,
-                                        "nullable": true
-                                    },
-                                    "updated_at": {
-                                        "type": "string",
-                                        "format": "date-time",
-                                        "example": "2026-07-23 11:30:00",
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Fitem box updated successfully"
-                    },
-                    "404": {
-                        "description": "Fitem box not found"
-                    },
-                    "422": {
-                        "description": "Validation error"
-                    }
-                }
-            },
-            "delete": {
-                "tags": [
-                    "Fitem Boxes"
-                ],
-                "summary": "Delete an Fitem box",
-                "description": "Deletes an existing Fitem box.",
-                "operationId": "deleteFitemBox",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "Fitem Box ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        },
-                        "example": 1
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Fitem box deleted successfully"
-                    },
-                    "404": {
-                        "description": "Fitem box not found"
-                    }
-                }
-            }
-        },
         "/api/items": {
             "get": {
                 "tags": [
@@ -632,8 +421,8 @@
                     "User Details"
                 ],
                 "summary": "Get all user details",
-                "description": "Returns all user details from the database",
-                "operationId": "getUserDetails",
+                "description": "Returns all user details",
+                "operationId": "getAllUserDetails",
                 "responses": {
                     "200": {
                         "description": "User details retrieved successfully"
@@ -644,13 +433,13 @@
                 "tags": [
                     "User Details"
                 ],
-                "summary": "Create a new user detail",
-                "description": "Creates a new user detail record",
+                "summary": "Create user detail",
+                "description": "Create a new user detail with Aadhar image",
                 "operationId": "createUserDetail",
                 "requestBody": {
                     "required": true,
                     "content": {
-                        "application/json": {
+                        "multipart/form-data": {
                             "schema": {
                                 "required": [
                                     "name",
@@ -661,10 +450,12 @@
                                     "code",
                                     "phone_no",
                                     "proff",
-                                    "role",
+                                    "role_id",
                                     "mailing_name",
                                     "category_name",
-                                    "system_id"
+                                    "system_id",
+                                    "is_customerfitem_cal_enabled",
+                                    "is_customerfitem_cal_in_enabled"
                                 ],
                                 "properties": {
                                     "name": {
@@ -697,20 +488,20 @@
                                     },
                                     "remarks": {
                                         "type": "string",
-                                        "example": "Testing",
+                                        "example": "Test user",
                                         "nullable": true
                                     },
                                     "proff": {
                                         "type": "string",
-                                        "example": "Developer"
+                                        "example": "Employee"
                                     },
-                                    "role": {
+                                    "role_id": {
                                         "type": "string",
                                         "example": "Admin"
                                     },
                                     "customer_commants": {
                                         "type": "string",
-                                        "example": "Customer related comments",
+                                        "example": "Customer comments",
                                         "nullable": true
                                     },
                                     "mailing_name": {
@@ -719,17 +510,23 @@
                                     },
                                     "image_url": {
                                         "type": "string",
-                                        "example": "https://example.com/image.jpg",
+                                        "example": "profile/image.jpg",
                                         "nullable": true
                                     },
                                     "profile_image": {
                                         "type": "string",
-                                        "example": "profile.jpg",
+                                        "format": "binary",
+                                        "nullable": true
+                                    },
+                                    "aadhar_image": {
+                                        "description": "Aadhar front and back images can be uploaded",
+                                        "type": "string",
+                                        "format": "binary",
                                         "nullable": true
                                     },
                                     "category_name": {
                                         "type": "string",
-                                        "example": "BOTH",
+                                        "example": "GRAMS",
                                         "enum": [
                                             "GRAMS",
                                             "PURITY",
@@ -756,96 +553,9 @@
                                         "type": "boolean",
                                         "example": false
                                     },
-                                    "grams_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0
-                                    },
-                                    "purity_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0
-                                    },
-                                    "stone_weight_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0,
-                                        "nullable": true
-                                    },
-                                    "beads_weight_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0,
-                                        "nullable": true
-                                    },
-                                    "net_weight_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0,
-                                        "nullable": true
-                                    },
-                                    "gross_weight_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0,
-                                        "nullable": true
-                                    },
-                                    "beads_stone_weight_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0,
-                                        "nullable": true
-                                    },
-                                    "stone_cost_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0,
-                                        "nullable": true
-                                    },
-                                    "beads_cost_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0,
-                                        "nullable": true
-                                    },
-                                    "beads_stone_cost_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0,
-                                        "nullable": true
-                                    },
-                                    "order_grand_total": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0
-                                    },
-                                    "order_grand_no_of_pcs": {
-                                        "type": "integer",
-                                        "example": 0
-                                    },
-                                    "last_txn_date": {
-                                        "type": "string",
-                                        "example": null,
-                                        "nullable": true
-                                    },
                                     "is_salary_person": {
                                         "type": "boolean",
                                         "example": false
-                                    },
-                                    "per_day_salary": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0
-                                    },
-                                    "rak_cash_balance": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0
-                                    },
-                                    "last_cash_txn_date": {
-                                        "type": "string",
-                                        "example": null,
-                                        "nullable": true
                                     },
                                     "is_gold_cal_enabled": {
                                         "type": "boolean",
@@ -861,269 +571,15 @@
                                     },
                                     "is_customerfitem_cal_enabled": {
                                         "type": "boolean",
-                                        "example": false
+                                        "example": true
                                     },
                                     "is_customerfitem_cal_in_enabled": {
                                         "type": "boolean",
-                                        "example": false
-                                    },
-                                    "report_password": {
-                                        "type": "string",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "otp": {
-                                        "type": "string",
-                                        "example": null,
-                                        "nullable": true
+                                        "example": true
                                     },
                                     "is_otp_verified": {
                                         "type": "boolean",
                                         "example": false
-                                    },
-                                    "allot_value": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "is_remainder_shown": {
-                                        "type": "boolean",
-                                        "example": false,
-                                        "nullable": true
-                                    },
-                                    "is_delivery_item_shown": {
-                                        "type": "boolean",
-                                        "example": false,
-                                        "nullable": true
-                                    },
-                                    "rak_rtgs_balance": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": 0
-                                    },
-                                    "last_rtgs_txn_date": {
-                                        "type": "string",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "is_polish_needed": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_wa_delivery_stock_needed": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_polish_chk_need_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_delivery_chk_need_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_cashamt_thermal_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_customer_touch_need_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_complete_history_need_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_create_order_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_cash_mngmt_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_freeze_entry_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_admin_login_otp_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_customer_cmts_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_outside_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_tally_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_die_num_search_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_con_box_rpt_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_box_tot_rpt_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_ob_cb_rpt_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_gallery_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_worker_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_emp_group_task_need_to_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_day_grand_rpt_need_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_need_pink_box_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_need_order_status_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_need_role_wise_cash_rpt_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "need_roles_in_rpt_shown": {
-                                        "type": "string",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "is_need_to_retailer_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_need_grosswgt_print_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_cus_fitem_pur_out_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_cus_fitem_pur_in_shown": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_need_show_order_display_in_head_login": {
-                                        "type": "boolean",
-                                        "example": false,
-                                        "nullable": true
-                                    },
-                                    "attendance_user_id": {
-                                        "type": "integer",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "is_metal_stock_shown": {
-                                        "type": "boolean",
-                                        "example": false,
-                                        "nullable": true
-                                    },
-                                    "top_print_out": {
-                                        "type": "string",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "incentive_sent_to": {
-                                        "type": "integer",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "vendor_barcode_group_id": {
-                                        "type": "integer",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "vendor_short_name": {
-                                        "type": "string",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "credit_out_limit": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "credit_in_limit": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "credit_limit_remarks": {
-                                        "type": "string",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "credit_limit_updated_at": {
-                                        "type": "string",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "credit_limit_updated_by": {
-                                        "type": "integer",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "temp_gram_credit_limit": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "temp_purity_credit_limit": {
-                                        "type": "number",
-                                        "format": "double",
-                                        "example": null,
-                                        "nullable": true
-                                    },
-                                    "default_mc_choice": {
-                                        "type": "string",
-                                        "example": "RETAILER",
-                                        "nullable": true,
-                                        "enum": [
-                                            "RETAILER",
-                                            "WHOLESALER"
-                                        ]
-                                    },
-                                    "page_access": {
-                                        "type": "string",
-                                        "example": "{\"dashboard\":true,\"users\":true}",
-                                        "nullable": true
-                                    },
-                                    "is_admin_head": {
-                                        "type": "integer",
-                                        "example": 0
-                                    },
-                                    "main_head_id": {
-                                        "type": "integer",
-                                        "example": null,
-                                        "nullable": true
                                     }
                                 },
                                 "type": "object"
@@ -1141,16 +597,17 @@
                 }
             }
         },
-        "/api/user-details/{user_id}": {
+        "/api/user-details/{id}": {
             "get": {
                 "tags": [
                     "User Details"
                 ],
                 "summary": "Get user detail by ID",
+                "description": "Get single user",
                 "operationId": "getUserDetailById",
                 "parameters": [
                     {
-                        "name": "user_id",
+                        "name": "id",
                         "in": "path",
                         "description": "User ID",
                         "required": true,
@@ -1169,15 +626,16 @@
                     }
                 }
             },
-            "put": {
+            "post": {
                 "tags": [
                     "User Details"
                 ],
                 "summary": "Update user detail",
+                "description": "Update user",
                 "operationId": "updateUserDetail",
                 "parameters": [
                     {
-                        "name": "user_id",
+                        "name": "id",
                         "in": "path",
                         "description": "User ID",
                         "required": true,
@@ -1188,47 +646,34 @@
                     }
                 ],
                 "requestBody": {
-                    "required": true,
+                    "required": false,
                     "content": {
-                        "application/json": {
+                        "multipart/form-data": {
                             "schema": {
                                 "properties": {
                                     "name": {
                                         "type": "string",
-                                        "example": "Mohamed Azar Updated"
-                                    },
-                                    "user_name": {
-                                        "type": "string",
-                                        "example": "azar"
+                                        "example": "Updated User"
                                     },
                                     "phone_no": {
                                         "type": "string",
                                         "example": "9876543210"
                                     },
-                                    "role": {
+                                    "role_id": {
                                         "type": "string",
-                                        "example": "Manager"
+                                        "example": "Admin"
                                     },
-                                    "category_name": {
+                                    "profile_image": {
                                         "type": "string",
-                                        "example": "BOTH",
-                                        "enum": [
-                                            "GRAMS",
-                                            "PURITY",
-                                            "BOTH"
-                                        ]
+                                        "format": "binary"
+                                    },
+                                    "aadhar_image": {
+                                        "type": "string",
+                                        "format": "binary"
                                     },
                                     "is_active": {
                                         "type": "boolean",
                                         "example": true
-                                    },
-                                    "is_customerfitem_cal_enabled": {
-                                        "type": "boolean",
-                                        "example": false
-                                    },
-                                    "is_customerfitem_cal_in_enabled": {
-                                        "type": "boolean",
-                                        "example": false
                                     }
                                 },
                                 "type": "object"
@@ -1253,10 +698,11 @@
                     "User Details"
                 ],
                 "summary": "Delete user detail",
+                "description": "Delete user",
                 "operationId": "deleteUserDetail",
                 "parameters": [
                     {
-                        "name": "user_id",
+                        "name": "id",
                         "in": "path",
                         "description": "User ID",
                         "required": true,
@@ -1278,10 +724,6 @@
         }
     },
     "tags": [
-        {
-            "name": "Fitem Boxes",
-            "description": "Fitem Boxes CRUD API"
-        },
         {
             "name": "Items",
             "description": "Items CRUD API"
