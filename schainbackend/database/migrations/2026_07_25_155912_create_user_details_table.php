@@ -3,48 +3,21 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+
 
 return new class extends Migration
 {
     public function up(): void
     {
-        /*
-        |--------------------------------------------------------------------------
-        | Create PostgreSQL ENUM
-        |--------------------------------------------------------------------------
-        */
-        DB::statement("
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1
-                    FROM pg_type
-                    WHERE typname = 'category_name_enum'
-                ) THEN
-                    CREATE TYPE category_name_enum AS ENUM (
-                        'GRAMS',
-                        'PURITY',
-                        'BOTH'
-                    );
-                END IF;
-            END
-            $$;
-        ");
-
-        /*
-        |--------------------------------------------------------------------------
-        | Create user_details table
-        |--------------------------------------------------------------------------
-        */
         Schema::create('user_details', function (Blueprint $table) {
 
-            $table->increments('user_id');
+            $table->bigIncrements('user_id');
 
             $table->string('name', 55);
             $table->string('user_name', 55)->unique();
 
-            // Password hash needs enough space for Laravel Hash::make()
+            // Store Laravel Hash::make() result here
             $table->string('password_hash', 255);
 
             $table->string('address', 400);
@@ -53,20 +26,21 @@ return new class extends Migration
             $table->string('phone_no', 15)->unique();
 
             $table->string('remarks', 255)->nullable();
-
             $table->string('proff', 155);
 
             $table->string('role_id', 50);
 
             $table->string('customer_commants', 1500)->nullable();
-
             $table->string('mailing_name', 255);
 
             $table->string('image_url', 255)->nullable();
-
             $table->text('profile_image')->nullable();
-
-            $table->string('category_name', 20);
+            $table->string('aadhar_image', 255)->nullable();
+            $table->enum('category_name', [
+                'GRAMS',
+                'PURITY',
+                'BOTH'
+            ]);
 
             $table->string('system_id', 255)->unique();
 
@@ -80,7 +54,6 @@ return new class extends Migration
                 ->default(true);
 
             $table->boolean('is_delete')
-                ->nullable()
                 ->default(false);
 
             $table->boolean('is_billable')
@@ -125,7 +98,7 @@ return new class extends Migration
             $table->integer('order_grand_no_of_pcs')
                 ->default(0);
 
-            $table->timestamp('last_txn_date')
+            $table->dateTime('last_txn_date')
                 ->nullable();
 
             $table->boolean('is_salary_person')
@@ -149,11 +122,9 @@ return new class extends Migration
             $table->boolean('is_wastage_cal_enabled')
                 ->default(true);
 
-            $table->boolean('is_customerfitem_cal_enabled')
-                ->default(false);
+            $table->boolean('is_customerfitem_cal_enabled');
 
-            $table->boolean('is_customerfitem_cal_in_enabled')
-                ->default(false);
+            $table->boolean('is_customerfitem_cal_in_enabled');
 
             $table->string('report_password', 250)
                 ->nullable();
@@ -176,11 +147,10 @@ return new class extends Migration
             $table->double('rak_rtgs_balance')
                 ->default(0);
 
-            $table->timestamp('last_rtgs_txn_date')
+            $table->dateTime('last_rtgs_txn_date')
                 ->nullable();
 
             $table->boolean('is_polish_needed')
-                ->nullable()
                 ->default(false);
 
             $table->boolean('is_wa_delivery_stock_needed')
@@ -276,26 +246,10 @@ return new class extends Migration
             $table->boolean('is_metal_stock_shown')
                 ->nullable();
         });
-
-        /*
-        |--------------------------------------------------------------------------
-        | Convert category_name to PostgreSQL ENUM
-        |--------------------------------------------------------------------------
-        */
-        DB::statement("
-            ALTER TABLE user_details
-            ALTER COLUMN category_name
-            TYPE category_name_enum
-            USING category_name::category_name_enum
-        ");
     }
 
     public function down(): void
     {
         Schema::dropIfExists('user_details');
-
-        DB::statement("
-            DROP TYPE IF EXISTS category_name_enum
-        ");
     }
 };

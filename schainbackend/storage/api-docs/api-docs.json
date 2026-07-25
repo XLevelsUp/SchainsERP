@@ -12,6 +12,189 @@
         }
     ],
     "paths": {
+        "/api/fitem-boxes": {
+            "get": {
+                "tags": [
+                    "Fitem Boxes"
+                ],
+                "summary": "Get all fitem boxes",
+                "operationId": "getFitemBoxes",
+                "responses": {
+                    "200": {
+                        "description": "Fitem boxes retrieved successfully"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Fitem Boxes"
+                ],
+                "summary": "Create a new fitem box",
+                "operationId": "createFitemBox",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "box_name",
+                                    "item_id",
+                                    "is_active",
+                                    "added_by"
+                                ],
+                                "properties": {
+                                    "box_name": {
+                                        "type": "string",
+                                        "example": "Box A"
+                                    },
+                                    "item_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "added_by": {
+                                        "type": "integer",
+                                        "example": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Fitem box created successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
+        "/api/fitem-boxes/{box_id}": {
+            "get": {
+                "tags": [
+                    "Fitem Boxes"
+                ],
+                "summary": "Get fitem box by ID",
+                "operationId": "getFitemBoxById",
+                "parameters": [
+                    {
+                        "name": "box_id",
+                        "in": "path",
+                        "description": "Fitem Box ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Fitem box retrieved successfully"
+                    },
+                    "404": {
+                        "description": "Fitem box not found"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Fitem Boxes"
+                ],
+                "summary": "Update a fitem box",
+                "operationId": "updateFitemBox",
+                "parameters": [
+                    {
+                        "name": "box_id",
+                        "in": "path",
+                        "description": "Fitem Box ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "box_name",
+                                    "item_id",
+                                    "is_active",
+                                    "updated_by"
+                                ],
+                                "properties": {
+                                    "box_name": {
+                                        "type": "string",
+                                        "example": "Updated Box A"
+                                    },
+                                    "item_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "updated_by": {
+                                        "type": "integer",
+                                        "example": 2
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Fitem box updated successfully"
+                    },
+                    "404": {
+                        "description": "Fitem box not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Fitem Boxes"
+                ],
+                "summary": "Delete a fitem box",
+                "operationId": "deleteFitemBox",
+                "parameters": [
+                    {
+                        "name": "box_id",
+                        "in": "path",
+                        "description": "Fitem Box ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Fitem box deleted successfully"
+                    },
+                    "404": {
+                        "description": "Fitem box not found"
+                    }
+                }
+            }
+        },
         "/api/items": {
             "get": {
                 "tags": [
@@ -598,34 +781,6 @@
             }
         },
         "/api/user-details/{id}": {
-            "get": {
-                "tags": [
-                    "User Details"
-                ],
-                "summary": "Get user detail by ID",
-                "description": "Get single user",
-                "operationId": "getUserDetailById",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "User ID",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        },
-                        "example": 1
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "User detail retrieved successfully"
-                    },
-                    "404": {
-                        "description": "User detail not found"
-                    }
-                }
-            },
             "post": {
                 "tags": [
                     "User Details"
@@ -735,6 +890,10 @@
         {
             "name": "User Details",
             "description": "User Details CRUD API"
+        },
+        {
+            "name": "Fitem Boxes",
+            "description": "Fitem Boxes"
         }
     ]
 }
