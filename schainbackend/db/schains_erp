@@ -1,0 +1,1062 @@
+--
+-- PostgreSQL database dump
+--
+
+\restrict tA8wjUncDXi0qA8hY24wkQJrgfdYRRfaOjXhdK4Ks9hDRaFA0tEevcORKYletpZ
+
+-- Dumped from database version 16.14
+-- Dumped by pg_dump version 16.14
+
+-- Started on 2026-07-26 19:30:16
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 859 (class 1247 OID 41189)
+-- Name: category_name_enum; Type: TYPE; Schema: public; Owner: postgres
+--
+
+CREATE TYPE public.category_name_enum AS ENUM (
+    'GRAMS',
+    'PURITY',
+    'BOTH'
+);
+
+
+ALTER TYPE public.category_name_enum OWNER TO postgres;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 221 (class 1259 OID 57373)
+-- Name: cache; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.cache (
+    key character varying(255) NOT NULL,
+    value text NOT NULL,
+    expiration bigint NOT NULL
+);
+
+
+ALTER TABLE public.cache OWNER TO postgres;
+
+--
+-- TOC entry 222 (class 1259 OID 57381)
+-- Name: cache_locks; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.cache_locks (
+    key character varying(255) NOT NULL,
+    owner character varying(255) NOT NULL,
+    expiration bigint NOT NULL
+);
+
+
+ALTER TABLE public.cache_locks OWNER TO postgres;
+
+--
+-- TOC entry 234 (class 1259 OID 57521)
+-- Name: cash_head_employee_mappings; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.cash_head_employee_mappings (
+    id bigint NOT NULL,
+    head_id bigint NOT NULL,
+    employee_id bigint NOT NULL,
+    added_at timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+ALTER TABLE public.cash_head_employee_mappings OWNER TO postgres;
+
+--
+-- TOC entry 233 (class 1259 OID 57520)
+-- Name: cash_head_employee_mappings_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.cash_head_employee_mappings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.cash_head_employee_mappings_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5074 (class 0 OID 0)
+-- Dependencies: 233
+-- Name: cash_head_employee_mappings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.cash_head_employee_mappings_id_seq OWNED BY public.cash_head_employee_mappings.id;
+
+
+--
+-- TOC entry 228 (class 1259 OID 57468)
+-- Name: customer_touch; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.customer_touch (
+    item_id bigint NOT NULL,
+    item_name character varying(150) NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    added_at timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+ALTER TABLE public.customer_touch OWNER TO postgres;
+
+--
+-- TOC entry 227 (class 1259 OID 57467)
+-- Name: customer_touch_item_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.customer_touch_item_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.customer_touch_item_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5075 (class 0 OID 0)
+-- Dependencies: 227
+-- Name: customer_touch_item_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.customer_touch_item_id_seq OWNED BY public.customer_touch.item_id;
+
+
+--
+-- TOC entry 224 (class 1259 OID 57390)
+-- Name: fitem_boxes; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.fitem_boxes (
+    box_id bigint NOT NULL,
+    box_name character varying(100) NOT NULL,
+    item_id bigint NOT NULL,
+    is_active boolean DEFAULT false NOT NULL,
+    added_by bigint NOT NULL,
+    updated_by bigint,
+    added_at timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+ALTER TABLE public.fitem_boxes OWNER TO postgres;
+
+--
+-- TOC entry 223 (class 1259 OID 57389)
+-- Name: fitem_boxes_box_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.fitem_boxes_box_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.fitem_boxes_box_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5076 (class 0 OID 0)
+-- Dependencies: 223
+-- Name: fitem_boxes_box_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.fitem_boxes_box_id_seq OWNED BY public.fitem_boxes.box_id;
+
+
+--
+-- TOC entry 232 (class 1259 OID 57501)
+-- Name: head_employee_mappings; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.head_employee_mappings (
+    id bigint NOT NULL,
+    head_id bigint NOT NULL,
+    employee_id bigint NOT NULL,
+    added_at timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+ALTER TABLE public.head_employee_mappings OWNER TO postgres;
+
+--
+-- TOC entry 231 (class 1259 OID 57500)
+-- Name: head_employee_mappings_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.head_employee_mappings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.head_employee_mappings_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5077 (class 0 OID 0)
+-- Dependencies: 231
+-- Name: head_employee_mappings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.head_employee_mappings_id_seq OWNED BY public.head_employee_mappings.id;
+
+
+--
+-- TOC entry 218 (class 1259 OID 57352)
+-- Name: items; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.items (
+    item_id integer NOT NULL,
+    item_name character varying(255) NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    default_touch double precision DEFAULT '92'::double precision NOT NULL,
+    item_touch double precision DEFAULT '0'::double precision NOT NULL,
+    added_at timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    is_need_fitem_shown boolean DEFAULT false NOT NULL,
+    mtouch double precision,
+    is_barcode boolean DEFAULT false NOT NULL,
+    is_no_barcode boolean DEFAULT false NOT NULL
+);
+
+
+ALTER TABLE public.items OWNER TO postgres;
+
+--
+-- TOC entry 217 (class 1259 OID 57351)
+-- Name: items_item_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.items_item_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.items_item_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5078 (class 0 OID 0)
+-- Dependencies: 217
+-- Name: items_item_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.items_item_id_seq OWNED BY public.items.item_id;
+
+
+--
+-- TOC entry 216 (class 1259 OID 57345)
+-- Name: migrations; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.migrations (
+    id integer NOT NULL,
+    migration character varying(255) NOT NULL,
+    batch integer NOT NULL
+);
+
+
+ALTER TABLE public.migrations OWNER TO postgres;
+
+--
+-- TOC entry 215 (class 1259 OID 57344)
+-- Name: migrations_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.migrations_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.migrations_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5079 (class 0 OID 0)
+-- Dependencies: 215
+-- Name: migrations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.migrations_id_seq OWNED BY public.migrations.id;
+
+
+--
+-- TOC entry 220 (class 1259 OID 57366)
+-- Name: roles; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.roles (
+    id bigint NOT NULL,
+    role character varying(50) NOT NULL,
+    added_at timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    touch double precision
+);
+
+
+ALTER TABLE public.roles OWNER TO postgres;
+
+--
+-- TOC entry 219 (class 1259 OID 57365)
+-- Name: roles_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.roles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.roles_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5080 (class 0 OID 0)
+-- Dependencies: 219
+-- Name: roles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.roles_id_seq OWNED BY public.roles.id;
+
+
+--
+-- TOC entry 226 (class 1259 OID 57405)
+-- Name: user_details; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_details (
+    user_id bigint NOT NULL,
+    name character varying(55) NOT NULL,
+    user_name character varying(55) NOT NULL,
+    password_hash character varying(255) NOT NULL,
+    address character varying(400) NOT NULL,
+    signature character varying(45) NOT NULL,
+    code character varying(255) NOT NULL,
+    phone_no character varying(15) NOT NULL,
+    remarks character varying(255),
+    proff character varying(155) NOT NULL,
+    role_id character varying(50) NOT NULL,
+    customer_commants character varying(1500),
+    mailing_name character varying(255) NOT NULL,
+    image_url character varying(255),
+    profile_image text,
+    aadhar_image character varying(255),
+    category_name character varying(255) NOT NULL,
+    system_id character varying(255) NOT NULL,
+    updated_at timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    added_at timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    is_delete boolean DEFAULT false NOT NULL,
+    is_billable boolean DEFAULT false NOT NULL,
+    is_create_order_shown boolean DEFAULT false NOT NULL,
+    grams_grand_total double precision DEFAULT '0'::double precision NOT NULL,
+    purity_grand_total double precision DEFAULT '0'::double precision NOT NULL,
+    stone_weight_grand_total double precision,
+    beads_weight_grand_total double precision,
+    net_weight_grand_total double precision,
+    gross_weight_grand_total double precision,
+    beads_stone_weight_grand_total double precision,
+    stone_cost_grand_total double precision,
+    beads_cost_grand_total double precision,
+    beads_stone_cost_grand_total double precision,
+    order_grand_total double precision DEFAULT '0'::double precision NOT NULL,
+    order_grand_no_of_pcs integer DEFAULT 0 NOT NULL,
+    last_txn_date timestamp(0) without time zone,
+    is_salary_person boolean DEFAULT false NOT NULL,
+    per_day_salary double precision DEFAULT '0'::double precision NOT NULL,
+    rak_cash_balance double precision DEFAULT '0'::double precision NOT NULL,
+    last_cash_txn_date date,
+    is_gold_cal_enabled boolean DEFAULT true NOT NULL,
+    is_cash_cal_enabled boolean DEFAULT true NOT NULL,
+    is_wastage_cal_enabled boolean DEFAULT true NOT NULL,
+    is_customerfitem_cal_enabled boolean DEFAULT false NOT NULL,
+    is_customerfitem_cal_in_enabled boolean DEFAULT false NOT NULL,
+    report_password character varying(250),
+    otp character varying(4),
+    is_otp_verified boolean DEFAULT false NOT NULL,
+    allot_value double precision,
+    is_remainder_shown boolean,
+    is_delivery_item_shown boolean,
+    rak_rtgs_balance double precision DEFAULT '0'::double precision NOT NULL,
+    last_rtgs_txn_date timestamp(0) without time zone,
+    is_polish_needed boolean DEFAULT false NOT NULL,
+    is_wa_delivery_stock_needed boolean DEFAULT false NOT NULL,
+    is_polish_chk_need_shown boolean DEFAULT false NOT NULL,
+    is_delivery_chk_need_shown boolean DEFAULT false NOT NULL,
+    is_cashamt_thermal_shown boolean DEFAULT false NOT NULL,
+    is_customer_touch_need_shown boolean DEFAULT false NOT NULL,
+    is_complete_history_need_shown boolean DEFAULT false NOT NULL,
+    is_create_order_need_to_shown boolean DEFAULT false NOT NULL,
+    is_cash_mngmt_need_to_shown boolean DEFAULT false NOT NULL,
+    is_freeze_entry_need_to_shown boolean DEFAULT false NOT NULL,
+    is_admin_login_otp_need_to_shown boolean DEFAULT false NOT NULL,
+    is_customer_cmts_need_to_shown boolean DEFAULT false NOT NULL,
+    is_outside_need_to_shown boolean DEFAULT false NOT NULL,
+    is_tally_need_to_shown boolean DEFAULT false NOT NULL,
+    is_die_num_search_need_to_shown boolean DEFAULT false NOT NULL,
+    is_con_box_rpt_need_to_shown boolean DEFAULT false NOT NULL,
+    is_box_tot_rpt_need_to_shown boolean DEFAULT false NOT NULL,
+    is_ob_cb_rpt_need_to_shown boolean DEFAULT false NOT NULL,
+    is_gallery_need_to_shown boolean DEFAULT false NOT NULL,
+    is_worker_need_to_shown boolean DEFAULT false NOT NULL,
+    is_emp_group_task_need_to_shown boolean DEFAULT false NOT NULL,
+    is_day_grand_rpt_need_shown boolean DEFAULT false NOT NULL,
+    is_need_pink_box_shown boolean DEFAULT false NOT NULL,
+    is_need_order_status_shown boolean DEFAULT false NOT NULL,
+    is_need_role_wise_cash_rpt_shown boolean DEFAULT false NOT NULL,
+    need_roles_in_rpt_shown character varying(2000),
+    is_need_to_retailer_shown boolean DEFAULT false NOT NULL,
+    is_need_grosswgt_print_shown boolean DEFAULT false NOT NULL,
+    is_cus_fitem_pur_out_shown boolean DEFAULT false NOT NULL,
+    is_cus_fitem_pur_in_shown boolean DEFAULT false NOT NULL,
+    is_need_show_order_display_in_head_login boolean,
+    is_metal_stock_shown boolean,
+    CONSTRAINT user_details_category_name_check CHECK (((category_name)::text = ANY ((ARRAY['GRAMS'::character varying, 'PURITY'::character varying, 'BOTH'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.user_details OWNER TO postgres;
+
+--
+-- TOC entry 225 (class 1259 OID 57404)
+-- Name: user_details_user_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.user_details_user_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.user_details_user_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5081 (class 0 OID 0)
+-- Dependencies: 225
+-- Name: user_details_user_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.user_details_user_id_seq OWNED BY public.user_details.user_id;
+
+
+--
+-- TOC entry 230 (class 1259 OID 57477)
+-- Name: users_items_mappings; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.users_items_mappings (
+    id bigint NOT NULL,
+    item_id bigint NOT NULL,
+    user_id bigint NOT NULL,
+    added_at timestamp(0) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    item_grams_total character varying(255) DEFAULT '0'::character varying NOT NULL,
+    item_purity_total character varying(255) DEFAULT '0'::character varying NOT NULL,
+    stone_cost_grand_total double precision,
+    beads_cost_grand_total double precision,
+    beads_stone_cost_grand_total double precision,
+    last_txn_date timestamp(0) without time zone,
+    is_primary integer NOT NULL
+);
+
+
+ALTER TABLE public.users_items_mappings OWNER TO postgres;
+
+--
+-- TOC entry 229 (class 1259 OID 57476)
+-- Name: users_items_mappings_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.users_items_mappings_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.users_items_mappings_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5082 (class 0 OID 0)
+-- Dependencies: 229
+-- Name: users_items_mappings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.users_items_mappings_id_seq OWNED BY public.users_items_mappings.id;
+
+
+--
+-- TOC entry 4860 (class 2604 OID 57524)
+-- Name: cash_head_employee_mappings id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cash_head_employee_mappings ALTER COLUMN id SET DEFAULT nextval('public.cash_head_employee_mappings_id_seq'::regclass);
+
+
+--
+-- TOC entry 4851 (class 2604 OID 57471)
+-- Name: customer_touch item_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customer_touch ALTER COLUMN item_id SET DEFAULT nextval('public.customer_touch_item_id_seq'::regclass);
+
+
+--
+-- TOC entry 4797 (class 2604 OID 57393)
+-- Name: fitem_boxes box_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fitem_boxes ALTER COLUMN box_id SET DEFAULT nextval('public.fitem_boxes_box_id_seq'::regclass);
+
+
+--
+-- TOC entry 4858 (class 2604 OID 57504)
+-- Name: head_employee_mappings id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.head_employee_mappings ALTER COLUMN id SET DEFAULT nextval('public.head_employee_mappings_id_seq'::regclass);
+
+
+--
+-- TOC entry 4787 (class 2604 OID 57355)
+-- Name: items item_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.items ALTER COLUMN item_id SET DEFAULT nextval('public.items_item_id_seq'::regclass);
+
+
+--
+-- TOC entry 4786 (class 2604 OID 57348)
+-- Name: migrations id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.migrations ALTER COLUMN id SET DEFAULT nextval('public.migrations_id_seq'::regclass);
+
+
+--
+-- TOC entry 4795 (class 2604 OID 57369)
+-- Name: roles id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.roles ALTER COLUMN id SET DEFAULT nextval('public.roles_id_seq'::regclass);
+
+
+--
+-- TOC entry 4801 (class 2604 OID 57408)
+-- Name: user_details user_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_details ALTER COLUMN user_id SET DEFAULT nextval('public.user_details_user_id_seq'::regclass);
+
+
+--
+-- TOC entry 4854 (class 2604 OID 57480)
+-- Name: users_items_mappings id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users_items_mappings ALTER COLUMN id SET DEFAULT nextval('public.users_items_mappings_id_seq'::regclass);
+
+
+--
+-- TOC entry 5055 (class 0 OID 57373)
+-- Dependencies: 221
+-- Data for Name: cache; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.cache (key, value, expiration) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5056 (class 0 OID 57381)
+-- Dependencies: 222
+-- Data for Name: cache_locks; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.cache_locks (key, owner, expiration) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5068 (class 0 OID 57521)
+-- Dependencies: 234
+-- Data for Name: cash_head_employee_mappings; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.cash_head_employee_mappings (id, head_id, employee_id, added_at) FROM stdin;
+1	8	9	2026-07-26 13:54:31
+\.
+
+
+--
+-- TOC entry 5062 (class 0 OID 57468)
+-- Dependencies: 228
+-- Data for Name: customer_touch; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.customer_touch (item_id, item_name, is_active, added_at) FROM stdin;
+1	Gold	t	2026-07-25 22:05:02
+\.
+
+
+--
+-- TOC entry 5058 (class 0 OID 57390)
+-- Dependencies: 224
+-- Data for Name: fitem_boxes; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.fitem_boxes (box_id, box_name, item_id, is_active, added_by, updated_by, added_at, updated_at) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5066 (class 0 OID 57501)
+-- Dependencies: 232
+-- Data for Name: head_employee_mappings; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.head_employee_mappings (id, head_id, employee_id, added_at) FROM stdin;
+2	8	9	2026-07-26 13:49:33
+\.
+
+
+--
+-- TOC entry 5052 (class 0 OID 57352)
+-- Dependencies: 218
+-- Data for Name: items; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.items (item_id, item_name, is_active, default_touch, item_touch, added_at, is_need_fitem_shown, mtouch, is_barcode, is_no_barcode) FROM stdin;
+1	Gold Ring	t	92	90	2026-07-25 10:30:00	f	91.5	t	f
+2	Gold Chain	t	92	91	2026-07-25 10:30:00	f	91.5	t	f
+\.
+
+
+--
+-- TOC entry 5050 (class 0 OID 57345)
+-- Dependencies: 216
+-- Data for Name: migrations; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.migrations (id, migration, batch) FROM stdin;
+1	2026_07_23_062800_create_items_table	1
+2	2026_07_23_125520_create_roles_table	1
+3	2026_07_23_130338_create_cache_table	1
+4	2026_07_23_145212_create_fitem_boxes_table	1
+5	2026_07_25_155912_create_user_details_table	1
+6	2026_07_25_160058_create_customer_touch_table	1
+7	2026_07_25_160555_create_users_items_mappings_table	1
+8	2026_07_25_160632_create_head_employee_mappings_table	1
+9	2026_07_25_160655_create_cash_head_employee_mappings_table	1
+\.
+
+
+--
+-- TOC entry 5054 (class 0 OID 57366)
+-- Dependencies: 220
+-- Data for Name: roles; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.roles (id, role, added_at, touch) FROM stdin;
+1	Admin	2026-07-25 10:30:00	92.5
+\.
+
+
+--
+-- TOC entry 5060 (class 0 OID 57405)
+-- Dependencies: 226
+-- Data for Name: user_details; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.user_details (user_id, name, user_name, password_hash, address, signature, code, phone_no, remarks, proff, role_id, customer_commants, mailing_name, image_url, profile_image, aadhar_image, category_name, system_id, updated_at, added_at, is_active, is_delete, is_billable, is_create_order_shown, grams_grand_total, purity_grand_total, stone_weight_grand_total, beads_weight_grand_total, net_weight_grand_total, gross_weight_grand_total, beads_stone_weight_grand_total, stone_cost_grand_total, beads_cost_grand_total, beads_stone_cost_grand_total, order_grand_total, order_grand_no_of_pcs, last_txn_date, is_salary_person, per_day_salary, rak_cash_balance, last_cash_txn_date, is_gold_cal_enabled, is_cash_cal_enabled, is_wastage_cal_enabled, is_customerfitem_cal_enabled, is_customerfitem_cal_in_enabled, report_password, otp, is_otp_verified, allot_value, is_remainder_shown, is_delivery_item_shown, rak_rtgs_balance, last_rtgs_txn_date, is_polish_needed, is_wa_delivery_stock_needed, is_polish_chk_need_shown, is_delivery_chk_need_shown, is_cashamt_thermal_shown, is_customer_touch_need_shown, is_complete_history_need_shown, is_create_order_need_to_shown, is_cash_mngmt_need_to_shown, is_freeze_entry_need_to_shown, is_admin_login_otp_need_to_shown, is_customer_cmts_need_to_shown, is_outside_need_to_shown, is_tally_need_to_shown, is_die_num_search_need_to_shown, is_con_box_rpt_need_to_shown, is_box_tot_rpt_need_to_shown, is_ob_cb_rpt_need_to_shown, is_gallery_need_to_shown, is_worker_need_to_shown, is_emp_group_task_need_to_shown, is_day_grand_rpt_need_shown, is_need_pink_box_shown, is_need_order_status_shown, is_need_role_wise_cash_rpt_shown, need_roles_in_rpt_shown, is_need_to_retailer_shown, is_need_grosswgt_print_shown, is_cus_fitem_pur_out_shown, is_cus_fitem_pur_in_shown, is_need_show_order_display_in_head_login, is_metal_stock_shown) FROM stdin;
+8	Admin User	admin	$2y$12$/KTtwb2pTjs3hhnaMZNqpO89IUprN0mkpv/5UyjT3tdUx/k9J7hvC	Chennai	ADM	ADM001	9876543200	Admin user	Administrator	1	\N	Admin User	\N	\N	\N	BOTH	SYS_ADMIN	2026-07-25 22:17:12	2026-07-25 22:17:12	t	f	t	f	0	0	\N	\N	\N	\N	\N	\N	\N	\N	0	0	\N	f	0	0	\N	t	t	t	f	f	\N	\N	f	\N	\N	\N	0	\N	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	\N	f	f	f	f	\N	\N
+9	Test Employee	employee1	$2y$12$otbYsBjIT00Tj2sJuultO.4q3PgVb9Rrz3aW.eMLlxrqBwFYnAOUK	Chennai	TE	EMP002	9876543211	Testing employee user	Employee	1	\N	Test Employee	\N	\N	\N	BOTH	SYS002	2026-07-26 19:19:12	2026-07-26 19:19:12	t	f	t	f	0	0	\N	\N	\N	\N	\N	\N	\N	\N	0	0	\N	f	0	0	\N	t	t	t	f	f	\N	\N	f	\N	\N	\N	0	\N	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	f	\N	f	f	f	f	\N	\N
+\.
+
+
+--
+-- TOC entry 5064 (class 0 OID 57477)
+-- Dependencies: 230
+-- Data for Name: users_items_mappings; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.users_items_mappings (id, item_id, user_id, added_at, item_grams_total, item_purity_total, stone_cost_grand_total, beads_cost_grand_total, beads_stone_cost_grand_total, last_txn_date, is_primary) FROM stdin;
+6	1	8	2026-07-26 19:16:10	0	0	\N	\N	\N	\N	1
+\.
+
+
+--
+-- TOC entry 5083 (class 0 OID 0)
+-- Dependencies: 233
+-- Name: cash_head_employee_mappings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.cash_head_employee_mappings_id_seq', 1, true);
+
+
+--
+-- TOC entry 5084 (class 0 OID 0)
+-- Dependencies: 227
+-- Name: customer_touch_item_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.customer_touch_item_id_seq', 1, true);
+
+
+--
+-- TOC entry 5085 (class 0 OID 0)
+-- Dependencies: 223
+-- Name: fitem_boxes_box_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.fitem_boxes_box_id_seq', 1, false);
+
+
+--
+-- TOC entry 5086 (class 0 OID 0)
+-- Dependencies: 231
+-- Name: head_employee_mappings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.head_employee_mappings_id_seq', 2, true);
+
+
+--
+-- TOC entry 5087 (class 0 OID 0)
+-- Dependencies: 217
+-- Name: items_item_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.items_item_id_seq', 2, true);
+
+
+--
+-- TOC entry 5088 (class 0 OID 0)
+-- Dependencies: 215
+-- Name: migrations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.migrations_id_seq', 9, true);
+
+
+--
+-- TOC entry 5089 (class 0 OID 0)
+-- Dependencies: 219
+-- Name: roles_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.roles_id_seq', 1, true);
+
+
+--
+-- TOC entry 5090 (class 0 OID 0)
+-- Dependencies: 225
+-- Name: user_details_user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.user_details_user_id_seq', 9, true);
+
+
+--
+-- TOC entry 5091 (class 0 OID 0)
+-- Dependencies: 229
+-- Name: users_items_mappings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.users_items_mappings_id_seq', 6, true);
+
+
+--
+-- TOC entry 4874 (class 2606 OID 57387)
+-- Name: cache_locks cache_locks_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cache_locks
+    ADD CONSTRAINT cache_locks_pkey PRIMARY KEY (key);
+
+
+--
+-- TOC entry 4871 (class 2606 OID 57379)
+-- Name: cache cache_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cache
+    ADD CONSTRAINT cache_pkey PRIMARY KEY (key);
+
+
+--
+-- TOC entry 4898 (class 2606 OID 57527)
+-- Name: cash_head_employee_mappings cash_head_employee_mappings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cash_head_employee_mappings
+    ADD CONSTRAINT cash_head_employee_mappings_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4886 (class 2606 OID 57475)
+-- Name: customer_touch customer_touch_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customer_touch
+    ADD CONSTRAINT customer_touch_pkey PRIMARY KEY (item_id);
+
+
+--
+-- TOC entry 4876 (class 2606 OID 57398)
+-- Name: fitem_boxes fitem_boxes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fitem_boxes
+    ADD CONSTRAINT fitem_boxes_pkey PRIMARY KEY (box_id);
+
+
+--
+-- TOC entry 4894 (class 2606 OID 57507)
+-- Name: head_employee_mappings head_employee_mappings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.head_employee_mappings
+    ADD CONSTRAINT head_employee_mappings_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4866 (class 2606 OID 57364)
+-- Name: items items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.items
+    ADD CONSTRAINT items_pkey PRIMARY KEY (item_id);
+
+
+--
+-- TOC entry 4864 (class 2606 OID 57350)
+-- Name: migrations migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.migrations
+    ADD CONSTRAINT migrations_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4868 (class 2606 OID 57372)
+-- Name: roles roles_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4878 (class 2606 OID 57464)
+-- Name: user_details user_details_phone_no_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_details
+    ADD CONSTRAINT user_details_phone_no_unique UNIQUE (phone_no);
+
+
+--
+-- TOC entry 4880 (class 2606 OID 57460)
+-- Name: user_details user_details_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_details
+    ADD CONSTRAINT user_details_pkey PRIMARY KEY (user_id);
+
+
+--
+-- TOC entry 4882 (class 2606 OID 57466)
+-- Name: user_details user_details_system_id_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_details
+    ADD CONSTRAINT user_details_system_id_unique UNIQUE (system_id);
+
+
+--
+-- TOC entry 4884 (class 2606 OID 57462)
+-- Name: user_details user_details_user_name_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_details
+    ADD CONSTRAINT user_details_user_name_unique UNIQUE (user_name);
+
+
+--
+-- TOC entry 4889 (class 2606 OID 57487)
+-- Name: users_items_mappings users_items_mappings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users_items_mappings
+    ADD CONSTRAINT users_items_mappings_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4869 (class 1259 OID 57380)
+-- Name: cache_expiration_index; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX cache_expiration_index ON public.cache USING btree (expiration);
+
+
+--
+-- TOC entry 4872 (class 1259 OID 57388)
+-- Name: cache_locks_expiration_index; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX cache_locks_expiration_index ON public.cache_locks USING btree (expiration);
+
+
+--
+-- TOC entry 4895 (class 1259 OID 57539)
+-- Name: cash_head_employee_mappings_employee_id_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX cash_head_employee_mappings_employee_id_idx ON public.cash_head_employee_mappings USING btree (employee_id);
+
+
+--
+-- TOC entry 4896 (class 1259 OID 57538)
+-- Name: cash_head_employee_mappings_head_id_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX cash_head_employee_mappings_head_id_idx ON public.cash_head_employee_mappings USING btree (head_id);
+
+
+--
+-- TOC entry 4891 (class 1259 OID 57519)
+-- Name: head_employee_mappings_employee_id_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX head_employee_mappings_employee_id_idx ON public.head_employee_mappings USING btree (employee_id);
+
+
+--
+-- TOC entry 4892 (class 1259 OID 57518)
+-- Name: head_employee_mappings_head_id_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX head_employee_mappings_head_id_idx ON public.head_employee_mappings USING btree (head_id);
+
+
+--
+-- TOC entry 4887 (class 1259 OID 57499)
+-- Name: users_items_mappings_item_id_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX users_items_mappings_item_id_idx ON public.users_items_mappings USING btree (item_id);
+
+
+--
+-- TOC entry 4890 (class 1259 OID 57498)
+-- Name: users_items_mappings_user_id_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX users_items_mappings_user_id_idx ON public.users_items_mappings USING btree (user_id);
+
+
+--
+-- TOC entry 4904 (class 2606 OID 57533)
+-- Name: cash_head_employee_mappings cash_head_employee_mappings_employee_id_foreign; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cash_head_employee_mappings
+    ADD CONSTRAINT cash_head_employee_mappings_employee_id_foreign FOREIGN KEY (employee_id) REFERENCES public.user_details(user_id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4905 (class 2606 OID 57528)
+-- Name: cash_head_employee_mappings cash_head_employee_mappings_head_id_foreign; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cash_head_employee_mappings
+    ADD CONSTRAINT cash_head_employee_mappings_head_id_foreign FOREIGN KEY (head_id) REFERENCES public.user_details(user_id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4899 (class 2606 OID 57399)
+-- Name: fitem_boxes fitem_boxes_item_id_foreign; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fitem_boxes
+    ADD CONSTRAINT fitem_boxes_item_id_foreign FOREIGN KEY (item_id) REFERENCES public.items(item_id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4902 (class 2606 OID 57513)
+-- Name: head_employee_mappings head_employee_mappings_employee_id_foreign; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.head_employee_mappings
+    ADD CONSTRAINT head_employee_mappings_employee_id_foreign FOREIGN KEY (employee_id) REFERENCES public.user_details(user_id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4903 (class 2606 OID 57508)
+-- Name: head_employee_mappings head_employee_mappings_head_id_foreign; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.head_employee_mappings
+    ADD CONSTRAINT head_employee_mappings_head_id_foreign FOREIGN KEY (head_id) REFERENCES public.user_details(user_id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4900 (class 2606 OID 57493)
+-- Name: users_items_mappings users_items_mappings_item_id_foreign; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users_items_mappings
+    ADD CONSTRAINT users_items_mappings_item_id_foreign FOREIGN KEY (item_id) REFERENCES public.items(item_id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4901 (class 2606 OID 57488)
+-- Name: users_items_mappings users_items_mappings_user_id_foreign; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users_items_mappings
+    ADD CONSTRAINT users_items_mappings_user_id_foreign FOREIGN KEY (user_id) REFERENCES public.user_details(user_id) ON DELETE CASCADE;
+
+
+-- Completed on 2026-07-26 19:30:16
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict tA8wjUncDXi0qA8hY24wkQJrgfdYRRfaOjXhdK4Ks9hDRaFA0tEevcORKYletpZ
+
