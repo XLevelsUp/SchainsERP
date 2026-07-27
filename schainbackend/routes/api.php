@@ -7,7 +7,7 @@ use App\Http\Controllers\Api\FitemBoxController;
 use App\Http\Controllers\Api\UsersItemsMappingController;
 use App\Http\Controllers\Api\HeadEmployeeMappingController;
 use App\Http\Controllers\Api\CashHeadEmployeeMappingController;
-
+use App\Http\Controllers\Api\AuthController;
 
 // User Details
 Route::apiResource('user-details', UserDetailController::class);
@@ -35,3 +35,6 @@ Route::apiResource(
     'cash-head-employee-mappings',
     CashHeadEmployeeMappingController::class
 );
+
+
+Route::post('/login', [AuthController::class, 'login']);
