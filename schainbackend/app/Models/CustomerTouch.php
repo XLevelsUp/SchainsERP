@@ -4,11 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class FitemBox extends Model
+class CustomerTouch extends Model
 {
-    protected $table = 'fitem_boxes';
+    protected $table = 'customer_touch';
 
-    protected $primaryKey = 'box_id';
+    protected $primaryKey = 'item_id';
 
     public $incrementing = true;
 
@@ -17,19 +17,15 @@ class FitemBox extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'box_name',
-        'item_id',
+        'item_name',
         'is_active',
-        'added_by',
         'added_at',
-        'updated_by',
     ];
 
     protected $casts = [
         'item_id' => 'integer',
+        'item_name' => 'string',
         'is_active' => 'boolean',
-        'added_by' => 'integer',
-        'updated_by' => 'integer',
         'added_at' => 'datetime',
     ];
 }
