@@ -5,6 +5,8 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { fitemBoxesApi } from '@/lib/fitemBoxesApi'
 import { itemsApi } from '@/lib/itemsApi'
@@ -189,26 +191,14 @@ async function handleDelete(box: FitemBox) {
           :error="formError"
         />
 
-        <div class="flex flex-col gap-1.5">
-          <label for="item_id" class="text-sm font-medium text-slate-700">
-            Item <span class="text-brand-600">*</span>
-          </label>
-          <select
-            id="item_id"
-            v-model="form.item_id"
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-          >
-            <option :value="null" disabled>Select an item…</option>
-            <option v-for="item in items" :key="item.item_id" :value="item.item_id">
-              {{ item.item_name }}
-            </option>
-          </select>
-        </div>
+        <BaseSelect id="item_id" v-model="form.item_id" label="Item" required>
+          <option :value="null" disabled>Select an item…</option>
+          <option v-for="item in items" :key="item.item_id" :value="item.item_id">
+            {{ item.item_name }}
+          </option>
+        </BaseSelect>
 
-        <label class="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
-          <input v-model="form.is_active" type="checkbox" class="rounded border-slate-300" />
-          Active
-        </label>
+        <BaseCheckbox v-model="form.is_active" label="Active" class="sm:col-span-2" />
 
         <div class="flex items-center gap-3 sm:col-span-2">
           <BaseButton type="submit" :disabled="isSaving">
@@ -220,18 +210,14 @@ async function handleDelete(box: FitemBox) {
     </BaseCard>
 
     <div class="mb-4 flex items-center gap-2">
-      <div class="relative w-full max-w-xs">
-        <Search
-          class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
-        />
-        <input
-          v-model="searchQuery"
-          type="search"
-          placeholder="Search boxes…"
-          aria-label="Search boxes"
-          class="w-full rounded-lg border border-slate-300 py-2 pr-3 pl-9 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-        />
-      </div>
+      <BaseInput
+        v-model="searchQuery"
+        type="search"
+        :icon="Search"
+        placeholder="Search boxes…"
+        aria-label="Search boxes"
+        class="w-full max-w-xs"
+      />
     </div>
 
     <div

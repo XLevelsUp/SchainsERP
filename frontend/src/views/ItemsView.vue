@@ -5,6 +5,7 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { itemsApi } from '@/lib/itemsApi'
 import { ApiError } from '@/lib/api'
@@ -184,26 +185,10 @@ async function handleDelete(item: Item) {
         />
 
         <div class="flex flex-col gap-2 sm:col-span-2 sm:flex-row sm:flex-wrap sm:gap-6">
-          <label class="flex items-center gap-2 text-sm text-slate-700">
-            <input v-model="form.is_active" type="checkbox" class="rounded border-slate-300" />
-            Active
-          </label>
-          <label class="flex items-center gap-2 text-sm text-slate-700">
-            <input v-model="form.is_barcode" type="checkbox" class="rounded border-slate-300" />
-            Has barcode
-          </label>
-          <label class="flex items-center gap-2 text-sm text-slate-700">
-            <input v-model="form.is_no_barcode" type="checkbox" class="rounded border-slate-300" />
-            No barcode
-          </label>
-          <label class="flex items-center gap-2 text-sm text-slate-700">
-            <input
-              v-model="form.is_need_fitem_shown"
-              type="checkbox"
-              class="rounded border-slate-300"
-            />
-            Show f-item
-          </label>
+          <BaseCheckbox v-model="form.is_active" label="Active" />
+          <BaseCheckbox v-model="form.is_barcode" label="Has barcode" />
+          <BaseCheckbox v-model="form.is_no_barcode" label="No barcode" />
+          <BaseCheckbox v-model="form.is_need_fitem_shown" label="Show f-item" />
         </div>
 
         <div class="flex items-center gap-3 sm:col-span-2">
@@ -216,18 +201,14 @@ async function handleDelete(item: Item) {
     </BaseCard>
 
     <div class="mb-4 flex items-center gap-2">
-      <div class="relative w-full max-w-xs">
-        <Search
-          class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
-        />
-        <input
-          v-model="searchQuery"
-          type="search"
-          placeholder="Search items…"
-          aria-label="Search items"
-          class="w-full rounded-lg border border-slate-300 py-2 pr-3 pl-9 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-        />
-      </div>
+      <BaseInput
+        v-model="searchQuery"
+        type="search"
+        :icon="Search"
+        placeholder="Search items…"
+        aria-label="Search items"
+        class="w-full max-w-xs"
+      />
     </div>
 
     <div

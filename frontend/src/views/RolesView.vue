@@ -162,18 +162,14 @@ async function handleDelete(role: Role) {
     </BaseCard>
 
     <div class="mb-4 flex items-center gap-2">
-      <div class="relative w-full max-w-xs">
-        <Search
-          class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
-        />
-        <input
-          v-model="searchQuery"
-          type="search"
-          placeholder="Search roles…"
-          aria-label="Search roles"
-          class="w-full rounded-lg border border-slate-300 py-2 pr-3 pl-9 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-        />
-      </div>
+      <BaseInput
+        v-model="searchQuery"
+        type="search"
+        :icon="Search"
+        placeholder="Search roles…"
+        aria-label="Search roles"
+        class="w-full max-w-xs"
+      />
     </div>
 
     <div

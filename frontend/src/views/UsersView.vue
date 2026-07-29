@@ -5,6 +5,8 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { itemsApi } from '@/lib/itemsApi'
@@ -260,74 +262,60 @@ async function handleDelete(user: UserDetail) {
 
       <form class="flex flex-col gap-6" @submit.prevent="handleSubmit">
         <!-- Core details -->
-        <section class="grid gap-4 sm:grid-cols-2">
-          <BaseInput id="name" v-model="form.name" label="Name" required />
-          <BaseInput id="user_name" v-model="form.user_name" label="Username" required />
+        <section class="grid gap-3 sm:grid-cols-3">
+          <BaseInput id="name" v-model="form.name" label="Name" required size="sm" />
+          <BaseInput id="user_name" v-model="form.user_name" label="Username" required size="sm" />
           <BaseInput
             id="password"
             v-model="form.password"
             :label="editingId !== null ? 'Password (leave blank to keep)' : 'Password'"
             type="password"
             :required="editingId === null"
+            size="sm"
           />
-          <BaseInput id="phone_no" v-model="form.phone_no" label="Phone number" required />
-          <BaseInput id="address" v-model="form.address" label="Address" required />
-          <BaseInput id="mailing_name" v-model="form.mailing_name" label="Mailing name" required />
-          <BaseInput id="signature" v-model="form.signature" label="Signature" required />
-          <BaseInput id="code" v-model="form.code" label="Code" required />
-          <BaseInput id="proff" v-model="form.proff" label="Proof" required />
-          <BaseInput id="system_id" v-model="form.system_id" label="System ID" required />
+          <BaseInput id="phone_no" v-model="form.phone_no" label="Phone number" required size="sm" />
+          <BaseInput id="address" v-model="form.address" label="Address" required size="sm" />
+          <BaseInput
+            id="mailing_name"
+            v-model="form.mailing_name"
+            label="Mailing name"
+            required
+            size="sm"
+          />
+          <BaseInput id="signature" v-model="form.signature" label="Signature" required size="sm" />
+          <BaseInput id="code" v-model="form.code" label="Code" required size="sm" />
+          <BaseInput id="proff" v-model="form.proff" label="Proof" required size="sm" />
+          <BaseInput id="system_id" v-model="form.system_id" label="System ID" required size="sm" />
 
-          <div class="flex flex-col gap-1.5">
-            <label for="role_id" class="text-sm font-medium text-slate-700">
-              Role <span class="text-brand-600">*</span>
-            </label>
-            <select
-              id="role_id"
-              v-model="form.role_id"
-              class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            >
-              <option value="" disabled>Select a role…</option>
-              <option v-for="role in roles" :key="role.id" :value="String(role.id)">
-                {{ role.role }}
-              </option>
-            </select>
-          </div>
+          <BaseSelect id="role_id" v-model="form.role_id" label="Role" required size="sm">
+            <option value="" disabled>Select a role…</option>
+            <option v-for="role in roles" :key="role.id" :value="String(role.id)">
+              {{ role.role }}
+            </option>
+          </BaseSelect>
 
-          <div class="flex flex-col gap-1.5">
-            <label for="category_name" class="text-sm font-medium text-slate-700">
-              Category <span class="text-brand-600">*</span>
-            </label>
-            <select
-              id="category_name"
-              v-model="form.category_name"
-              class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            >
-              <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-            </select>
-          </div>
+          <BaseSelect
+            id="category_name"
+            v-model="form.category_name"
+            label="Category"
+            required
+            size="sm"
+            :options="categories.map((cat) => ({ value: cat, label: cat }))"
+          />
 
-          <BaseInput id="remarks" v-model="form.remarks" label="Remarks (optional)" />
+          <BaseInput id="remarks" v-model="form.remarks" label="Remarks (optional)" size="sm" />
           <BaseInput
             id="customer_commants"
             v-model="form.customer_commants"
             label="Customer comments (optional)"
+            size="sm"
           />
         </section>
 
         <section class="flex flex-wrap gap-6">
-          <label class="flex items-center gap-2 text-sm text-slate-700">
-            <input v-model="form.is_active" type="checkbox" class="rounded border-slate-300" />
-            Active
-          </label>
-          <label class="flex items-center gap-2 text-sm text-slate-700">
-            <input v-model="form.is_billable" type="checkbox" class="rounded border-slate-300" />
-            Billable
-          </label>
-          <label class="flex items-center gap-2 text-sm text-slate-700">
-            <input v-model="form.is_delete" type="checkbox" class="rounded border-slate-300" />
-            Marked deleted
-          </label>
+          <BaseCheckbox v-model="form.is_active" label="Active" />
+          <BaseCheckbox v-model="form.is_billable" label="Billable" />
+          <BaseCheckbox v-model="form.is_delete" label="Marked deleted" />
         </section>
 
         <!-- Item mappings -->
@@ -346,37 +334,30 @@ async function handleDelete(user: UserDetail) {
             :key="index"
             class="mb-3 grid items-end gap-3 sm:grid-cols-[1fr_1fr_1fr_auto_auto]"
           >
-            <div class="flex flex-col gap-1.5">
-              <label class="text-sm font-medium text-slate-700">Item</label>
-              <select
-                v-model="mapping.item_id"
-                class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              >
-                <option :value="null" disabled>Select…</option>
-                <option v-for="item in items" :key="item.item_id" :value="item.item_id">
-                  {{ item.item_name }}
-                </option>
-              </select>
-            </div>
+            <BaseSelect v-model="mapping.item_id" label="Item" size="sm">
+              <option :value="null" disabled>Select…</option>
+              <option v-for="item in items" :key="item.item_id" :value="item.item_id">
+                {{ item.item_name }}
+              </option>
+            </BaseSelect>
             <BaseInput
               v-model="mapping.item_grams_total"
               label="Grams total"
               type="number"
+              size="sm"
             />
             <BaseInput
               v-model="mapping.item_purity_total"
               label="Purity total"
               type="number"
+              size="sm"
             />
-            <label class="flex items-center gap-2 pb-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                class="rounded border-slate-300"
-                :checked="mapping.is_primary === 1"
-                @change="mapping.is_primary = ($event.target as HTMLInputElement).checked ? 1 : 0"
-              />
-              Primary
-            </label>
+            <BaseCheckbox
+              class="pb-2"
+              label="Primary"
+              :model-value="mapping.is_primary === 1"
+              @update:model-value="(v) => (mapping.is_primary = v ? 1 : 0)"
+            />
             <button
               type="button"
               class="mb-1 rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
@@ -404,18 +385,12 @@ async function handleDelete(user: UserDetail) {
             :key="index"
             class="mb-3 flex items-end gap-3"
           >
-            <div class="flex flex-1 flex-col gap-1.5">
-              <label class="text-sm font-medium text-slate-700">Head (user)</label>
-              <select
-                v-model="mapping.head_id"
-                class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              >
-                <option :value="null" disabled>Select a user…</option>
-                <option v-for="u in users" :key="u.user_id" :value="u.user_id">
-                  {{ u.name }} ({{ u.user_name }})
-                </option>
-              </select>
-            </div>
+            <BaseSelect v-model="mapping.head_id" label="Head (user)" size="sm" class="flex-1">
+              <option :value="null" disabled>Select a user…</option>
+              <option v-for="u in users" :key="u.user_id" :value="u.user_id">
+                {{ u.name }} ({{ u.user_name }})
+              </option>
+            </BaseSelect>
             <button
               type="button"
               class="mb-1 rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
@@ -443,18 +418,12 @@ async function handleDelete(user: UserDetail) {
             :key="index"
             class="mb-3 flex items-end gap-3"
           >
-            <div class="flex flex-1 flex-col gap-1.5">
-              <label class="text-sm font-medium text-slate-700">Cash head (user)</label>
-              <select
-                v-model="mapping.head_id"
-                class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              >
-                <option :value="null" disabled>Select a user…</option>
-                <option v-for="u in users" :key="u.user_id" :value="u.user_id">
-                  {{ u.name }} ({{ u.user_name }})
-                </option>
-              </select>
-            </div>
+            <BaseSelect v-model="mapping.head_id" label="Cash head (user)" size="sm" class="flex-1">
+              <option :value="null" disabled>Select a user…</option>
+              <option v-for="u in users" :key="u.user_id" :value="u.user_id">
+                {{ u.name }} ({{ u.user_name }})
+              </option>
+            </BaseSelect>
             <button
               type="button"
               class="mb-1 rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
@@ -476,18 +445,14 @@ async function handleDelete(user: UserDetail) {
     </BaseCard>
 
     <div class="mb-4 flex items-center gap-2">
-      <div class="relative w-full max-w-xs">
-        <Search
-          class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
-        />
-        <input
-          v-model="searchQuery"
-          type="search"
-          placeholder="Search users…"
-          aria-label="Search users"
-          class="w-full rounded-lg border border-slate-300 py-2 pr-3 pl-9 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-        />
-      </div>
+      <BaseInput
+        v-model="searchQuery"
+        type="search"
+        :icon="Search"
+        placeholder="Search users…"
+        aria-label="Search users"
+        class="w-full max-w-xs"
+      />
     </div>
 
     <div

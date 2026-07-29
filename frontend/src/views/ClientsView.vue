@@ -5,6 +5,8 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { clientsApi } from '@/lib/clientsApi'
 import { ApiError } from '@/lib/api'
@@ -140,54 +142,57 @@ async function handleDelete(client: Client) {
         {{ formError }}
       </div>
 
-      <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="handleSubmit">
-        <BaseInput id="name" v-model="form.name" label="Name" required />
-        <BaseInput id="user_name" v-model="form.user_name" label="Username" required />
+      <form class="grid gap-3 sm:grid-cols-3" @submit.prevent="handleSubmit">
+        <BaseInput id="name" v-model="form.name" label="Name" required size="sm" />
+        <BaseInput id="user_name" v-model="form.user_name" label="Username" required size="sm" />
         <BaseInput
           id="password"
           v-model="form.password"
           label="Password"
           type="password"
           required
+          size="sm"
         />
-        <BaseInput id="phone_no" v-model="form.phone_no" label="Phone" required />
-        <BaseInput id="address" v-model="form.address" label="Address" required />
-        <BaseInput id="mailing_name" v-model="form.mailing_name" label="Mailing name" required />
-        <BaseInput id="signature" v-model="form.signature" label="Signature" required />
-        <BaseInput id="code" v-model="form.code" label="Code" required />
-        <BaseInput id="proff" v-model="form.proff" label="Profession" required />
-        <BaseInput id="role_id" v-model="form.role_id" label="Role ID" required />
-        <BaseInput id="system_id" v-model="form.system_id" label="System ID" required />
+        <BaseInput id="phone_no" v-model="form.phone_no" label="Phone" required size="sm" />
+        <BaseInput id="address" v-model="form.address" label="Address" required size="sm" />
+        <BaseInput
+          id="mailing_name"
+          v-model="form.mailing_name"
+          label="Mailing name"
+          required
+          size="sm"
+        />
+        <BaseInput id="signature" v-model="form.signature" label="Signature" required size="sm" />
+        <BaseInput id="code" v-model="form.code" label="Code" required size="sm" />
+        <BaseInput id="proff" v-model="form.proff" label="Profession" required size="sm" />
+        <BaseInput id="role_id" v-model="form.role_id" label="Role ID" required size="sm" />
+        <BaseInput id="system_id" v-model="form.system_id" label="System ID" required size="sm" />
 
-        <div class="flex flex-col gap-1.5">
-          <label for="category_name" class="text-sm font-medium text-slate-700">
-            Category <span class="text-brand-600">*</span>
-          </label>
-          <select
-            id="category_name"
-            v-model="form.category_name"
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-          >
-            <option value="GRAMS">Grams</option>
-            <option value="PURITY">Purity</option>
-            <option value="BOTH">Both</option>
-          </select>
-        </div>
+        <BaseSelect
+          id="category_name"
+          v-model="form.category_name"
+          label="Category"
+          required
+          size="sm"
+          :options="[
+            { value: 'GRAMS', label: 'Grams' },
+            { value: 'PURITY', label: 'Purity' },
+            { value: 'BOTH', label: 'Both' },
+          ]"
+        />
 
         <BaseInput
           id="remarks"
           v-model="form.remarks"
           label="Remarks"
           placeholder="Optional"
-          class="sm:col-span-2"
+          size="sm"
+          class="sm:col-span-3"
         />
 
-        <label class="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
-          <input v-model="form.is_active" type="checkbox" class="rounded border-slate-300" />
-          Active
-        </label>
+        <BaseCheckbox v-model="form.is_active" label="Active" class="sm:col-span-3" />
 
-        <div class="flex items-center gap-3 sm:col-span-2">
+        <div class="flex items-center gap-3 sm:col-span-3">
           <BaseButton type="submit" :disabled="isSaving">
             {{ isSaving ? 'Saving…' : 'Create client' }}
           </BaseButton>
@@ -197,18 +202,14 @@ async function handleDelete(client: Client) {
     </BaseCard>
 
     <div class="mb-4 flex items-center gap-2">
-      <div class="relative w-full max-w-xs">
-        <Search
-          class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
-        />
-        <input
-          v-model="searchQuery"
-          type="search"
-          placeholder="Search clients…"
-          aria-label="Search clients"
-          class="w-full rounded-lg border border-slate-300 py-2 pr-3 pl-9 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-        />
-      </div>
+      <BaseInput
+        v-model="searchQuery"
+        type="search"
+        :icon="Search"
+        placeholder="Search clients…"
+        aria-label="Search clients"
+        class="w-full max-w-xs"
+      />
     </div>
 
     <div
