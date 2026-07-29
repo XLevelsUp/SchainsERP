@@ -3,6 +3,7 @@ import type { Component } from 'vue'
 import { Users, FileText, Activity, TrendingUp } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
+import RemindersPanel from '@/components/dashboard/RemindersPanel.vue'
 
 interface StatCard {
   label: string
@@ -31,9 +32,13 @@ const stats: StatCard[] = [
       </BaseCard>
     </div>
 
-    <BaseCard class="mt-6">
-      <h2 class="text-sm font-semibold text-slate-900">Recent activity</h2>
-      <p class="mt-2 text-sm text-slate-500">No recent activity yet.</p>
-    </BaseCard>
+    <div class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <BaseCard class="lg:col-span-2">
+        <h2 class="text-sm font-semibold text-slate-900">Recent activity</h2>
+        <p class="mt-2 text-sm text-slate-500">No recent activity yet.</p>
+      </BaseCard>
+
+      <RemindersPanel />
+    </div>
   </div>
 </template>
