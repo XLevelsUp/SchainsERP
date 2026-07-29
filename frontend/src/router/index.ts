@@ -18,6 +18,13 @@ const router = createRouter({
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
         { path: 'items', name: 'items', component: () => import('@/views/ItemsView.vue') },
+        {
+          path: 'fitem-boxes',
+          name: 'fitem-boxes',
+          component: () => import('@/views/FitemBoxesView.vue'),
+        },
+        { path: 'roles', name: 'roles', component: () => import('@/views/RolesView.vue') },
+        { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue') },
         { path: 'clients', name: 'clients', component: () => import('@/views/ClientsView.vue') },
         { path: 'pages', name: 'pages', component: () => import('@/views/PagesView.vue') },
       ],
