@@ -30,8 +30,8 @@ function handleLogout() {
     <div class="flex-1" />
 
     <div class="flex items-center gap-3">
-      <span v-if="auth.userEmail" class="hidden text-sm text-slate-600 sm:inline">
-        {{ auth.userEmail }}
+      <span v-if="auth.user" class="hidden text-sm text-slate-600 sm:inline">
+        {{ auth.user.name }}
       </span>
       <button
         type="button"

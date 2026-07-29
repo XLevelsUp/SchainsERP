@@ -1,26 +1,29 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { AuthUser } from '@/types'
 
 const AUTH_STORAGE_KEY = 'schainserp:auth'
 
-export const useAuthStore = defineStore('auth', () => {
-  const isAuthenticated = ref(localStorage.getItem(AUTH_STORAGE_KEY) === 'true')
-  const userEmail = ref<string | null>(localStorage.getItem(`${AUTH_STORAGE_KEY}:email`))
+function loadStoredUser(): AuthUser | null {
+  const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+  return raw ? (JSON.parse(raw) as AuthUser) : null
+}
 
-  function login(email: string) {
-    // Stub: no backend yet. Replace with a real auth request later.
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<AuthUser | null>(loadStoredUser())
+  const isAuthenticated = ref(user.value !== null)
+
+  function login(authUser: AuthUser) {
+    user.value = authUser
     isAuthenticated.value = true
-    userEmail.value = email
-    localStorage.setItem(AUTH_STORAGE_KEY, 'true')
-    localStorage.setItem(`${AUTH_STORAGE_KEY}:email`, email)
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser))
   }
 
   function logout() {
+    user.value = null
     isAuthenticated.value = false
-    userEmail.value = null
     localStorage.removeItem(AUTH_STORAGE_KEY)
-    localStorage.removeItem(`${AUTH_STORAGE_KEY}:email`)
   }
 
-  return { isAuthenticated, userEmail, login, logout }
+  return { user, isAuthenticated, login, logout }
 })
