@@ -19,7 +19,6 @@ const searchQuery = ref('')
 
 const columns: DataTableColumn<Role>[] = [
   { key: 'role', label: 'Role' },
-  { key: 'touch', label: 'Touch' },
   { key: 'added_at', label: 'Added' },
   { key: 'id', label: '' },
 ]
@@ -64,7 +63,7 @@ function openCreateForm() {
 
 function openEditForm(role: Role) {
   editingId.value = role.id
-  Object.assign(form, { role: role.role, touch: role.touch })
+  Object.assign(form, { role: role.role, touch: null })
   formError.value = ''
   isFormOpen.value = true
 }
@@ -113,7 +112,7 @@ async function handleDelete(role: Role) {
 
 <template>
   <div>
-    <PageHeader title="Roles" description="Manage user roles and their default touch.">
+    <PageHeader title="Roles" description="Manage user roles.">
       <template #actions>
         <BaseButton variant="secondary" :icon="RefreshCw" @click="loadRoles">Refresh</BaseButton>
         <BaseButton :icon="Plus" @click="openCreateForm">New role</BaseButton>
@@ -135,7 +134,7 @@ async function handleDelete(role: Role) {
         </button>
       </div>
 
-      <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="handleSubmit">
+      <form class="flex flex-col gap-4" @submit.prevent="handleSubmit">
         <BaseInput
           id="role"
           v-model="form.role"
@@ -143,17 +142,10 @@ async function handleDelete(role: Role) {
           placeholder="Admin"
           required
           :error="formError"
-        />
-        <BaseInput
-          id="touch"
-          :model-value="form.touch === null ? '' : String(form.touch)"
-          label="Touch"
-          type="number"
-          placeholder="Optional"
-          @update:model-value="(v) => (form.touch = v === '' ? null : Number(v))"
+          class="max-w-sm"
         />
 
-        <div class="flex items-center gap-3 sm:col-span-2">
+        <div class="flex items-center gap-3">
           <BaseButton type="submit" :disabled="isSaving">
             {{ isSaving ? 'Saving…' : editingId !== null ? 'Save changes' : 'Create role' }}
           </BaseButton>
@@ -193,10 +185,6 @@ async function handleDelete(role: Role) {
       :rows="filteredRoles"
       empty-message="No roles yet. Add your first role to get started."
     >
-      <template #touch="{ value }">
-        {{ value === null ? '—' : value }}
-      </template>
-
       <template #added_at="{ value }">{{ formatDateTime(value as string) }}</template>
 
       <template #id="{ row }">

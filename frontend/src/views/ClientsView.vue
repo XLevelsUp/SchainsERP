@@ -10,11 +10,13 @@ import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { clientsApi } from '@/lib/clientsApi'
+import { rolesApi } from '@/lib/rolesApi'
 import { ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/date'
-import type { Client, ClientFormValues, DataTableColumn } from '@/types'
+import type { Client, ClientFormValues, DataTableColumn, Role } from '@/types'
 
 const clients = ref<Client[]>([])
+const roles = ref<Role[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 const searchQuery = ref('')
@@ -33,7 +35,9 @@ async function loadClients() {
   isLoading.value = true
   loadError.value = ''
   try {
-    clients.value = await clientsApi.list()
+    const [clientsData, rolesData] = await Promise.all([clientsApi.list(), rolesApi.list()])
+    clients.value = clientsData
+    roles.value = rolesData
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load clients.'
   } finally {
@@ -166,7 +170,12 @@ async function handleDelete(client: Client) {
         <BaseInput id="signature" v-model="form.signature" label="Signature" required size="sm" />
         <BaseInput id="code" v-model="form.code" label="Code" required size="sm" />
         <BaseInput id="proff" v-model="form.proff" label="Profession" required size="sm" />
-        <BaseInput id="role_id" v-model="form.role_id" label="Role ID" required size="sm" />
+        <BaseSelect id="role_id" v-model="form.role_id" label="Role" required size="sm">
+          <option value="" disabled>Select a role…</option>
+          <option v-for="role in roles" :key="role.id" :value="String(role.id)">
+            {{ role.role }}
+          </option>
+        </BaseSelect>
         <BaseInput id="system_id" v-model="form.system_id" label="System ID" required size="sm" />
 
         <BaseSelect

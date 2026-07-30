@@ -13,6 +13,7 @@ import { userDetailsApi } from '@/lib/userDetailsApi'
 import { itemsApi } from '@/lib/itemsApi'
 import { rolesApi } from '@/lib/rolesApi'
 import { ApiError } from '@/lib/api'
+import { useToastStore } from '@/stores/toast'
 import type {
   DataTableColumn,
   UserDetail,
@@ -28,6 +29,7 @@ const roles = ref<Role[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 const searchQuery = ref('')
+const toastStore = useToastStore()
 
 const columns: DataTableColumn<UserDetail>[] = [
   { key: 'name', label: 'Name' },
@@ -109,6 +111,7 @@ function openCreateForm() {
   editingId.value = null
   resetForm(makeEmptyForm())
   formError.value = ''
+  clearFieldErrors()
   isFormOpen.value = true
 }
 
@@ -135,6 +138,7 @@ function openEditForm(user: UserDetail) {
     // Note: backend show() does not return mappings, so they start empty on edit.
   })
   formError.value = ''
+  clearFieldErrors()
   isFormOpen.value = true
 }
 
@@ -167,35 +171,84 @@ function removeCashHeadMapping(index: number) {
   form.cash_head_mappings.splice(index, 1)
 }
 
-const requiredFields: { key: keyof UserDetailFormValues; label: string }[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'user_name', label: 'Username' },
-  { key: 'address', label: 'Address' },
-  { key: 'signature', label: 'Signature' },
-  { key: 'code', label: 'Code' },
-  { key: 'phone_no', label: 'Phone number' },
-  { key: 'proff', label: 'Proof' },
-  { key: 'role_id', label: 'Role' },
-  { key: 'system_id', label: 'System ID' },
-  { key: 'mailing_name', label: 'Mailing name' },
+// Mirrors the max-length rules enforced by UserDetailController::store()/update().
+const requiredFields: { key: keyof UserDetailFormValues; label: string; maxLength: number }[] = [
+  { key: 'name', label: 'Name', maxLength: 55 },
+  { key: 'user_name', label: 'Username', maxLength: 55 },
+  { key: 'address', label: 'Address', maxLength: 400 },
+  { key: 'signature', label: 'Signature', maxLength: 45 },
+  { key: 'code', label: 'Code', maxLength: 255 },
+  { key: 'phone_no', label: 'Phone number', maxLength: 15 },
+  { key: 'proff', label: 'Proof', maxLength: 155 },
+  { key: 'system_id', label: 'System ID', maxLength: 255 },
+  { key: 'mailing_name', label: 'Mailing name', maxLength: 255 },
 ]
 
+const fieldErrors = reactive<Record<string, string>>({})
+
+function clearFieldErrors() {
+  Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
+}
+
 function validate(): boolean {
+  clearFieldErrors()
+  formError.value = ''
+
   for (const f of requiredFields) {
-    if (!String(form[f.key] ?? '').trim()) {
-      formError.value = `${f.label} is required.`
-      return false
+    const value = String(form[f.key] ?? '').trim()
+    if (!value) {
+      fieldErrors[f.key] = `${f.label} is required.`
+    } else if (value.length > f.maxLength) {
+      fieldErrors[f.key] = `${f.label} must be ${f.maxLength} characters or fewer.`
     }
   }
+
+  if (!String(form.role_id).trim()) {
+    fieldErrors.role_id = 'Role is required.'
+  }
+
+  if (form.phone_no.trim() && !/^\d{6,15}$/.test(form.phone_no.trim())) {
+    fieldErrors.phone_no = 'Phone number must be 6-15 digits.'
+  }
+
+  if (form.remarks.length > 255) {
+    fieldErrors.remarks = 'Remarks must be 255 characters or fewer.'
+  }
+  if (form.customer_commants.length > 1500) {
+    fieldErrors.customer_commants = 'Customer comments must be 1500 characters or fewer.'
+  }
+
   if (editingId.value === null && form.password.trim().length < 6) {
-    formError.value = 'Password is required (min 6 characters).'
+    fieldErrors.password = 'Password is required (min 6 characters).'
+  }
+
+  form.item_mappings.forEach((mapping, index) => {
+    if (mapping.item_id === null) {
+      fieldErrors[`item_mappings.${index}`] = `Select an item for row ${index + 1} or remove it.`
+    }
+  })
+  form.head_mappings.forEach((mapping, index) => {
+    if (mapping.head_id === null) {
+      fieldErrors[`head_mappings.${index}`] = `Select a head for row ${index + 1} or remove it.`
+    }
+  })
+  form.cash_head_mappings.forEach((mapping, index) => {
+    if (mapping.head_id === null) {
+      fieldErrors[`cash_head_mappings.${index}`] =
+        `Select a cash head for row ${index + 1} or remove it.`
+    }
+  })
+
+  const firstError = Object.values(fieldErrors)[0]
+  if (firstError) {
+    formError.value = firstError
+    toastStore.show(firstError, 'error')
     return false
   }
   return true
 }
 
 async function handleSubmit() {
-  formError.value = ''
   if (!validate()) return
 
   isSaving.value = true
@@ -206,9 +259,26 @@ async function handleSubmit() {
       await userDetailsApi.create({ ...form })
     }
     isFormOpen.value = false
+    toastStore.show(
+      editingId.value !== null ? 'User updated successfully.' : 'User created successfully.',
+      'success',
+    )
     await loadData()
   } catch (err) {
-    formError.value = err instanceof ApiError ? err.message : 'Failed to save user.'
+    if (err instanceof ApiError) {
+      formError.value = err.message
+      if (err.errors) {
+        for (const [key, messages] of Object.entries(err.errors)) {
+          fieldErrors[key] = messages[0]
+        }
+        toastStore.show(Object.values(err.errors)[0]?.[0] ?? err.message, 'error')
+      } else {
+        toastStore.show(err.message, 'error')
+      }
+    } else {
+      formError.value = 'Failed to save user.'
+      toastStore.show('Failed to save user.', 'error')
+    }
   } finally {
     isSaving.value = false
   }
@@ -263,8 +333,24 @@ async function handleDelete(user: UserDetail) {
       <form class="flex flex-col gap-6" @submit.prevent="handleSubmit">
         <!-- Core details -->
         <section class="grid gap-3 sm:grid-cols-3">
-          <BaseInput id="name" v-model="form.name" label="Name" required size="sm" />
-          <BaseInput id="user_name" v-model="form.user_name" label="Username" required size="sm" />
+          <BaseInput
+            id="name"
+            v-model="form.name"
+            label="Name"
+            required
+            size="sm"
+            maxlength="55"
+            :error="fieldErrors.name"
+          />
+          <BaseInput
+            id="user_name"
+            v-model="form.user_name"
+            label="Username"
+            required
+            size="sm"
+            maxlength="55"
+            :error="fieldErrors.user_name"
+          />
           <BaseInput
             id="password"
             v-model="form.password"
@@ -272,22 +358,80 @@ async function handleDelete(user: UserDetail) {
             type="password"
             :required="editingId === null"
             size="sm"
+            :error="fieldErrors.password"
           />
-          <BaseInput id="phone_no" v-model="form.phone_no" label="Phone number" required size="sm" />
-          <BaseInput id="address" v-model="form.address" label="Address" required size="sm" />
+          <BaseInput
+            id="phone_no"
+            v-model="form.phone_no"
+            label="Phone number"
+            required
+            size="sm"
+            maxlength="15"
+            :error="fieldErrors.phone_no"
+          />
+          <BaseInput
+            id="address"
+            v-model="form.address"
+            label="Address"
+            required
+            size="sm"
+            maxlength="400"
+            :error="fieldErrors.address"
+          />
           <BaseInput
             id="mailing_name"
             v-model="form.mailing_name"
             label="Mailing name"
             required
             size="sm"
+            maxlength="255"
+            :error="fieldErrors.mailing_name"
           />
-          <BaseInput id="signature" v-model="form.signature" label="Signature" required size="sm" />
-          <BaseInput id="code" v-model="form.code" label="Code" required size="sm" />
-          <BaseInput id="proff" v-model="form.proff" label="Proof" required size="sm" />
-          <BaseInput id="system_id" v-model="form.system_id" label="System ID" required size="sm" />
+          <BaseInput
+            id="signature"
+            v-model="form.signature"
+            label="Signature"
+            required
+            size="sm"
+            maxlength="45"
+            :error="fieldErrors.signature"
+          />
+          <BaseInput
+            id="code"
+            v-model="form.code"
+            label="Code"
+            required
+            size="sm"
+            maxlength="255"
+            :error="fieldErrors.code"
+          />
+          <BaseInput
+            id="proff"
+            v-model="form.proff"
+            label="Proof"
+            required
+            size="sm"
+            maxlength="155"
+            :error="fieldErrors.proff"
+          />
+          <BaseInput
+            id="system_id"
+            v-model="form.system_id"
+            label="System ID"
+            required
+            size="sm"
+            maxlength="255"
+            :error="fieldErrors.system_id"
+          />
 
-          <BaseSelect id="role_id" v-model="form.role_id" label="Role" required size="sm">
+          <BaseSelect
+            id="role_id"
+            v-model="form.role_id"
+            label="Role"
+            required
+            size="sm"
+            :error="fieldErrors.role_id"
+          >
             <option value="" disabled>Select a role…</option>
             <option v-for="role in roles" :key="role.id" :value="String(role.id)">
               {{ role.role }}
@@ -303,12 +447,21 @@ async function handleDelete(user: UserDetail) {
             :options="categories.map((cat) => ({ value: cat, label: cat }))"
           />
 
-          <BaseInput id="remarks" v-model="form.remarks" label="Remarks (optional)" size="sm" />
+          <BaseInput
+            id="remarks"
+            v-model="form.remarks"
+            label="Remarks (optional)"
+            size="sm"
+            maxlength="255"
+            :error="fieldErrors.remarks"
+          />
           <BaseInput
             id="customer_commants"
             v-model="form.customer_commants"
             label="Customer comments (optional)"
             size="sm"
+            maxlength="1500"
+            :error="fieldErrors.customer_commants"
           />
         </section>
 
@@ -334,7 +487,12 @@ async function handleDelete(user: UserDetail) {
             :key="index"
             class="mb-3 grid items-end gap-3 sm:grid-cols-[1fr_1fr_1fr_auto_auto]"
           >
-            <BaseSelect v-model="mapping.item_id" label="Item" size="sm">
+            <BaseSelect
+              v-model="mapping.item_id"
+              label="Item"
+              size="sm"
+              :error="fieldErrors[`item_mappings.${index}`]"
+            >
               <option :value="null" disabled>Select…</option>
               <option v-for="item in items" :key="item.item_id" :value="item.item_id">
                 {{ item.item_name }}
@@ -385,7 +543,13 @@ async function handleDelete(user: UserDetail) {
             :key="index"
             class="mb-3 flex items-end gap-3"
           >
-            <BaseSelect v-model="mapping.head_id" label="Head (user)" size="sm" class="flex-1">
+            <BaseSelect
+              v-model="mapping.head_id"
+              label="Head (user)"
+              size="sm"
+              class="flex-1"
+              :error="fieldErrors[`head_mappings.${index}`]"
+            >
               <option :value="null" disabled>Select a user…</option>
               <option v-for="u in users" :key="u.user_id" :value="u.user_id">
                 {{ u.name }} ({{ u.user_name }})
@@ -418,7 +582,13 @@ async function handleDelete(user: UserDetail) {
             :key="index"
             class="mb-3 flex items-end gap-3"
           >
-            <BaseSelect v-model="mapping.head_id" label="Cash head (user)" size="sm" class="flex-1">
+            <BaseSelect
+              v-model="mapping.head_id"
+              label="Cash head (user)"
+              size="sm"
+              class="flex-1"
+              :error="fieldErrors[`cash_head_mappings.${index}`]"
+            >
               <option :value="null" disabled>Select a user…</option>
               <option v-for="u in users" :key="u.user_id" :value="u.user_id">
                 {{ u.name }} ({{ u.user_name }})

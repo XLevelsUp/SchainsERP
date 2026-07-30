@@ -7,10 +7,13 @@ export interface ApiResponse<T> {
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  // Laravel validation error bag: { field: [message, ...] }
+  errors?: Record<string, string[]>
+  constructor(message: string, status: number, errors?: Record<string, string[]>) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.errors = errors
   }
 }
 
@@ -38,7 +41,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     const message =
       (body && (body.message || body.error)) || `Request failed (${response.status})`
-    throw new ApiError(message, response.status)
+    throw new ApiError(message, response.status, body?.errors)
   }
 
   return body as T
