@@ -5,6 +5,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import { formatDateOnly } from '@/lib/date'
 
 // UI-only feature. Mock data held in memory — no backend calls.
 type Recurrence = 'DAILY' | 'MONTHLY' | 'ONE_TIME'
@@ -53,10 +54,7 @@ function isDueToday(r: Reminder) {
 
 function formatDate(date: string) {
   if (date === today) return 'Today'
-  return new Date(date + 'T00:00:00').toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })
+  return formatDateOnly(date)
 }
 
 function acknowledge(r: Reminder) {

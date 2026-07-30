@@ -8,9 +8,11 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { fitemBoxesApi } from '@/lib/fitemBoxesApi'
 import { itemsApi } from '@/lib/itemsApi'
 import { ApiError } from '@/lib/api'
+import { formatDateTime } from '@/lib/date'
 import type { DataTableColumn, FitemBox, FitemBoxFormValues, Item } from '@/types'
 
 // Until real auth wiring exists, attribute changes to the seeded user (id 1).
@@ -144,7 +146,6 @@ async function handleSubmit() {
 const deletingId = ref<number | null>(null)
 
 async function handleDelete(box: FitemBox) {
-  if (!window.confirm(`Delete "${box.box_name}"?`)) return
   deletingId.value = box.box_id
   try {
     await fitemBoxesApi.remove(box.box_id)
@@ -244,6 +245,8 @@ async function handleDelete(box: FitemBox) {
         {{ itemLabel(row as FitemBox) }}
       </template>
 
+      <template #added_at="{ value }">{{ formatDateTime(value as string) }}</template>
+
       <template #is_active="{ value }">
         <span
           class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -263,15 +266,22 @@ async function handleDelete(box: FitemBox) {
           >
             <Pencil class="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            aria-label="Delete box"
-            :disabled="deletingId === (row as FitemBox).box_id"
-            @click="handleDelete(row as FitemBox)"
+          <ConfirmPopover
+            :message="`Delete ${(row as FitemBox).box_name}?`"
+            @confirm="handleDelete(row as FitemBox)"
           >
-            <Trash2 class="h-4 w-4" />
-          </button>
+            <template #default="{ toggle }">
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                aria-label="Delete box"
+                :disabled="deletingId === (row as FitemBox).box_id"
+                @click="toggle"
+              >
+                <Trash2 class="h-4 w-4" />
+              </button>
+            </template>
+          </ConfirmPopover>
         </div>
       </template>
     </DataTable>

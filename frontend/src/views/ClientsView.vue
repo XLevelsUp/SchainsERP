@@ -8,8 +8,10 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { clientsApi } from '@/lib/clientsApi'
 import { ApiError } from '@/lib/api'
+import { formatDateTime } from '@/lib/date'
 import type { Client, ClientFormValues, DataTableColumn } from '@/types'
 
 const clients = ref<Client[]>([])
@@ -100,7 +102,6 @@ async function handleSubmit() {
 const deletingId = ref<number | null>(null)
 
 async function handleDelete(client: Client) {
-  if (!window.confirm(`Delete "${client.name}"?`)) return
   deletingId.value = client.user_id
   try {
     await clientsApi.remove(client.user_id)
@@ -241,17 +242,26 @@ async function handleDelete(client: Client) {
         </span>
       </template>
 
+      <template #added_at="{ value }">{{ formatDateTime(value as string) }}</template>
+
       <template #user_id="{ row }">
         <div class="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            aria-label="Delete client"
-            :disabled="deletingId === (row as Client).user_id"
-            @click="handleDelete(row as Client)"
+          <ConfirmPopover
+            :message="`Delete ${(row as Client).name}?`"
+            @confirm="handleDelete(row as Client)"
           >
-            <Trash2 class="h-4 w-4" />
-          </button>
+            <template #default="{ toggle }">
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                aria-label="Delete client"
+                :disabled="deletingId === (row as Client).user_id"
+                @click="toggle"
+              >
+                <Trash2 class="h-4 w-4" />
+              </button>
+            </template>
+          </ConfirmPopover>
         </div>
       </template>
     </DataTable>

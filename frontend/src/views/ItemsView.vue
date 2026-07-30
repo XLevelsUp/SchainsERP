@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Search, Plus, Pencil, Trash2, X, RefreshCw } from 'lucide-vue-next'
+import { Search, Plus, Pencil, Trash2, X, RefreshCw, Check } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { itemsApi } from '@/lib/itemsApi'
 import { ApiError } from '@/lib/api'
+import { formatDateTime } from '@/lib/date'
 import type { DataTableColumn, Item, ItemFormValues } from '@/types'
 
 const items = ref<Item[]>([])
@@ -20,6 +22,10 @@ const columns: DataTableColumn<Item>[] = [
   { key: 'item_name', label: 'Name' },
   { key: 'default_touch', label: 'Default Touch' },
   { key: 'item_touch', label: 'Item Touch' },
+  { key: 'mtouch', label: 'M-Touch' },
+  { key: 'is_barcode', label: 'Barcode' },
+  { key: 'is_no_barcode', label: 'No Barcode' },
+  { key: 'is_need_fitem_shown', label: 'F-Item' },
   { key: 'is_active', label: 'Status' },
   { key: 'added_at', label: 'Added' },
   { key: 'item_id', label: '' },
@@ -115,7 +121,6 @@ async function handleSubmit() {
 const deletingId = ref<number | null>(null)
 
 async function handleDelete(item: Item) {
-  if (!window.confirm(`Delete "${item.item_name}"?`)) return
   deletingId.value = item.item_id
   try {
     await itemsApi.remove(item.item_id)
@@ -231,6 +236,25 @@ async function handleDelete(item: Item) {
       :rows="filteredItems"
       empty-message="No items yet. Add your first item to get started."
     >
+      <template #mtouch="{ value }">
+        {{ value === null ? '—' : value }}
+      </template>
+
+      <template #is_barcode="{ value }">
+        <Check v-if="value" class="h-4 w-4 text-emerald-600" aria-label="Yes" />
+        <span v-else class="text-slate-300">—</span>
+      </template>
+
+      <template #is_no_barcode="{ value }">
+        <Check v-if="value" class="h-4 w-4 text-emerald-600" aria-label="Yes" />
+        <span v-else class="text-slate-300">—</span>
+      </template>
+
+      <template #is_need_fitem_shown="{ value }">
+        <Check v-if="value" class="h-4 w-4 text-emerald-600" aria-label="Yes" />
+        <span v-else class="text-slate-300">—</span>
+      </template>
+
       <template #is_active="{ value }">
         <span
           class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -239,6 +263,8 @@ async function handleDelete(item: Item) {
           {{ value ? 'Active' : 'Inactive' }}
         </span>
       </template>
+
+      <template #added_at="{ value }">{{ formatDateTime(value as string) }}</template>
 
       <template #item_id="{ row }">
         <div class="flex items-center justify-end gap-1">
@@ -250,15 +276,22 @@ async function handleDelete(item: Item) {
           >
             <Pencil class="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            aria-label="Delete item"
-            :disabled="deletingId === (row as Item).item_id"
-            @click="handleDelete(row as Item)"
+          <ConfirmPopover
+            :message="`Delete ${(row as Item).item_name}?`"
+            @confirm="handleDelete(row as Item)"
           >
-            <Trash2 class="h-4 w-4" />
-          </button>
+            <template #default="{ toggle }">
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                aria-label="Delete item"
+                :disabled="deletingId === (row as Item).item_id"
+                @click="toggle"
+              >
+                <Trash2 class="h-4 w-4" />
+              </button>
+            </template>
+          </ConfirmPopover>
         </div>
       </template>
     </DataTable>

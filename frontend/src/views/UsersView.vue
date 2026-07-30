@@ -8,6 +8,7 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { itemsApi } from '@/lib/itemsApi'
 import { rolesApi } from '@/lib/rolesApi'
@@ -216,7 +217,6 @@ async function handleSubmit() {
 const deletingId = ref<number | null>(null)
 
 async function handleDelete(user: UserDetail) {
-  if (!window.confirm(`Delete "${user.name}"? This also removes their mappings.`)) return
   deletingId.value = user.user_id
   try {
     await userDetailsApi.remove(user.user_id)
@@ -494,15 +494,22 @@ async function handleDelete(user: UserDetail) {
           >
             <Pencil class="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            aria-label="Delete user"
-            :disabled="deletingId === (row as UserDetail).user_id"
-            @click="handleDelete(row as UserDetail)"
+          <ConfirmPopover
+            :message="`Delete ${(row as UserDetail).name}? This also removes their mappings.`"
+            @confirm="handleDelete(row as UserDetail)"
           >
-            <Trash2 class="h-4 w-4" />
-          </button>
+            <template #default="{ toggle }">
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                aria-label="Delete user"
+                :disabled="deletingId === (row as UserDetail).user_id"
+                @click="toggle"
+              >
+                <Trash2 class="h-4 w-4" />
+              </button>
+            </template>
+          </ConfirmPopover>
         </div>
       </template>
     </DataTable>

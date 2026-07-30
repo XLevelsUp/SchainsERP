@@ -6,8 +6,10 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import DataTable from '@/components/ui/DataTable.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { rolesApi } from '@/lib/rolesApi'
 import { ApiError } from '@/lib/api'
+import { formatDateTime } from '@/lib/date'
 import type { DataTableColumn, Role, RoleFormValues } from '@/types'
 
 const roles = ref<Role[]>([])
@@ -97,7 +99,6 @@ async function handleSubmit() {
 const deletingId = ref<number | null>(null)
 
 async function handleDelete(role: Role) {
-  if (!window.confirm(`Delete "${role.role}"?`)) return
   deletingId.value = role.id
   try {
     await rolesApi.remove(role.id)
@@ -196,6 +197,8 @@ async function handleDelete(role: Role) {
         {{ value === null ? '—' : value }}
       </template>
 
+      <template #added_at="{ value }">{{ formatDateTime(value as string) }}</template>
+
       <template #id="{ row }">
         <div class="flex items-center justify-end gap-1">
           <button
@@ -206,15 +209,22 @@ async function handleDelete(role: Role) {
           >
             <Pencil class="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            aria-label="Delete role"
-            :disabled="deletingId === (row as Role).id"
-            @click="handleDelete(row as Role)"
+          <ConfirmPopover
+            :message="`Delete ${(row as Role).role}?`"
+            @confirm="handleDelete(row as Role)"
           >
-            <Trash2 class="h-4 w-4" />
-          </button>
+            <template #default="{ toggle }">
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                aria-label="Delete role"
+                :disabled="deletingId === (row as Role).id"
+                @click="toggle"
+              >
+                <Trash2 class="h-4 w-4" />
+              </button>
+            </template>
+          </ConfirmPopover>
         </div>
       </template>
     </DataTable>
