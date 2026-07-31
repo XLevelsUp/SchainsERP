@@ -12,7 +12,7 @@ use App\Http\Controllers\Api\HeadEmployeeMappingController;
 use App\Http\Controllers\Api\CashHeadEmployeeMappingController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashTxnDetailController;
-
+use App\Http\Controllers\Api\BankDetailController;
 
 /*
 |--------------------------------------------------------------------------
@@ -157,5 +157,11 @@ Route::prefix('v1')->group(function () {
     Route::delete(
         'cash-txn-images/{imageId}',
         [CashTxnDetailController::class, 'deleteImage']
+    );
+
+    //BankDetailController
+    Route::apiResource(
+        'bank-details',
+        BankDetailController::class
     );
 });
