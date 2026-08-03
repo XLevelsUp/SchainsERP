@@ -33,6 +33,8 @@ class UsersItemsMapping extends Model
         'item_id' => 'integer',
         'user_id' => 'integer',
         'added_at' => 'datetime',
+        'item_grams_total' => 'decimal:4',
+        'item_purity_total' => 'decimal:4',
         'stone_cost_grand_total' => 'float',
         'beads_cost_grand_total' => 'float',
         'beads_stone_cost_grand_total' => 'float',
