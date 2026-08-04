@@ -13,7 +13,7 @@ use App\Http\Controllers\Api\CashHeadEmployeeMappingController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashTxnDetailController;
 use App\Http\Controllers\Api\BankDetailController;
-
+use App\Http\Controllers\Api\SaleGoldController;
 /*
 |--------------------------------------------------------------------------
 | API VERSION 1
@@ -163,5 +163,11 @@ Route::prefix('v1')->group(function () {
     Route::apiResource(
         'bank-details',
         BankDetailController::class
+    );
+
+   //SaleGoldController
+    Route::apiResource(
+        'sale-gold',
+        SaleGoldController::class
     );
 });
