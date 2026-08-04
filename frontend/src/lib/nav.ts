@@ -1,4 +1,13 @@
-import { LayoutDashboard, Gem, Package, ShieldCheck, UserCog, Users, FileText } from 'lucide-vue-next'
+import {
+  LayoutDashboard,
+  Gem,
+  Package,
+  ShieldCheck,
+  UserCog,
+  Users,
+  Hand,
+  FileText,
+} from 'lucide-vue-next'
 import type { NavItem } from '@/types/nav'
 
 export const navItems: NavItem[] = [
@@ -8,5 +17,6 @@ export const navItems: NavItem[] = [
   { label: 'Roles', to: '/roles', icon: ShieldCheck },
   { label: 'Users', to: '/users', icon: UserCog },
   { label: 'Clients', to: '/clients', icon: Users },
+  { label: 'Customer Touch', to: '/customer-touch', icon: Hand },
   { label: 'Pages', to: '/pages', icon: FileText },
 ]

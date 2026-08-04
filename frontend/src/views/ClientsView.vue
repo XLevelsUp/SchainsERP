@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Search, Plus, Trash2, X, RefreshCw } from 'lucide-vue-next'
+import { Search, Plus, Pencil, Trash2, X, RefreshCw } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -75,12 +75,37 @@ const emptyForm: ClientFormValues = {
 }
 
 const isFormOpen = ref(false)
+const editingId = ref<number | null>(null)
 const form = reactive<ClientFormValues>({ ...emptyForm })
 const formError = ref('')
 const isSaving = ref(false)
 
 function openCreateForm() {
+  editingId.value = null
   Object.assign(form, emptyForm)
+  formError.value = ''
+  isFormOpen.value = true
+}
+
+function openEditForm(client: Client) {
+  editingId.value = client.user_id
+  Object.assign(form, {
+    ...emptyForm,
+    name: client.name,
+    user_name: client.user_name,
+    address: client.address,
+    signature: client.signature,
+    code: client.code,
+    phone_no: client.phone_no,
+    remarks: client.remarks ?? '',
+    proff: client.proff,
+    role_id: client.role_id,
+    mailing_name: client.mailing_name,
+    category_name: client.category_name,
+    system_id: client.system_id,
+    is_active: client.is_active,
+    password: '',
+  })
   formError.value = ''
   isFormOpen.value = true
 }
@@ -93,7 +118,13 @@ async function handleSubmit() {
   isSaving.value = true
   formError.value = ''
   try {
-    await clientsApi.create({ ...form })
+    if (editingId.value !== null) {
+      const payload: Partial<ClientFormValues> = { ...form }
+      if (!payload.password) delete payload.password
+      await clientsApi.update(editingId.value, payload)
+    } else {
+      await clientsApi.create({ ...form })
+    }
     isFormOpen.value = false
     await loadClients()
   } catch (err) {
@@ -129,7 +160,9 @@ async function handleDelete(client: Client) {
 
     <BaseCard v-if="isFormOpen" class="mb-6">
       <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-slate-900">New client</h2>
+        <h2 class="text-sm font-semibold text-slate-900">
+          {{ editingId !== null ? 'Edit client' : 'New client' }}
+        </h2>
         <button
           type="button"
           class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
@@ -153,9 +186,9 @@ async function handleDelete(client: Client) {
         <BaseInput
           id="password"
           v-model="form.password"
-          label="Password"
+          :label="editingId !== null ? 'Password (leave blank to keep)' : 'Password'"
           type="password"
-          required
+          :required="editingId === null"
           size="sm"
         />
         <BaseInput id="phone_no" v-model="form.phone_no" label="Phone" required size="sm" />
@@ -204,7 +237,7 @@ async function handleDelete(client: Client) {
 
         <div class="flex items-center gap-3 sm:col-span-3">
           <BaseButton type="submit" :disabled="isSaving">
-            {{ isSaving ? 'Saving…' : 'Create client' }}
+            {{ isSaving ? 'Saving…' : editingId !== null ? 'Save changes' : 'Create client' }}
           </BaseButton>
           <BaseButton variant="secondary" type="button" @click="closeForm">Cancel</BaseButton>
         </div>
@@ -255,6 +288,14 @@ async function handleDelete(client: Client) {
 
       <template #user_id="{ row }">
         <div class="flex items-center justify-end gap-1">
+          <button
+            type="button"
+            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Edit client"
+            @click="openEditForm(row as Client)"
+          >
+            <Pencil class="h-4 w-4" />
+          </button>
           <ConfirmPopover
             :message="`Delete ${(row as Client).name}?`"
             @confirm="handleDelete(row as Client)"

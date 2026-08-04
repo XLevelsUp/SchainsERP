@@ -26,6 +26,11 @@ const router = createRouter({
         { path: 'roles', name: 'roles', component: () => import('@/views/RolesView.vue') },
         { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue') },
         { path: 'clients', name: 'clients', component: () => import('@/views/ClientsView.vue') },
+        {
+          path: 'customer-touch',
+          name: 'customer-touch',
+          component: () => import('@/views/CustomerTouchView.vue'),
+        },
         { path: 'pages', name: 'pages', component: () => import('@/views/PagesView.vue') },
       ],
     },
