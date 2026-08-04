@@ -14,84 +14,28 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashTxnDetailController;
 use App\Http\Controllers\Api\BankDetailController;
 use App\Http\Controllers\Api\SaleGoldController;
+use App\Http\Controllers\Api\StockDetailsController;
+
+// User Details
+
 /*
 |--------------------------------------------------------------------------
 | API VERSION 1
 |--------------------------------------------------------------------------
 */
-
 Route::prefix('v1')->group(function () {
+Route::apiResource('user-details', UserDetailController::class);
+// Items
+Route::apiResource('items', ItemController::class);
 
-    /*
-    |--------------------------------------------------------------------------
-    | Items
-    |--------------------------------------------------------------------------
-    */
+// Fitem Boxes
+Route::apiResource('fitem-boxes', FitemBoxController::class);
 
-    Route::apiResource(
-        'items',
-        ItemController::class
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Fitem Boxes
-    |--------------------------------------------------------------------------
-    */
-
-    Route::apiResource(
-        'fitem-boxes',
-        FitemBoxController::class
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Roles
-    |--------------------------------------------------------------------------
-    */
-
-    Route::apiResource(
-        'roles',
-        RoleController::class
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | User Details
-    |--------------------------------------------------------------------------
-    */
-
-    Route::apiResource(
-        'user-details',
-        UserDetailController::class
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Customer Touch
-    |--------------------------------------------------------------------------
-    */
-
-    Route::apiResource(
-        'customer-touch',
-        CustomerTouchController::class
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Users Items Mappings
-    |--------------------------------------------------------------------------
-    */
-
-    Route::apiResource(
-        'users-items-mappings',
-        UsersItemsMappingController::class
-    );
+// Users Items Mappings
+Route::apiResource(
+    'users-items-mappings',
+    UsersItemsMappingController::class
+);
 
 
     /*
@@ -118,11 +62,7 @@ Route::prefix('v1')->group(function () {
     );
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Authentication
-    |--------------------------------------------------------------------------
-    */
+Route::post('/login', [AuthController::class, 'login']);
 
     Route::post(
         '/login',
@@ -170,4 +110,16 @@ Route::prefix('v1')->group(function () {
         'sale-gold',
         SaleGoldController::class
     );
+});
+
+
+
+Route::prefix('v1/stock')->group(function () {
+    Route::post('out', [StockDetailsController::class, 'postStockOut']);
+    Route::post('item-change', [StockDetailsController::class, 'postItemChange']);
+    Route::post('item-conversion', [StockDetailsController::class, 'postItemConversion']);
+    Route::post('gms', [StockDetailsController::class, 'postGmsOut']);
+    Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
+    Route::post('hide', [StockDetailsController::class, 'postHide']);
+    Route::post('cash', [StockDetailsController::class, 'postCash']);
 });
