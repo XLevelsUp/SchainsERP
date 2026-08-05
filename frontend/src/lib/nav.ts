@@ -6,6 +6,8 @@ import {
   UserCog,
   Users,
   Hand,
+  Landmark,
+  ArrowLeftRight,
   FileText,
 } from 'lucide-vue-next'
 import type { NavItem } from '@/types/nav'
@@ -18,5 +20,7 @@ export const navItems: NavItem[] = [
   { label: 'Users', to: '/users', icon: UserCog },
   { label: 'Clients', to: '/clients', icon: Users },
   { label: 'Customer Touch', to: '/customer-touch', icon: Hand },
+  { label: 'Bank Details', to: '/bank-details', icon: Landmark },
+  { label: 'Cash Transactions', to: '/cash-transactions', icon: ArrowLeftRight },
   { label: 'Pages', to: '/pages', icon: FileText },
 ]

@@ -31,6 +31,16 @@ const router = createRouter({
           name: 'customer-touch',
           component: () => import('@/views/CustomerTouchView.vue'),
         },
+        {
+          path: 'bank-details',
+          name: 'bank-details',
+          component: () => import('@/views/BankDetailsView.vue'),
+        },
+        {
+          path: 'cash-transactions',
+          name: 'cash-transactions',
+          component: () => import('@/views/CashTransactionsView.vue'),
+        },
         { path: 'pages', name: 'pages', component: () => import('@/views/PagesView.vue') },
       ],
     },

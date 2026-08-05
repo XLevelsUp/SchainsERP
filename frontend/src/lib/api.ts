@@ -20,11 +20,13 @@ export class ApiError extends Error {
 const BASE_URL = '/api/v1'
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  // Let the browser set the multipart boundary itself for FormData bodies.
+  const isFormData = options.body instanceof FormData
   let response: Response
   try {
     response = await fetch(`${BASE_URL}${path}`, {
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         Accept: 'application/json',
         ...options.headers,
       },
@@ -54,4 +56,5 @@ export const api = {
   put: <T>(path: string, data: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(data) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  postForm: <T>(path: string, data: FormData) => request<T>(path, { method: 'POST', body: data }),
 }

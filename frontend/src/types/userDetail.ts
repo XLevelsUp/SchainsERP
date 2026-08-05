@@ -19,6 +19,7 @@ export interface UserDetail {
   is_active: boolean
   is_delete: boolean
   is_billable: boolean
+  rak_cash_balance: number
   added_at?: string
   updated_at?: string
 }
