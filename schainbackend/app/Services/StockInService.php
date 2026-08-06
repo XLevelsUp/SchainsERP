@@ -7,7 +7,7 @@ use App\Models\BillingEntry;
 use App\Models\StockInDetail;
 use App\Models\GmsInHistory;
 use App\Models\NumericWastageIn;
-use App\Models\CashTxn;
+use App\Models\CashTxnDetail;
 use App\Models\UserDetail;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
@@ -363,7 +363,7 @@ class StockInService extends BaseStockService
                     $openingAccountBalance = $givenBy->rak_cash_balance;
                     $openingUserBalance = $givenTo->rak_cash_balance;
 
-                    $cashTxn = CashTxn::create([
+                    $cashTxn = CashTxnDetail::create([
                         'type' => 'INCOME',
                         'given_to' => $givenTo->user_id, // head admin receives cash
                         'given_by' => $givenBy->user_id, // worker pays cash
