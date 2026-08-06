@@ -16,101 +16,22 @@ use App\Http\Controllers\Api\BankDetailController;
 use App\Http\Controllers\Api\SaleGoldController;
 use App\Http\Controllers\Api\StockDetailsController;
 
-// User Details
 
-/*
-|--------------------------------------------------------------------------
-| API VERSION 1
-|--------------------------------------------------------------------------
-*/
 Route::prefix('v1')->group(function () {
 Route::apiResource('user-details', UserDetailController::class);
-// Items
 Route::apiResource('items', ItemController::class);
-
-// Fitem Boxes
 Route::apiResource('fitem-boxes', FitemBoxController::class);
-
-// Users Items Mappings
-Route::apiResource(
-    'users-items-mappings',
-    UsersItemsMappingController::class
-);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Head Employee Mappings
-    |--------------------------------------------------------------------------
-    */
-
-    Route::apiResource(
-        'head-employee-mappings',
-        HeadEmployeeMappingController::class
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Cash Head Employee Mappings
-    |--------------------------------------------------------------------------
-    */
-
-    Route::apiResource(
-        'cash-head-employee-mappings',
-        CashHeadEmployeeMappingController::class
-    );
-
-
+Route::apiResource('roles',RoleController::class);
+Route::apiResource( 'users-items-mappings',UsersItemsMappingController::class);
+Route::apiResource('head-employee-mappings', HeadEmployeeMappingController::class);
+Route::apiResource('cash-head-employee-mappings',CashHeadEmployeeMappingController::class);
 Route::post('/login', [AuthController::class, 'login']);
-
-    Route::post(
-        '/login',
-        [AuthController::class, 'login']
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Cash Transaction Details
-    |--------------------------------------------------------------------------
-    */
-
-    Route::apiResource(
-        'cash-txn-details',
-        CashTxnDetailController::class
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Cash Transaction Images
-    |--------------------------------------------------------------------------
-    */
-
-    Route::post(
-        'cash-txn-details/{id}/images',
-        [CashTxnDetailController::class, 'addImages']
-    );
-
-
-    Route::delete(
-        'cash-txn-images/{imageId}',
-        [CashTxnDetailController::class, 'deleteImage']
-    );
-
-    //BankDetailController
-    Route::apiResource(
-        'bank-details',
-        BankDetailController::class
-    );
-
-   //SaleGoldController
-    Route::apiResource(
-        'sale-gold',
-        SaleGoldController::class
-    );
-});
+Route::post('/login', [AuthController::class, 'login']);
+Route::apiResource( 'cash-txn-details',CashTxnDetailController::class);
+Route::post( 'cash-txn-details/{id}/images',[CashTxnDetailController::class, 'addImages']);
+Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage']);
+Route::apiResource('bank-details',BankDetailController::class);
+Route::apiResource('sale-gold',SaleGoldController::class);});
 
 
 
