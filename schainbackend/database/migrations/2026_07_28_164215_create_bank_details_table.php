@@ -10,10 +10,10 @@ return new class extends Migration
     {
         Schema::create('bank_details', function (Blueprint $table) {
             $table->id('bank_id');
-            $table->string('bank_name', 150);
-            $table->double('current_balance')->default(0);
+            $table->string('account_name', 150);
+            $table->decimal('ledger_balance', 15, 2)->default(0.00);
             $table->boolean('is_active')->default(true);
-            $table->timestamp('added_at')->useCurrent();
+            $table->timestamps();
         });
     }
 

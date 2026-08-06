@@ -731,12 +731,12 @@ class StockOutService extends BaseStockService
 
                     $cashTxn = CashTxnDetail::create([
                         'type' => 'EXPENSE',
-                        'given_to' => $givenTo->user_id, // worker receives cash
-                        'given_by' => $givenBy->user_id, // head admin pays cash
+                        'recipient_id' => $givenTo->user_id, // worker receives cash
+                        'sender_id' => $givenBy->user_id, // head admin pays cash
                         'amount' => $cashAmount,
-                        'opening_account_balance' => $openingAccountBalance, // sender (head) cash balance
-                        'opening_user_balance' => $openingUserBalance, // receiver (worker) cash balance
-                        'souce_type' => 'CASH_ON_HAND',
+                        'sender_opening_cash' => $openingAccountBalance, // sender (head) cash balance
+                        'recipient_opening_cash' => $openingUserBalance, // receiver (worker) cash balance
+                        'payment_method' => 'CASH_ON_HAND',
                         'remarks' => "NUMERIC_WASTAGE EXPENSE (ID : {$stock->stock_id})",
                         'added_by' => $addedBy,
                     ]);
@@ -846,12 +846,12 @@ class StockOutService extends BaseStockService
             // Create cash transaction record
             $cashTxn = CashTxnDetail::create([
                 'type' => 'EXPENSE',
-                'given_to' => $givenTo->user_id,
-                'given_by' => $givenBy->user_id,
+                'recipient_id' => $givenTo->user_id,
+                'sender_id' => $givenBy->user_id,
                 'amount' => $amount,
-                'opening_account_balance' => $openingAccountBalance,
-                'opening_user_balance' => $openingUserBalance,
-                'souce_type' => 'CASH_ON_HAND',
+                'sender_opening_cash' => $openingAccountBalance,
+                'recipient_opening_cash' => $openingUserBalance,
+                'payment_method' => 'CASH_ON_HAND',
                 'remarks' => $remarks,
                 'added_by' => $addedBy,
             ]);

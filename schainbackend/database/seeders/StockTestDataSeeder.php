@@ -8,7 +8,7 @@ use App\Models\UsersItemsMapping;
 use App\Models\StockDetails;
 use App\Models\GmsHistory;
 use App\Models\NumericWastage;
-use App\Models\CashTxn;
+use App\Models\CashTxnDetail;
 use App\Models\BillingEntry;
 use App\Models\OverAllBill;
 use App\Models\WastageDetails;
@@ -24,13 +24,13 @@ class StockTestDataSeeder extends Seeder
     {
         // 1. Ensure clean transaction and master state for IDs 1 and 2
         if (DB::getDriverName() === 'pgsql') {
-            DB::statement('TRUNCATE stock_details, gms_history, numeric_wastages, cash_txn_details, billing_entries, over_all_bills, wastage_details RESTART IDENTITY CASCADE;');
+            DB::statement('TRUNCATE stock_details, gms_history, numeric_wastages, cash_txn_details, cash_txn_images, bank_details, billing_entries, over_all_bills, wastage_details RESTART IDENTITY CASCADE;');
         } else {
             DB::statement('PRAGMA foreign_keys = OFF;');
             StockDetails::truncate();
             GmsHistory::truncate();
             NumericWastage::truncate();
-            CashTxn::truncate();
+            CashTxnDetail::truncate();
             BillingEntry::truncate();
             OverAllBill::truncate();
             WastageDetails::truncate();

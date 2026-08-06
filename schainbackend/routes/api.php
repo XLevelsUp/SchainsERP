@@ -33,6 +33,9 @@ Route::post( 'cash-txn-details/{id}/images',[CashTxnDetailController::class, 'ad
 Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage']);
 Route::apiResource('bank-details',BankDetailController::class);
 Route::apiResource('sale-gold',SaleGoldController::class);
+
+Route::post('cash-txn-details/in', [CashTxnDetailController::class, 'postIncome']);
+Route::post('cash-txn-details/out', [CashTxnDetailController::class, 'postExpense']);
 });
 
 
@@ -42,12 +45,12 @@ Route::prefix('v1/stock')->group(function () {
     Route::post('in', [StockDetailsController::class, 'postStockIn']);
     Route::post('item-change', [StockDetailsController::class, 'postItemChange']);
     Route::post('item-conversion', [StockDetailsController::class, 'postItemConversion']);
-    // Route::post('gms', [StockDetailsController::class, 'postGmsOut']);
-    // Route::post('gms-in', [StockDetailsController::class, 'postGmsIn']);
-    // Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
-    // Route::post('numeric-waste-in', [StockDetailsController::class, 'postNumericWasteIn']);
-    // Route::post('hide', [StockDetailsController::class, 'postHide']);
-    // Route::post('cash', [StockDetailsController::class, 'postCash']);
-    // Route::post('auto-entry', [StockDetailsController::class, 'postAutoEntry']);
-    // Route::get('reports/items-obcb', [StockDetailsController::class, 'getHistoryItemsObcb']);
+    Route::post('gms', [StockDetailsController::class, 'postGmsOut']);
+    Route::post('gms-in', [StockDetailsController::class, 'postGmsIn']);
+    Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
+    Route::post('numeric-waste-in', [StockDetailsController::class, 'postNumericWasteIn']);
+    Route::post('hide', [StockDetailsController::class, 'postHide']);
+    Route::post('cash', [StockDetailsController::class, 'postCash']);
+    Route::post('auto-entry', [StockDetailsController::class, 'postAutoEntry']);
+    Route::get('reports/items-obcb', [StockDetailsController::class, 'getHistoryItemsObcb']);
 });
