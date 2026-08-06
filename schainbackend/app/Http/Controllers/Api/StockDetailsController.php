@@ -4,24 +4,41 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StockOutRequest;
+use App\Http\Requests\StockInRequest;
 use App\Http\Requests\ItemChangeRequest;
 use App\Http\Requests\ItemConversionRequest;
 use App\Http\Requests\GmsOutRequest;
+use App\Http\Requests\GmsInRequest;
 use App\Http\Requests\NumericWasteRequest;
+use App\Http\Requests\NumericWastageInRequest;
 use App\Http\Requests\HideStockRequest;
 use App\Http\Requests\CashOutRequest;
-use App\Services\StockInventoryService;
+use App\Services\StockOutService;
+use App\Services\StockInService;
+use App\Services\AutoEntryService;
+use App\Services\ReportService;
+use App\Http\Requests\AutoEntryRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class StockDetailsController extends Controller
 {
-    protected StockInventoryService $inventoryService;
+    protected StockOutService $stockOutService;
+    protected StockInService $stockInService;
+    protected AutoEntryService $autoEntryService;
+    protected ReportService $reportService;
 
-    public function __construct(StockInventoryService $inventoryService)
-    {
-        $this->inventoryService = $inventoryService;
+    public function __construct(
+        StockOutService $stockOutService,
+        StockInService $stockInService,
+        AutoEntryService $autoEntryService,
+        ReportService $reportService
+    ) {
+        $this->stockOutService = $stockOutService;
+        $this->stockInService = $stockInService;
+        $this->autoEntryService = $autoEntryService;
+        $this->reportService = $reportService;
     }
 
     /**
@@ -39,7 +56,7 @@ class StockDetailsController extends Controller
     {
         try {
             $addedBy = $this->getActingUserId($request);
-            $result = $this->inventoryService->createStockOut($request->validated(), $addedBy);
+            $result = $this->stockOutService->createStockOut($request->validated(), $addedBy);
 
             return response()->json([
                 'success' => true,
@@ -63,7 +80,7 @@ class StockDetailsController extends Controller
     {
         try {
             $addedBy = $this->getActingUserId($request);
-            $history = $this->inventoryService->createItemChange($request->validated(), $addedBy);
+            $history = $this->stockOutService->createItemChange($request->validated(), $addedBy);
 
             return response()->json([
                 'success' => true,
@@ -87,7 +104,7 @@ class StockDetailsController extends Controller
     {
         try {
             $addedBy = $this->getActingUserId($request);
-            $conversions = $this->inventoryService->createItemConversion($request->validated(), $addedBy);
+            $conversions = $this->stockOutService->createItemConversion($request->validated(), $addedBy);
 
             return response()->json([
                 'success' => true,
@@ -111,7 +128,7 @@ class StockDetailsController extends Controller
     {
         try {
             $addedBy = $this->getActingUserId($request);
-            $gmsHistory = $this->inventoryService->createGmsOut($request->validated(), $addedBy);
+            $gmsHistory = $this->stockOutService->createGmsOut($request->validated(), $addedBy);
 
             return response()->json([
                 'success' => true,
@@ -135,7 +152,7 @@ class StockDetailsController extends Controller
     {
         try {
             $addedBy = $this->getActingUserId($request);
-            $nw = $this->inventoryService->createNumericWaste($request->validated(), $addedBy);
+            $nw = $this->stockOutService->createNumericWaste($request->validated(), $addedBy);
 
             return response()->json([
                 'success' => true,
@@ -158,7 +175,7 @@ class StockDetailsController extends Controller
     public function postHide(HideStockRequest $request): JsonResponse
     {
         try {
-            $this->inventoryService->hideStocks($request->input('stock_ids'));
+            $this->stockOutService->hideStocks($request->input('stock_ids'));
 
             return response()->json([
                 'success' => true,
@@ -181,7 +198,7 @@ class StockDetailsController extends Controller
     {
         try {
             $addedBy = $this->getActingUserId($request);
-            $cashTxn = $this->inventoryService->createCashOut($request->validated(), $addedBy);
+            $cashTxn = $this->stockOutService->createCashOut($request->validated(), $addedBy);
 
             return response()->json([
                 'success' => true,
@@ -193,6 +210,126 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Cash transaction.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * 7. Register a normal IN stock transaction (New In)
+     */
+    public function postStockIn(StockInRequest $request): JsonResponse
+    {
+        try {
+            $addedBy = $this->getActingUserId($request);
+            $result = $this->stockInService->createStockIn($request->validated(), $addedBy);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Stock In Created Successfully',
+                'data' => $result,
+            ], 201);
+        } catch (\Throwable $e) {
+            Log::error('StockDetailsController::postStockIn failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process Stock In transaction.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * 8. Register a GMS IN stock transaction (GMS In)
+     */
+    public function postGmsIn(GmsInRequest $request): JsonResponse
+    {
+        try {
+            $addedBy = $this->getActingUserId($request);
+            $result = $this->stockInService->createGmsIn($request->validated(), $addedBy);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'GMS In Created Successfully',
+                'data' => $result,
+            ], 201);
+        } catch (\Throwable $e) {
+            Log::error('StockDetailsController::postGmsIn failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process GMS In transaction.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * 9. Register a Numeric Wastage IN stock transaction (Numeric Wastage In)
+     */
+    public function postNumericWasteIn(NumericWastageInRequest $request): JsonResponse
+    {
+        try {
+            $addedBy = $this->getActingUserId($request);
+            $result = $this->stockInService->createNumericWasteIn($request->validated(), $addedBy);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Numeric Wastage In Created Successfully',
+                'data' => $result,
+            ], 201);
+        } catch (\Throwable $e) {
+            Log::error('StockDetailsController::postNumericWasteIn failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process Numeric Wastage In transaction.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * 10. Register an Auto Entry stock transfer transaction
+     */
+    public function postAutoEntry(AutoEntryRequest $request): JsonResponse
+    {
+        try {
+            $addedBy = $this->getActingUserId($request);
+            $result = $this->autoEntryService->executeAutoTransfer($request->validated(), $addedBy);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Auto Entry transaction processed successfully.',
+                'data' => $result,
+            ], 201);
+        } catch (\Throwable $e) {
+            Log::error('StockDetailsController::postAutoEntry failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process Auto Entry transaction.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * 11. Retrieve Items OB & CB running ledger report
+     */
+    public function getHistoryItemsObcb(Request $request): JsonResponse
+    {
+        try {
+            $headId = $this->getActingUserId($request);
+            $result = $this->reportService->getItemsObcbReport($request->all(), $headId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Items OB & CB report compiled successfully.',
+                'data' => $result,
+            ], 200);
+        } catch (\Throwable $e) {
+            Log::error('StockDetailsController::getHistoryItemsObcb failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to compile Items OB & CB report.',
                 'error' => $e->getMessage(),
             ], 500);
         }

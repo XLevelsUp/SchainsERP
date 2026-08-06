@@ -12,120 +12,24 @@ use App\Models\CashTxn;
 use App\Models\GoldConversion;
 use App\Models\GoldConversionAlloy;
 use App\Models\UserDetail;
-use App\Models\UsersItemsMapping;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 
-class StockInventoryService
+class StockOutService extends BaseStockService
 {
     /**
-     * Perform BCMath addition with 4 decimal places.
-     */
-    protected function add($a, $b): string
-    {
-        return bcadd((string)($a ?? 0), (string)($b ?? 0), 4);
-    }
-
-    /**
-     * Perform BCMath subtraction with 4 decimal places.
-     */
-    protected function sub($a, $b): string
-    {
-        return bcsub((string)($a ?? 0), (string)($b ?? 0), 4);
-    }
-
-    /**
-     * Perform BCMath multiplication with 4 decimal places.
-     */
-    protected function mul($a, $b): string
-    {
-        return bcmul((string)($a ?? 0), (string)($b ?? 0), 4);
-    }
-
-    /**
-     * Perform BCMath division with 4 decimal places.
-     */
-    protected function div($a, $b): string
-    {
-        return bcdiv((string)($a ?? 0), (string)($b ?? 1), 4);
-    }
-
-    /**
-     * Capture a snapshot of user balances for OB/CB auditing.
-     */
-    protected function buildUserItemDetails(?int $userId, ?int $itemId, ?int $toItemId, string $prefix = 'ob'): array
-    {
-        $details = [
-            'item_details' => [],
-            'to_item_details' => [],
-            'tot_' . $prefix . '_grams' => '0.0000',
-            'tot_' . $prefix . '_purity' => '0.0000',
-        ];
-
-        if (!$userId) {
-            return $details;
-        }
-
-        $user = UserDetail::find($userId);
-        if (!$user) {
-            return $details;
-        }
-
-        $item = UsersItemsMapping::where('item_id', $itemId)->where('user_id', $userId)->first();
-        if ($item) {
-            $details['item_details'] = [
-                $prefix . '_grams' => number_format((float)$item->item_grams_total, 4, '.', ''),
-                $prefix . '_purity' => number_format((float)$item->item_purity_total, 4, '.', ''),
-            ];
-        }
-
-        if ($toItemId && $toItemId !== $itemId) {
-            $toItem = UsersItemsMapping::where('item_id', $toItemId)->where('user_id', $userId)->first();
-            if ($toItem) {
-                $details['to_item_details'] = [
-                    $prefix . '_grams' => number_format((float)$toItem->item_grams_total, 4, '.', ''),
-                    $prefix . '_purity' => number_format((float)$toItem->item_purity_total, 4, '.', ''),
-                ];
-            }
-        }
-
-        $details['tot_' . $prefix . '_grams'] = number_format((float)$user->grams_grand_total, 4, '.', '');
-        $details['tot_' . $prefix . '_purity'] = number_format((float)$user->purity_grand_total, 4, '.', '');
-
-        return $details;
-    }
-
-    /**
-     * Update mappings balance helper.
-     */
-    protected function updateUserItemBalance(int $userId, int $itemId, string $gramsChange, string $purityChange): void
-    {
-        $hasExistingMapping = UsersItemsMapping::where('user_id', $userId)->exists();
-        $isPrimary = $hasExistingMapping ? 0 : 1;
-
-        $mapping = UsersItemsMapping::firstOrCreate(
-            ['user_id' => $userId, 'item_id' => $itemId],
-            ['item_grams_total' => '0.0000', 'item_purity_total' => '0.0000', 'is_primary' => $isPrimary]
-        );
-
-        $mapping->item_grams_total = $this->add($mapping->item_grams_total, $gramsChange);
-        $mapping->item_purity_total = $this->add($mapping->item_purity_total, $purityChange);
-        $mapping->last_txn_date = now();
-        $mapping->save();
-    }
-
-    /**
-     * 1. Create Stock Outward Transaction (New Out)
+     * 1. Process normal stock outward transaction (New Out) - supports dynamic arrays
      */
     public function createStockOut(array $data, int $addedBy): array
     {
         return DB::transaction(function () use ($data, $addedBy) {
             $givenBy = UserDetail::findOrFail($data['given_by']);
             $givenTo = UserDetail::findOrFail($data['given_to']);
-
             $addedAt = isset($data['added_at']) ? \Illuminate\Support\Carbon::parse($data['added_at']) : now();
 
-            // 1. Create Overall Bill and Billing Entries
+            $createdStocks = [];
+
+            // Billing Entry
             $overallBill = OverAllBill::create([
                 'is_active' => true,
                 'is_cash_updated' => false,
@@ -133,27 +37,19 @@ class StockInventoryService
                 'updated_at' => $addedAt,
             ]);
 
-            // Snapshot OB
-            $headObPurity = $givenBy->purity_grand_total;
-            $headObGrams = $givenBy->grams_grand_total;
-            $userObPurity = $givenTo->purity_grand_total;
-            $userObGrams = $givenTo->grams_grand_total;
-
             $billingEntry = BillingEntry::create([
                 'over_all_bill_id' => $overallBill->id,
                 'type' => 'OUT',
-                'head_id' => $givenBy->user_id,
+                'head_id' => $addedBy,
                 'user_id' => $givenTo->user_id,
-                'ob_purity' => $headObPurity,
-                'ob_grams' => $headObGrams,
-                'from_ob_purity' => $userObPurity,
-                'from_ob_grams' => $userObGrams,
+                'ob_purity' => 0,
+                'ob_grams' => 0,
+                'from_ob_purity' => 0,
+                'from_ob_grams' => 0,
                 'added_at' => $addedAt,
                 'created_at' => $addedAt,
                 'updated_at' => $addedAt,
             ]);
-
-            $createdStocks = [];
 
             foreach ($data['items'] as $itemData) {
                 $itemId = $itemData['item_id'];
@@ -162,16 +58,27 @@ class StockInventoryService
                 $remarks = $itemData['remarks'] ?? null;
                 $itemRemarks = $itemData['item_remarks'] ?? null;
                 $wasteId = $itemData['waste_id'] ?? null;
-                $wasteTotal = $itemData['waste_total'] ?? 0; // wastage percentage, e.g. 0.180
+                $wasteTotal = $itemData['waste_total'] ?? 0;
                 $itemAddedAt = isset($itemData['added_at']) ? \Illuminate\Support\Carbon::parse($itemData['added_at']) : $addedAt;
 
-                // waste_value = grams * waste_total / 100 (or use frontend wValue/waste_value)
+                // waste_value = grams * waste_total / 100
                 $wasteValue = $itemData['waste_value'] ?? $itemData['wValue'] ?? $this->div($this->mul($grams, $wasteTotal), '100');
 
-                // purity = (grams * touch / 100) + waste_value (or use frontend purity)
+                // purity = (grams * touch / 100) + waste_value
                 $purity = $itemData['purity'] ?? $this->add($this->div($this->mul($grams, $touch), '100'), $wasteValue);
 
-                // Build OB snapshot
+                // calculate grams changes based on roles (head does not add wastage to their balance)
+                $givenbygrams = $giventograms = $grams;
+                if ($wasteTotal) {
+                    if ($givenBy->role_id != 1) { // Assuming role_id 1 is HEAD/Admin
+                        $givenbygrams = $this->add($grams, $wasteValue);
+                    }
+                    if ($givenTo->role_id != 1) {
+                        $giventograms = $this->add($grams, $wasteValue);
+                    }
+                }
+
+                // Snapshot OB details
                 $obSnapshot = [
                     'given_by_details' => [
                         'ob' => $this->buildUserItemDetails($givenBy->user_id, $itemId, null, 'ob'),
@@ -181,7 +88,7 @@ class StockInventoryService
                     ]
                 ];
 
-                // Create Stock Detail record (OUT)
+                // Create StockDetails row
                 $stock = StockDetails::create([
                     'item_id' => $itemId,
                     'given_by' => $givenBy->user_id,
@@ -197,7 +104,7 @@ class StockInventoryService
                     'waste_id' => $wasteId,
                     'waste_total' => $wasteTotal,
                     'waste_value' => $wasteValue,
-                    'bill_id' => $billingEntry->bill_id,
+                    'bill_id' => $billingEntry->id, // OverAllBill id
                     'balance' => $grams,
                     'added_by' => $addedBy,
                     'given_by_item_grams_op' => $obSnapshot['given_by_details']['ob']['item_details']['ob_grams'] ?? 0,
@@ -209,31 +116,20 @@ class StockInventoryService
                     'updated_at' => $itemAddedAt,
                 ]);
 
-                // Determine gram adjustments based on role (HEAD admin role ignores wastage addition for deduct, employee doesn't)
-                $isGivenByHead = (strtoupper($givenBy->proff) === 'HEAD' || strtoupper($givenBy->role_id) === 'HEAD' || $givenBy->role_id == '1');
-                $isGivenToHead = (strtoupper($givenTo->proff) === 'HEAD' || strtoupper($givenTo->role_id) === 'HEAD' || $givenTo->role_id == '1');
-
-                $givenByGramsDeduct = $isGivenByHead ? $grams : $this->add($grams, $wasteValue);
-                $givenToGramsAdd = $isGivenToHead ? $grams : $this->add($grams, $wasteValue);
-
-                // Update Balances
-                // 1. Deduct from givenBy
-                $givenBy->grams_grand_total = $this->sub($givenBy->grams_grand_total, $givenByGramsDeduct);
+                // Update user balances: deduct from sender, add to receiver
+                $givenBy->grams_grand_total = $this->sub($givenBy->grams_grand_total, $givenbygrams);
                 $givenBy->purity_grand_total = $this->sub($givenBy->purity_grand_total, $purity);
-                $givenBy->last_txn_date = $addedAt;
                 $givenBy->save();
 
-                $this->updateUserItemBalance($givenBy->user_id, $itemId, "-$givenByGramsDeduct", "-$purity");
+                $this->updateUserItemBalance($givenBy->user_id, $itemId, "-$givenbygrams", "-$purity");
 
-                // 2. Add to givenTo
-                $givenTo->grams_grand_total = $this->add($givenTo->grams_grand_total, $givenToGramsAdd);
+                $givenTo->grams_grand_total = $this->add($givenTo->grams_grand_total, $giventograms);
                 $givenTo->purity_grand_total = $this->add($givenTo->purity_grand_total, $purity);
-                $givenTo->last_txn_date = $addedAt;
                 $givenTo->save();
 
-                $this->updateUserItemBalance($givenTo->user_id, $itemId, $givenToGramsAdd, $purity);
+                $this->updateUserItemBalance($givenTo->user_id, $itemId, $giventograms, $purity);
 
-                // Build CB snapshot
+                // Snapshot CB details
                 $cbSnapshot = [
                     'given_by_details' => [
                         'cb' => $this->buildUserItemDetails($givenBy->user_id, $itemId, null, 'cb'),
@@ -243,10 +139,9 @@ class StockInventoryService
                     ]
                 ];
 
-                // Merge into single array
                 $snapshot = array_merge_recursive($obSnapshot, $cbSnapshot);
 
-                // Save CB snapshot directly on model using updateQuietly to prevent infinite loops
+                // Save CB snapshot directly on model using saveQuietly to prevent observer loops
                 $stock->obcb_details = $snapshot;
                 $stock->given_by_item_grams_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_grams'] ?? 0;
                 $stock->given_to_item_grams_cb = $cbSnapshot['given_to_details']['cb']['item_details']['cb_grams'] ?? 0;
@@ -257,19 +152,11 @@ class StockInventoryService
                 $createdStocks[] = $stock;
             }
 
-            // Update Billing entry CB
-            $billingEntry->update([
-                'cb_purity' => $givenBy->purity_grand_total,
-                'cb_grams' => $givenBy->grams_grand_total,
-                'from_cb_purity' => $givenTo->purity_grand_total,
-                'from_cb_grams' => $givenTo->grams_grand_total,
-            ]);
+            Cache::forget("user:{$givenBy->user_id}:balances");
+            Cache::forget("user:{$givenTo->user_id}:balances");
 
-            return [
-                'bill_id' => $billingEntry->bill_id,
-                'stocks' => $createdStocks,
-            ];
-        });
+            return $createdStocks;
+        }, 5);
     }
 
     /**
@@ -391,7 +278,7 @@ class StockInventoryService
 
                 $snapshot = array_merge_recursive($obSnapshot, $cbSnapshot);
 
-                // Save CB snapshot directly on model using updateQuietly to prevent infinite loops
+                // Save CB snapshot directly on model using saveQuietly
                 $outStock->obcb_details = $snapshot;
                 $outStock->given_by_item_grams_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_grams'] ?? 0;
                 $outStock->given_to_item_grams_cb = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_grams'] ?? 0;
@@ -401,9 +288,9 @@ class StockInventoryService
 
                 $inStock->obcb_details = $snapshot;
                 $inStock->given_by_item_grams_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_grams'] ?? 0;
-                $inStock->given_to_item_grams_cb = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_grams'] ?? 0;
+                $inStock->given_to_item_grams_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_grams'] ?? 0;
                 $inStock->given_by_item_purity_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_purity'] ?? 0;
-                $inStock->given_to_item_purity_cb = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_purity'] ?? 0;
+                $inStock->given_to_item_purity_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_purity'] ?? 0;
                 $inStock->saveQuietly();
 
                 // Record Item Change History
@@ -431,7 +318,7 @@ class StockInventoryService
     }
 
     /**
-     * 3. Item conversion submodule - supports dynamic arrays
+     * 3. Item conversion submodule (Item Conversion) - supports dynamic arrays
      */
     public function createItemConversion(array $data, int $addedBy): array
     {
@@ -587,16 +474,16 @@ class StockInventoryService
                 // Save CB snapshots and direct CB columns
                 $outStock->obcb_details = $snapshot;
                 $outStock->given_by_item_grams_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_grams'] ?? 0;
-                $outStock->given_to_item_grams_cb = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_grams'] ?? 0;
+                $outStock->given_to_item_grams_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_grams'] ?? 0;
                 $outStock->given_by_item_purity_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_purity'] ?? 0;
-                $outStock->given_to_item_purity_cb = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_purity'] ?? 0;
+                $outStock->given_to_item_purity_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_purity'] ?? 0;
                 $outStock->saveQuietly();
 
                 $inStock->obcb_details = $snapshot;
                 $inStock->given_by_item_grams_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_grams'] ?? 0;
-                $inStock->given_to_item_grams_cb = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_grams'] ?? 0;
+                $inStock->given_to_item_grams_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_grams'] ?? 0;
                 $inStock->given_by_item_purity_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_purity'] ?? 0;
-                $inStock->given_to_item_purity_cb = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_purity'] ?? 0;
+                $inStock->given_to_item_purity_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_purity'] ?? 0;
                 $inStock->saveQuietly();
 
                 // Save Gold Conversion record
@@ -636,7 +523,7 @@ class StockInventoryService
     }
 
     /**
-     * 4. Send raw gold to a goldsmith (GMS Out) - supports dynamic arrays
+     * 4. Goldsmith Outward transaction (GMS Out) - outsourced to worker - supports dynamic arrays
      */
     public function createGmsOut(array $data, int $addedBy): array
     {
@@ -658,15 +545,16 @@ class StockInventoryService
                 $mtouchWastage = $itemData['mtouch_wastage'] ?? 0;
                 $remarks = $itemData['remarks'] ?? null;
                 $itemRemarks = $itemData['item_remarks'] ?? null;
+                $itemAddedAt = isset($itemData['added_at']) ? \Illuminate\Support\Carbon::parse($itemData['added_at']) : $addedAt;
 
-                // Math: Net grams = grams - stone - thread
+                // Net grams = grams - stone - thread
                 $netGrams = $this->sub($grams, $this->add($stone, $thread));
                 // Wastage grams = netGrams * (wastage / 100) (or use frontend wValue/waste_value)
                 $wastageGrams = $itemData['waste_value'] ?? $itemData['wValue'] ?? $this->div($this->mul($netGrams, $wastage), '100');
                 // Calculated Purity = (netGrams + wastageGrams) * (hallMark / 100) (or use frontend purity)
                 $purity = $itemData['purity'] ?? $this->div($this->mul($this->add($netGrams, $wastageGrams), $hallMark), '100');
 
-                // Snapshot OB
+                // Snapshot OB details
                 $obSnapshot = [
                     'given_by_details' => [
                         'ob' => $this->buildUserItemDetails($givenBy->user_id, $itemId, null, 'ob'),
@@ -676,7 +564,7 @@ class StockInventoryService
                     ]
                 ];
 
-                // Create Stock details record (OUT)
+                // Create StockDetails row
                 $stock = StockDetails::create([
                     'item_id' => $itemId,
                     'given_by' => $givenBy->user_id,
@@ -687,10 +575,10 @@ class StockInventoryService
                     'grams' => $grams,
                     'touch' => $hallMark,
                     'purity' => $purity,
-                    'remarks' => $remarks ?? "GMS OUT",
+                    'remarks' => $remarks,
                     'item_remarks' => $itemRemarks,
-                    'waste_total' => $wastageGrams,
-                    'waste_value' => $wastage,
+                    'waste_total' => $wastage,
+                    'waste_value' => $wastageGrams,
                     'mtouch' => $mtouch,
                     'gms_mtouch' => $mtouch,
                     'gms_mthouch_wastage' => $mtouchWastage,
@@ -700,12 +588,28 @@ class StockInventoryService
                     'given_to_item_grams_op' => $obSnapshot['given_to_details']['ob']['item_details']['ob_grams'] ?? 0,
                     'given_by_item_purity_op' => $obSnapshot['given_by_details']['ob']['item_details']['ob_purity'] ?? 0,
                     'given_to_item_purity_op' => $obSnapshot['given_to_details']['ob']['item_details']['ob_purity'] ?? 0,
-                    'added_at' => $addedAt,
-                    'created_at' => $addedAt,
-                    'updated_at' => $addedAt,
+                    'added_at' => $itemAddedAt,
+                    'created_at' => $itemAddedAt,
+                    'updated_at' => $itemAddedAt,
                 ]);
 
-                // Update user balances: deduct from head, add to worker
+                // Create GmsHistory row
+                $gmsHistory = GmsHistory::create([
+                    'item_id' => $itemId,
+                    'grams' => $grams,
+                    'stone' => $stone,
+                    'thread' => $thread,
+                    'mtouch' => $mtouch,
+                    'mtouch_wastage' => $mtouchWastage,
+                    'wastage' => $wastage,
+                    'hall_mark' => $hallMark,
+                    'total' => $purity,
+                    'gms_type' => 'OUT',
+                    'gms_stock_out_id' => $stock->stock_id,
+                    'added_at' => $itemAddedAt,
+                ]);
+
+                // Update balances: deduct head, add worker
                 $givenBy->grams_grand_total = $this->sub($givenBy->grams_grand_total, $grams);
                 $givenBy->purity_grand_total = $this->sub($givenBy->purity_grand_total, $purity);
                 $givenBy->save();
@@ -718,7 +622,7 @@ class StockInventoryService
 
                 $this->updateUserItemBalance($givenTo->user_id, $itemId, $grams, $purity);
 
-                // Snapshot CB
+                // Snapshot CB details
                 $cbSnapshot = [
                     'given_by_details' => [
                         'cb' => $this->buildUserItemDetails($givenBy->user_id, $itemId, null, 'cb'),
@@ -738,20 +642,6 @@ class StockInventoryService
                 $stock->given_to_item_purity_cb = $cbSnapshot['given_to_details']['cb']['item_details']['cb_purity'] ?? 0;
                 $stock->saveQuietly();
 
-                // Create GMS History
-                $gmsHistory = GmsHistory::create([
-                    'item_id' => $itemId,
-                    'grams' => $grams,
-                    'stone' => $stone,
-                    'thread' => $thread,
-                    'wastage' => $wastage,
-                    'hall_mark' => $hallMark,
-                    'total' => $purity,
-                    'gms_type' => 'OUT',
-                    'gms_stock_out_id' => $stock->stock_id,
-                    'added_at' => $addedAt,
-                ]);
-
                 $createdGms[] = $gmsHistory;
             }
 
@@ -759,11 +649,11 @@ class StockInventoryService
             Cache::forget("user:{$givenTo->user_id}:balances");
 
             return $createdGms;
-        });
+        }, 5);
     }
 
     /**
-     * 5. Numeric wastage out - supports dynamic arrays
+     * 5. Swaps out piece-based wastage to a worker (Numeric Wastage Out) - supports dynamic arrays
      */
     public function createNumericWaste(array $data, int $addedBy): array
     {
@@ -781,17 +671,19 @@ class StockInventoryService
                 $noOfPcs = $itemData['no_of_pcs'];
                 $amountPcs = $itemData['amount_pcs'] ?? 0;
                 $wasteId = $itemData['waste_id'] ?? null;
-                $wastageValue = $itemData['waste_total'] ?? 0; // wastage per pc in grams/unit
-                // calculated WValue
-                $wastageTotal = $itemData['waste_value'] ?? $itemData['wValue'] ?? $this->mul($noOfPcs, $wastageValue);
-                $amount = $itemData['amount'] ?? $this->mul($noOfPcs, $amountPcs);
                 $remarks = $itemData['remarks'] ?? null;
                 $itemRemarks = $itemData['item_remarks'] ?? null;
+                $itemAddedAt = isset($itemData['added_at']) ? \Illuminate\Support\Carbon::parse($itemData['added_at']) : $addedAt;
+
+                $wastageValue = $itemData['waste_total'] ?? 0; // wastage per pc
+                // Calculated WValue (wastage total weight)
+                $wastageTotal = $itemData['waste_value'] ?? $itemData['wValue'] ?? $this->mul($noOfPcs, $wastageValue);
+                $amount = $itemData['amount'] ?? $this->mul($noOfPcs, $amountPcs);
 
                 // purity = (grams + wastageTotal) * (touch / 100) (or use frontend purity)
                 $purity = $itemData['purity'] ?? $this->div($this->mul($this->add($grams, $wastageTotal), $touch), '100');
 
-                // Snapshot OB
+                // Snapshot OB details
                 $obSnapshot = [
                     'given_by_details' => [
                         'ob' => $this->buildUserItemDetails($givenBy->user_id, $itemId, null, 'ob'),
@@ -801,35 +693,63 @@ class StockInventoryService
                     ]
                 ];
 
-                // Create Stock Details
+                // Create StockDetails row
                 $stock = StockDetails::create([
                     'item_id' => $itemId,
                     'given_by' => $givenBy->user_id,
                     'given_to' => $givenTo->user_id,
-                    'type' => 'NUMERIC_WASTAGE',
+                    'type' => 'NUMERICWASTE',
                     'entry_type' => 'NORMAL',
                     'stock_type' => 'OUT',
                     'grams' => $grams,
                     'touch' => $touch,
                     'purity' => $purity,
-                    'remarks' => $remarks ?? "Numeric Wastage Out",
+                    'remarks' => $remarks,
                     'item_remarks' => $itemRemarks,
                     'waste_id' => $wasteId,
-                    'waste_total' => $wastageValue, // mapped to wastage_value
-                    'waste_value' => $wastageTotal, // mapped to wastage_total
-                    'mtouch' => $amount,
+                    'waste_total' => $wastageValue,
+                    'waste_value' => $wastageTotal,
+                    'mtouch' => $amountPcs,
                     'balance' => $grams,
                     'added_by' => $addedBy,
                     'given_by_item_grams_op' => $obSnapshot['given_by_details']['ob']['item_details']['ob_grams'] ?? 0,
                     'given_to_item_grams_op' => $obSnapshot['given_to_details']['ob']['item_details']['ob_grams'] ?? 0,
                     'given_by_item_purity_op' => $obSnapshot['given_by_details']['ob']['item_details']['ob_purity'] ?? 0,
                     'given_to_item_purity_op' => $obSnapshot['given_to_details']['ob']['item_details']['ob_purity'] ?? 0,
-                    'added_at' => $addedAt,
-                    'created_at' => $addedAt,
-                    'updated_at' => $addedAt,
+                    'added_at' => $itemAddedAt,
+                    'created_at' => $itemAddedAt,
+                    'updated_at' => $itemAddedAt,
                 ]);
 
-                // Update user balances: deduct from head, add to worker
+                // Handle Cash Transaction mapping if enabled
+                $cashTxnId = null;
+                if ($amountPcs > 0) {
+                    $cashAmount = $this->mul($noOfPcs, $amountPcs);
+                    
+                    $openingAccountBalance = $givenBy->rak_cash_balance;
+                    $openingUserBalance = $givenTo->rak_cash_balance;
+
+                    $cashTxn = CashTxn::create([
+                        'type' => 'EXPENSE',
+                        'given_to' => $givenTo->user_id, // worker receives cash
+                        'given_by' => $givenBy->user_id, // head admin pays cash
+                        'amount' => $cashAmount,
+                        'opening_account_balance' => $openingAccountBalance, // sender (head) cash balance
+                        'opening_user_balance' => $openingUserBalance, // receiver (worker) cash balance
+                        'souce_type' => 'CASH_ON_HAND',
+                        'remarks' => "NUMERIC_WASTAGE EXPENSE (ID : {$stock->stock_id})",
+                        'added_by' => $addedBy,
+                    ]);
+
+                    $cashTxnId = $cashTxn->txn_id;
+
+                    // Deduct from head (givenBy)
+                    $givenBy->rak_cash_balance = $this->sub($givenBy->rak_cash_balance, $cashAmount);
+                    // Add to worker (givenTo)
+                    $givenTo->rak_cash_balance = $this->add($givenTo->rak_cash_balance, $cashAmount);
+                }
+
+                // Update balances: deduct head, add worker
                 $givenBy->grams_grand_total = $this->sub($givenBy->grams_grand_total, $grams);
                 $givenBy->purity_grand_total = $this->sub($givenBy->purity_grand_total, $purity);
                 $givenBy->save();
@@ -842,7 +762,7 @@ class StockInventoryService
 
                 $this->updateUserItemBalance($givenTo->user_id, $itemId, $grams, $purity);
 
-                // Snapshot CB
+                // Snapshot CB details
                 $cbSnapshot = [
                     'given_by_details' => [
                         'cb' => $this->buildUserItemDetails($givenBy->user_id, $itemId, null, 'cb'),
@@ -862,41 +782,6 @@ class StockInventoryService
                 $stock->given_to_item_purity_cb = $cbSnapshot['given_to_details']['cb']['item_details']['cb_purity'] ?? 0;
                 $stock->saveQuietly();
 
-                $cashTxnId = null;
-
-                // If amount > 0, generate cash expense payout
-                if (bccomp((string)$amount, '0', 4) > 0) {
-                    $openingAccountBalance = $givenBy->rak_cash_balance;
-                    $openingUserBalance = $givenTo->rak_cash_balance;
-
-                    // Create Cash Txn details
-                    $cashTxn = CashTxn::create([
-                        'type' => 'EXPENSE',
-                        'given_to' => $givenTo->user_id,
-                        'given_by' => $givenBy->user_id,
-                        'amount' => $amount,
-                        'opening_account_balance' => $openingAccountBalance,
-                        'opening_user_balance' => $openingUserBalance,
-                        'souce_type' => 'CASH_ON_HAND',
-                        'remarks' => "Expense triggered by Numeric Wastage stock transaction #{$stock->stock_id}",
-                        'added_by' => $addedBy,
-                        'stock_id' => $stock->stock_id,
-                        'added_at' => $addedAt,
-                        'created_at' => $addedAt,
-                        'updated_at' => $addedAt,
-                    ]);
-
-                    $cashTxnId = $cashTxn->txn_id;
-
-                    // Update cash balances
-                    $givenBy->rak_cash_balance = $this->sub($givenBy->rak_cash_balance, $amount);
-                    $givenBy->save();
-
-                    $givenTo->rak_cash_balance = $this->add($givenTo->rak_cash_balance, $amount);
-                    $givenTo->save();
-                }
-
-                // Create Numeric Wastages record
                 $nw = NumericWastage::create([
                     'item_id' => $itemId,
                     'grams' => $grams,
@@ -908,7 +793,7 @@ class StockInventoryService
                     'stock_id' => $stock->stock_id,
                     'amount' => $amount,
                     'cash_txn_id' => $cashTxnId,
-                    'added_at' => $addedAt,
+                    'added_at' => $itemAddedAt,
                 ]);
 
                 $createdWastages[] = $nw;
@@ -918,11 +803,11 @@ class StockInventoryService
             Cache::forget("user:{$givenTo->user_id}:balances");
 
             return $createdWastages;
-        });
+        }, 5);
     }
 
     /**
-     * 5. Hide specific stock details and their parent
+     * 6. Hide specific stock details and their parent
      */
     public function hideStocks(array $stockIds): void
     {
@@ -945,7 +830,7 @@ class StockInventoryService
     }
 
     /**
-     * 6. Cash / RTGS Transfer (Cash Out)
+     * 7. Cash / RTGS Transfer (Cash Out)
      */
     public function createCashOut(array $data, int $addedBy): CashTxn
     {

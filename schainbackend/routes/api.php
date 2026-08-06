@@ -116,10 +116,15 @@ Route::post('/login', [AuthController::class, 'login']);
 
 Route::prefix('v1/stock')->group(function () {
     Route::post('out', [StockDetailsController::class, 'postStockOut']);
+    Route::post('in', [StockDetailsController::class, 'postStockIn']);
     Route::post('item-change', [StockDetailsController::class, 'postItemChange']);
     Route::post('item-conversion', [StockDetailsController::class, 'postItemConversion']);
     Route::post('gms', [StockDetailsController::class, 'postGmsOut']);
+    Route::post('gms-in', [StockDetailsController::class, 'postGmsIn']);
     Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
+    Route::post('numeric-waste-in', [StockDetailsController::class, 'postNumericWasteIn']);
     Route::post('hide', [StockDetailsController::class, 'postHide']);
     Route::post('cash', [StockDetailsController::class, 'postCash']);
+    Route::post('auto-entry', [StockDetailsController::class, 'postAutoEntry']);
+    Route::get('reports/items-obcb', [StockDetailsController::class, 'getHistoryItemsObcb']);
 });
