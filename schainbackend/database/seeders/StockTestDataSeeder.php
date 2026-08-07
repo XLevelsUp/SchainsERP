@@ -73,6 +73,17 @@ class StockTestDataSeeder extends Seeder
             'is_no_barcode' => false,
         ]);
 
+        Item::create([
+            'item_id' => 3,
+            'item_name' => 'Gold',
+            'is_active' => true,
+            'default_touch' => 100.00,
+            'item_touch' => 100.00,
+            'is_need_fitem_shown' => false,
+            'is_barcode' => false,
+            'is_no_barcode' => true,
+        ]);
+
         // 3. Create Users
         UserDetail::create([
             'user_id' => 1,
@@ -142,6 +153,14 @@ class StockTestDataSeeder extends Seeder
         ]);
 
         UsersItemsMapping::create([
+            'user_id' => 1,
+            'item_id' => 3,
+            'item_grams_total' => 0.0000,
+            'item_purity_total' => 0.0000,
+            'is_primary' => 0,
+        ]);
+
+        UsersItemsMapping::create([
             'user_id' => 2,
             'item_id' => 1,
             'item_grams_total' => 0.0000,
@@ -157,6 +176,14 @@ class StockTestDataSeeder extends Seeder
             'is_primary' => 1,
         ]);
 
+        UsersItemsMapping::create([
+            'user_id' => 2,
+            'item_id' => 3,
+            'item_grams_total' => 0.0000,
+            'item_purity_total' => 0.0000,
+            'is_primary' => 0,
+        ]);
+
         // WastageDetails::create([
         //     'waste_id' => 1,
         //     'waste_name' => 'RUVIE DYE',
@@ -169,5 +196,13 @@ class StockTestDataSeeder extends Seeder
             'ledger_balance' => 10000.00,
             'is_active' => true,
         ]);
+        
+        BankDetail::create([
+            'bank_id' => 2,
+            'account_name' => 'ICICI Bank Ltd',
+            'ledger_balance' => 15000.00,
+            'is_active' => true,
+        ]);
     }
 }
+

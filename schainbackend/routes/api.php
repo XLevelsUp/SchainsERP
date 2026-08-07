@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 
+
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\FitemBoxController;
 use App\Http\Controllers\Api\RoleController;
@@ -15,6 +16,8 @@ use App\Http\Controllers\Api\CashTxnDetailController;
 use App\Http\Controllers\Api\BankDetailController;
 use App\Http\Controllers\Api\SaleGoldController;
 use App\Http\Controllers\Api\StockDetailsController;
+use App\Http\Controllers\Api\CashToGoldController;
+use App\Http\Controllers\Api\GoldToCashController;
 
 
 Route::prefix('v1')->group(function () {
@@ -35,7 +38,14 @@ Route::apiResource('sale-gold',SaleGoldController::class);
 
 Route::post('cash-txn-details/in', [CashTxnDetailController::class, 'postIncome']);
 Route::post('cash-txn-details/out', [CashTxnDetailController::class, 'postExpense']);
+
+// Cash To Gold — customer gives cash, head gives gold (Save)
+Route::post('cash-to-gold',             [CashToGoldController::class, 'store']);
+
+// Gold To Cash — customer gives gold, head gives cash (Save)
+Route::post('gold-to-cash',            [GoldToCashController::class, 'store']);
 });
+
 
 
 
