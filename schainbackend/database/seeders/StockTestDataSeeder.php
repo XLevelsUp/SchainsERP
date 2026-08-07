@@ -12,6 +12,7 @@ use App\Models\CashTxnDetail;
 use App\Models\BillingEntry;
 use App\Models\OverAllBill;
 use App\Models\WastageDetails;
+use App\Models\BankDetail;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -46,6 +47,7 @@ class StockTestDataSeeder extends Seeder
             DB::statement("SELECT setval('user_details_user_id_seq', COALESCE((SELECT MAX(user_id)+1 FROM user_details), 1), false);");
             DB::statement("SELECT setval('items_item_id_seq', COALESCE((SELECT MAX(item_id)+1 FROM items), 1), false);");
             DB::statement("SELECT setval('users_items_mappings_id_seq', COALESCE((SELECT MAX(id)+1 FROM users_items_mappings), 1), false);");
+            DB::statement("SELECT setval('bank_details_bank_id_seq', COALESCE((SELECT MAX(bank_id)+1 FROM bank_details), 1), false);");
         }
 
         // 2. Create Items
@@ -155,10 +157,17 @@ class StockTestDataSeeder extends Seeder
             'is_primary' => 1,
         ]);
 
-        WastageDetails::create([
-            'waste_id' => 1,
-            'waste_name' => 'RUVIE DYE',
-            'waste_value' => '0.1800',
+        // WastageDetails::create([
+        //     'waste_id' => 1,
+        //     'waste_name' => 'RUVIE DYE',
+        //     'waste_value' => '0.1800',
+        // ]);
+
+        BankDetail::create([
+            'bank_id' => 1,
+            'account_name' => 'HDFC Bank Ltd',
+            'ledger_balance' => 10000.00,
+            'is_active' => true,
         ]);
     }
 }
