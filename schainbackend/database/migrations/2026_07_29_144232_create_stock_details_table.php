@@ -16,9 +16,9 @@ return new class extends Migration
             $table->unsignedInteger('item_id');
             $table->unsignedBigInteger('given_by');
             $table->unsignedBigInteger('given_to');
-            $table->string('type', 45)->default('NORMAL');
-            $table->string('entry_type', 45)->default('NORMAL');
-            $table->string('stock_type', 10); // IN, OUT
+            $table->enum('type', ['NORMAL', 'ITEMCHANGE', 'ITEMCONVERSION', 'GMS', 'FITEM', 'NUMERICWASTE'])->default('NORMAL');
+            $table->enum('entry_type', ['NORMAL', 'EMPTOEMP', 'EMPTOHEAD', 'ANOTHERHEADTOEMP', 'HEADTOHEAD', 'GOLDCASHCONVERSION', 'OUT_CASH_CONVERTER', 'CashToGold', 'SALES'])->default('NORMAL');
+            $table->enum('stock_type', ['IN', 'OUT']);
             $table->decimal('grams', 12, 4);
             $table->decimal('touch', 12, 4);
             $table->decimal('purity', 12, 4);

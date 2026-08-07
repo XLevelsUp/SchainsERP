@@ -15,9 +15,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use App\Http\Requests\StoreCashTxnDetailRequest;
+use App\Services\CashTxnDetailService;
+use Illuminate\Support\Facades\Log;
 
 class CashTxnDetailController extends Controller
 {
+    protected CashTxnDetailService $service;
+
+    public function __construct(CashTxnDetailService $service)
+    {
+        $this->service = $service;
+    }
     /**
      * ============================================================
      * GET ALL CASH TRANSACTIONS
@@ -2161,6 +2170,54 @@ class CashTxnDetailController extends Controller
                     'storage/' .
                     $image->image_url
                 );
+        }
+    }
+
+    /**
+     * Post Income Cash/Bank Transaction (IN)
+     */
+    public function postIncome(StoreCashTxnDetailRequest $request): JsonResponse
+    {
+        try {
+            $addedBy = $request->user()->user_id ?? (int)$request->header('X-User-ID', 1);
+            $txn = $this->service->storeIncome($request->validated(), $addedBy);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Income Cash Transaction Created Successfully',
+                'data' => $txn,
+            ], 201);
+        } catch (\Throwable $e) {
+            Log::error('CashTxnDetailController::postIncome failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to record income transaction.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Post Expense Cash/Bank Transaction (OUT)
+     */
+    public function postExpense(StoreCashTxnDetailRequest $request): JsonResponse
+    {
+        try {
+            $addedBy = $request->user()->user_id ?? (int)$request->header('X-User-ID', 1);
+            $txn = $this->service->storeExpense($request->validated(), $addedBy);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Expense Cash Transaction Created Successfully',
+                'data' => $txn,
+            ], 201);
+        } catch (\Throwable $e) {
+            Log::error('CashTxnDetailController::postExpense failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to record expense transaction.',
+                'error' => $e->getMessage(),
+            ], 500);
         }
     }
 }

@@ -7,7 +7,7 @@ use App\Models\BillingEntry;
 use App\Models\StockInDetail;
 use App\Models\GmsInHistory;
 use App\Models\NumericWastageIn;
-use App\Models\CashTxn;
+use App\Models\CashTxnDetail;
 use App\Models\UserDetail;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
@@ -363,14 +363,14 @@ class StockInService extends BaseStockService
                     $openingAccountBalance = $givenBy->rak_cash_balance;
                     $openingUserBalance = $givenTo->rak_cash_balance;
 
-                    $cashTxn = CashTxn::create([
+                    $cashTxn = CashTxnDetail::create([
                         'type' => 'INCOME',
-                        'given_to' => $givenTo->user_id, // head admin receives cash
-                        'given_by' => $givenBy->user_id, // worker pays cash
+                        'recipient_id' => $givenTo->user_id, // head admin receives cash
+                        'sender_id' => $givenBy->user_id, // worker pays cash
                         'amount' => $cashAmount,
-                        'opening_account_balance' => $openingAccountBalance, // sender (worker) cash balance
-                        'opening_user_balance' => $openingUserBalance, // receiver (head) cash balance
-                        'souce_type' => 'CASH_ON_HAND',
+                        'sender_opening_cash' => $openingAccountBalance, // sender (worker) cash balance
+                        'recipient_opening_cash' => $openingUserBalance, // receiver (head) cash balance
+                        'payment_method' => 'CASH_ON_HAND',
                         'remarks' => "NUMERIC_WASTAGE INCOME (ID : {$stock->stock_in_detail_id})",
                         'added_by' => $addedBy,
                     ]);

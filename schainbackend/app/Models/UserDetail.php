@@ -202,4 +202,30 @@ class UserDetail extends Model
             'user_id'
         );
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Balance Bridges (No Prefix)
+    |--------------------------------------------------------------------------
+    */
+
+    public function getCashBalanceAttribute()
+    {
+        return $this->rak_cash_balance;
+    }
+
+    public function setCashBalanceAttribute($value)
+    {
+        $this->rak_cash_balance = $value;
+    }
+
+    public function getRtgsBalanceAttribute()
+    {
+        return $this->rak_rtgs_balance;
+    }
+
+    public function setRtgsBalanceAttribute($value)
+    {
+        $this->rak_rtgs_balance = $value;
+    }
 }
