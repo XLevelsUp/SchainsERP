@@ -25,12 +25,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let response: Response
   try {
     response = await fetch(`${BASE_URL}${path}`, {
+      ...options,
       headers: {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         Accept: 'application/json',
         ...options.headers,
       },
-      ...options,
     })
   } catch {
     throw new ApiError('Could not reach the server. Is the backend running?', 0)
@@ -51,8 +51,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: 'GET' }),
-  post: <T>(path: string, data: unknown) =>
-    request<T>(path, { method: 'POST', body: JSON.stringify(data) }),
+  post: <T>(path: string, data: unknown, headers?: Record<string, string>) =>
+    request<T>(path, { method: 'POST', body: JSON.stringify(data), headers }),
   put: <T>(path: string, data: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(data) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),

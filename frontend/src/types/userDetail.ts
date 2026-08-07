@@ -20,6 +20,9 @@ export interface UserDetail {
   is_delete: boolean
   is_billable: boolean
   rak_cash_balance: number
+  rak_rtgs_balance: number
+  grams_grand_total: number
+  purity_grand_total: number
   added_at?: string
   updated_at?: string
 }

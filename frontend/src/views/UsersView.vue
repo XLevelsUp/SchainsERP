@@ -44,14 +44,9 @@ async function loadData() {
   isLoading.value = true
   loadError.value = ''
   try {
-    const [usersData, itemsData, rolesData] = await Promise.all([
-      userDetailsApi.list(),
-      itemsApi.list(),
-      rolesApi.list(),
-    ])
+    const [usersData, itemsData] = await Promise.all([userDetailsApi.list(), itemsApi.list()])
     users.value = usersData
     items.value = itemsData
-    roles.value = rolesData
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load users.'
   } finally {
@@ -59,7 +54,19 @@ async function loadData() {
   }
 }
 
+// Fetched separately so a broken/missing roles endpoint can't take the
+// whole user list down with it (Promise.all fails the batch on any single
+// rejection) — it just leaves the Role dropdown empty.
+async function loadRoles() {
+  try {
+    roles.value = await rolesApi.list()
+  } catch {
+    roles.value = []
+  }
+}
+
 onMounted(loadData)
+onMounted(loadRoles)
 
 const filteredUsers = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()

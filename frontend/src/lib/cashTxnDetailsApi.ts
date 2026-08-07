@@ -1,5 +1,10 @@
 import { api, type ApiResponse } from './api'
-import type { CashTxnDetail, CashTxnDetailFormValues } from '@/types'
+import type {
+  CashTxnDetail,
+  CashTxnDetailFormValues,
+  CashTxnPostFormValues,
+  CashTxnPostResult,
+} from '@/types'
 
 const RESOURCE = '/cash-txn-details'
 
@@ -7,6 +12,13 @@ const RESOURCE = '/cash-txn-details'
 // Optional fields are sent as explicit `null` rather than omitted or '' —
 // Laravel's `nullable` rule accepts real JSON null cleanly (unlike '' for
 // numeric/enum rules), so this avoids ever tripping validation on blanks.
+//
+// WARNING: as of PR #13 the store()/update() endpoints this builds a
+// payload for are broken — see the warning at the top of
+// types/cashTxnDetail.ts. Kept as-is (not deleted) since it's still
+// wired into CashTransactionsView.vue; do not extend or copy this
+// pattern for new work. Use toPostPayload()/postIncome()/postExpense()
+// below instead.
 function toPayload(form: CashTxnDetailFormValues) {
   const payload: Record<string, unknown> = {
     type: form.type,
@@ -109,4 +121,49 @@ export const cashTxnDetailsApi = {
 
   deleteImage: (imageId: number) =>
     api.delete<ApiResponse<null>>(`/cash-txn-images/${imageId}`),
+}
+
+// ============================================================================
+// WORKING CONTRACT — POST /cash-txn-details/in and /cash-txn-details/out.
+// The only cash-txn write endpoints that match the current schema; see
+// the warning block at the top of types/cashTxnDetail.ts.
+// ============================================================================
+
+function toPostPayload(form: CashTxnPostFormValues) {
+  const payload: Record<string, unknown> = {
+    sender_id: form.sender_id,
+    recipient_id: form.recipient_id,
+    category_id: form.category_id,
+    amount: form.amount,
+    payment_method: form.payment_method,
+    remarks: form.remarks || null,
+    images: form.images,
+  }
+
+  // bank_account_id is required_if payment_method=BANK on the backend;
+  // send null rather than omit for CASH_ON_HAND so it always overwrites.
+  payload.bank_account_id = form.payment_method === 'BANK' ? form.bank_account_id : null
+
+  return payload
+}
+
+export const cashTxnPostApi = {
+  // There is no auth/session on this backend yet — postIncome/postExpense
+  // resolve the acting user (added_by) from an X-User-ID header (falling
+  // back to a hardcoded id if it's missing, see
+  // CashTxnDetailController::postIncome/postExpense), so it must be sent
+  // explicitly, same pattern as stockApi.ts.
+  postIncome: (form: CashTxnPostFormValues, actingUserId: number) =>
+    api
+      .post<ApiResponse<CashTxnPostResult>>(`${RESOURCE}/in`, toPostPayload(form), {
+        'X-User-ID': String(actingUserId),
+      })
+      .then((r) => r.data),
+
+  postExpense: (form: CashTxnPostFormValues, actingUserId: number) =>
+    api
+      .post<ApiResponse<CashTxnPostResult>>(`${RESOURCE}/out`, toPostPayload(form), {
+        'X-User-ID': String(actingUserId),
+      })
+      .then((r) => r.data),
 }

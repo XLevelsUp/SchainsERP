@@ -1,6 +1,23 @@
 import type { BankDetail } from './bankDetail'
 import type { UserDetail } from './userDetail'
 
+// ============================================================================
+// WARNING — everything below this point (CashTxnDetail, CashTxnImage,
+// CashTxnDetailFormValues) targets the CRUD endpoints
+// (GET/POST/PUT/DELETE /cash-txn-details, /cash-txn-details/{id}/images,
+// /cash-txn-images/{id}). As of PR #13, the backend rewrote the
+// cash_txn_details / cash_txn_images / bank_details tables (sender_id
+// /recipient_id/payment_method/bank_account_id, cash_txn_id/image_path,
+// account_name/ledger_balance) but left this CRUD controller code
+// unchanged — it still reads/writes given_by, opening_account_balance,
+// txn_id/image_url, bank_name/current_balance, none of which exist
+// anymore. Every one of those endpoints now 500s with an "unknown
+// column" SQL error. Do not build new screens against these types.
+// Use CashTxnPostFormValues / CashTxnPostResult (below) instead, which
+// target the only endpoints that actually work against the current
+// schema: POST /cash-txn-details/in and /cash-txn-details/out.
+// ============================================================================
+
 // Only INCOME/EXPENSE actually drive balance math server-side (see
 // CashTxnDetailController::calculateBalances) — every other type is stored
 // as a manual entry with closing balances equal to whatever opening values
@@ -101,8 +118,11 @@ export interface CashTxnDetail {
   admin_head_txn_id: number | null
   images: CashTxnImage[]
   bank: BankDetail | null
-  givenByUser: UserDetail | null
-  givenToUser: UserDetail | null
+  // Eloquent snake_cases relation names in JSON output by default, so
+  // these arrive as given_by_user/given_to_user despite the PHP relation
+  // methods being camelCase (givenByUser()/givenToUser()).
+  given_by_user: UserDetail | null
+  given_to_user: UserDetail | null
 }
 
 // Fields the store()/update() endpoints accept as JSON (images are handled
@@ -171,4 +191,56 @@ export interface CashTxnDetailFormValues {
 
   is_admin_head_entry: boolean
   admin_head_txn_id: number | null
+}
+
+// ============================================================================
+// WORKING CONTRACT — POST /cash-txn-details/in and /cash-txn-details/out
+// (CashTxnDetailController::postIncome/postExpense, backed by
+// CashTxnDetailService + StoreCashTxnDetailRequest). Matches the actual
+// current cash_txn_details/cash_txn_images schema.
+// ============================================================================
+
+// Values the quick in/out form collects. sender_id is who the cash/bank
+// balance moves from, recipient_id who it moves to — for an "IN" entry
+// that's typically the counter user as sender and the cash head as
+// recipient (or vice versa for "OUT"); the UI decides which, the API
+// only cares about direction via which endpoint you call (in vs out).
+export interface CashTxnPostFormValues {
+  sender_id: number | null
+  recipient_id: number | null
+  category_id: number | null
+  amount: number | null
+  payment_method: CashTxnSourceType
+  bank_account_id: number | null
+  remarks: string
+  // Paths of already-uploaded attachments (this endpoint takes JSON, not
+  // multipart — there is currently no separate upload endpoint for these
+  // paths; images.* is validated as plain strings server-side).
+  images: string[]
+}
+
+// Shape returned by postIncome/postExpense — a raw CashTxnDetail row on
+// the new schema (relations are NOT eager-loaded, unlike the old index()).
+export interface CashTxnPostResult {
+  txn_id: number
+  type: 'INCOME' | 'EXPENSE'
+  sender_id: number
+  recipient_id: number
+  category_id: number | null
+  amount: number
+  balance_after_txn: number | null
+  sender_opening_cash: number
+  sender_opening_rtgs: number
+  recipient_opening_cash: number
+  recipient_opening_rtgs: number
+  sender_closing_cash: number
+  sender_closing_rtgs: number
+  recipient_closing_cash: number
+  recipient_closing_rtgs: number
+  payment_method: CashTxnSourceType
+  bank_account_id: number | null
+  remarks: string | null
+  added_by: number
+  created_at?: string
+  updated_at?: string
 }

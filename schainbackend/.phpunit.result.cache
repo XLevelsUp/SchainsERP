@@ -1,0 +1,1 @@
+{"version":2,"defects":{"Tests\\Feature\\StockInDetailsTest::test_stock_in_success":8,"Tests\\Feature\\StockInDetailsTest::test_gms_in_success":8,"Tests\\Feature\\StockInDetailsTest::test_numeric_wastage_in_success_with_cash":8},"times":[]}

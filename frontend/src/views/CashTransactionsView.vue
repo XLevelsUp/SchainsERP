@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Search, Plus, Pencil, Trash2, X, RefreshCw, Image as ImageIcon } from 'lucide-vue-next'
+import { Search, Plus, Pencil, Trash2, X, RefreshCw, Printer, Image as ImageIcon } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -8,15 +8,33 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
-import DataTable from '@/components/ui/DataTable.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
+import TransactionEntryModal from '@/components/cash-txn/TransactionEntryModal.vue'
+import PurchaseGoldModal from '@/components/cash-txn/PurchaseGoldModal.vue'
+import GoldToCashModal from '@/components/cash-txn/GoldToCashModal.vue'
+import CashToGoldModal from '@/components/cash-txn/CashToGoldModal.vue'
+import SaleGoldQuickModal from '@/components/cash-txn/SaleGoldQuickModal.vue'
+import AutoEntryModal from '@/components/cash-txn/AutoEntryModal.vue'
 import { cashTxnDetailsApi } from '@/lib/cashTxnDetailsApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
+import { itemsApi } from '@/lib/itemsApi'
 import { ApiError } from '@/lib/api'
+import { validateImageFile } from '@/lib/imageValidation'
+import {
+  typeOptions,
+  typeLabel,
+  AUTO_CALC_TYPES,
+  OUT_TYPES,
+  IN_TYPES,
+  sourceTypeOptions,
+  txnTypeOptions,
+  billPaymentCashTypeOptions,
+  arithmeticOperationOptions,
+  cashLoanTypeOptions,
+} from '@/lib/cashTxnOptions'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
-import { formatDateTime } from '@/lib/date'
 import type {
   ArithmeticOperation,
   BankDetail,
@@ -28,7 +46,7 @@ import type {
   CashTxnImage,
   CashTxnSourceType,
   CashTxnType,
-  DataTableColumn,
+  Item,
   UserDetail,
 } from '@/types'
 
@@ -37,69 +55,10 @@ const toastStore = useToastStore()
 
 const transactions = ref<CashTxnDetail[]>([])
 const users = ref<UserDetail[]>([])
+const items = ref<Item[]>([])
 const banks = ref<BankDetail[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
-const searchQuery = ref('')
-
-/*
-|--------------------------------------------------------------------------
-| Option lists
-|--------------------------------------------------------------------------
-| These mirror the exact `in:` enum lists validated by
-| CashTxnDetailController::storeValidator()/updateValidator() — nothing
-| here is invented, only humanized for display.
-*/
-
-const typeOptions: { value: CashTxnType; label: string }[] = [
-  { value: 'INCOME', label: 'Income' },
-  { value: 'EXPENSE', label: 'Expense' },
-  { value: 'AUTO_ENTRY', label: 'Auto Entry' },
-  { value: 'CASH_TO_GOLD', label: 'Cash to Gold' },
-  { value: 'PURCHASE_GOLD', label: 'Purchase Gold' },
-  { value: 'SALE_GOLD', label: 'Sale Gold' },
-  { value: 'AMOUNT_TRANSFER', label: 'Amount Transfer' },
-  { value: 'GOLD_TO_CASH', label: 'Gold to Cash' },
-  { value: 'INTERNAL_TRANSFER', label: 'Internal Transfer' },
-  { value: 'IN_CASH_CONVERTER', label: 'In Cash Converter' },
-  { value: 'OUT_CASH_CONVERTER', label: 'Out Cash Converter' },
-  { value: 'CashToGold', label: 'Cash to Gold (legacy)' },
-  { value: 'CASH_LOAN', label: 'Cash Loan' },
-]
-const typeLabel = (value: CashTxnType) => typeOptions.find((o) => o.value === value)?.label ?? value
-
-// Only these two types actually drive balance math server-side — every
-// other type stores the entry with closing balances equal to whatever
-// opening values are submitted (CashTxnDetailController::calculateBalances).
-const AUTO_CALC_TYPES: CashTxnType[] = ['INCOME', 'EXPENSE']
-
-const sourceTypeOptions: { value: CashTxnSourceType; label: string }[] = [
-  { value: 'CASH_ON_HAND', label: 'Cash on hand' },
-  { value: 'BANK', label: 'Bank' },
-]
-
-const txnTypeOptions: { value: CashTxnEntryType; label: string }[] = [
-  { value: 'NORMAL', label: 'Normal' },
-  { value: 'ATTENDANCE', label: 'Attendance' },
-]
-
-const billPaymentCashTypeOptions: { value: BillPaymentCashType; label: string }[] = [
-  { value: 'ON_SPOT_NILL', label: 'On spot / nil' },
-  { value: 'ON_ACCOUNTABLE', label: 'On accountable' },
-  { value: 'PARTIAL_PAYMENT', label: 'Partial payment' },
-]
-
-const arithmeticOperationOptions: { value: ArithmeticOperation; label: string }[] = [
-  { value: '+', label: '+ (add)' },
-  { value: '-', label: '- (subtract)' },
-]
-
-const cashLoanTypeOptions: { value: CashLoanType; label: string }[] = [
-  { value: 'cash_loan_taken', label: 'Cash loan taken' },
-  { value: 'cash_loan_given', label: 'Cash loan given' },
-  { value: 'interest_payment', label: 'Interest payment' },
-  { value: 'interest_receipt', label: 'Interest receipt' },
-]
 
 function userLabel(user: UserDetail) {
   return `${user.name} (${user.user_name})`
@@ -122,37 +81,24 @@ function userName(id: number | null, cachedUser?: UserDetail | null) {
   if (id === null) return '—'
   return cachedUser?.name ?? users.value.find((u) => u.user_id === id)?.name ?? `#${id}`
 }
-
-/*
-|--------------------------------------------------------------------------
-| List + search
-|--------------------------------------------------------------------------
-*/
-
-const columns: DataTableColumn<CashTxnDetail>[] = [
-  { key: 'type', label: 'Type' },
-  { key: 'given_by', label: 'Given by' },
-  { key: 'given_to', label: 'Given to' },
-  { key: 'amount', label: 'Amount' },
-  { key: 'souce_type', label: 'Source' },
-  { key: 'closing_account_balance', label: 'Balance' },
-  { key: 'is_active', label: 'Status' },
-  { key: 'added_at', label: 'Added' },
-  { key: 'txn_id', label: '' },
-]
+function categoryLabel(id: number | null) {
+  return id === null ? '—' : String(id)
+}
 
 async function loadData() {
   isLoading.value = true
   loadError.value = ''
   try {
-    const [txnData, usersData, banksData] = await Promise.all([
+    const [txnData, usersData, banksData, itemsData] = await Promise.all([
       cashTxnDetailsApi.list(),
       userDetailsApi.list(),
       bankDetailsApi.list(),
+      itemsApi.list(),
     ])
     transactions.value = txnData
     users.value = usersData
     banks.value = banksData
+    items.value = itemsData
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load cash transactions.'
   } finally {
@@ -162,26 +108,246 @@ async function loadData() {
 
 onMounted(loadData)
 
-const filteredTransactions = computed(() => {
+/*
+|--------------------------------------------------------------------------
+| Filter bar — Head / User / date range
+|--------------------------------------------------------------------------
+| "Roles" is intentionally left out here: GET /api/v1/roles is currently
+| 404 (route dropped in a backend merge), so a Role→User cascade can't be
+| built against it. Head/User selects both work today.
+*/
+
+const headId = ref<number | null>(null)
+const counterpartyId = ref<number | null>(null)
+const fromDate = ref('')
+const toDate = ref('')
+const searchQuery = ref('')
+
+const headUser = computed(() => users.value.find((u) => u.user_id === headId.value) ?? null)
+const counterpartyUser = computed(
+  () => users.value.find((u) => u.user_id === counterpartyId.value) ?? null,
+)
+const canQuickCreate = computed(() => headUser.value !== null && counterpartyUser.value !== null)
+
+function onHeadFilterChange(id: number | null) {
+  headId.value = id
+  counterpartyId.value = null
+}
+
+const scopedTransactions = computed(() => {
+  if (headId.value === null) return []
   const query = searchQuery.value.trim().toLowerCase()
-  if (!query) return transactions.value
   return transactions.value.filter((t) => {
-    const haystack = [
-      typeLabel(t.type),
-      t.remarks ?? '',
-      t.givenByUser?.name ?? '',
-      t.givenToUser?.name ?? '',
-      String(t.txn_id),
-    ]
-      .join(' ')
-      .toLowerCase()
-    return haystack.includes(query)
+    const involvesHead = t.given_by === headId.value || t.given_to === headId.value
+    if (!involvesHead) return false
+
+    if (counterpartyId.value !== null) {
+      const involvesCounterparty =
+        t.given_by === counterpartyId.value || t.given_to === counterpartyId.value
+      if (!involvesCounterparty) return false
+    }
+
+    const day = t.added_at?.slice(0, 10)
+    if (fromDate.value && (!day || day < fromDate.value)) return false
+    if (toDate.value && (!day || day > toDate.value)) return false
+
+    if (query) {
+      const haystack = [
+        typeLabel(t.type),
+        t.remarks ?? '',
+        t.given_by_user?.name ?? '',
+        t.given_to_user?.name ?? '',
+        String(t.txn_id),
+      ]
+        .join(' ')
+        .toLowerCase()
+      if (!haystack.includes(query)) return false
+    }
+
+    return true
   })
 })
 
+const outRows = computed(() => scopedTransactions.value.filter((t) => OUT_TYPES.includes(t.type)))
+const inRows = computed(() => scopedTransactions.value.filter((t) => IN_TYPES.includes(t.type)))
+const outTotal = computed(() => outRows.value.reduce((sum, t) => sum + t.amount, 0))
+const inTotal = computed(() => inRows.value.reduce((sum, t) => sum + t.amount, 0))
+
+const PAGE_SIZE = 10
+const outVisible = ref(PAGE_SIZE)
+const inVisible = ref(PAGE_SIZE)
+const visibleOutRows = computed(() => outRows.value.slice(0, outVisible.value))
+const visibleInRows = computed(() => inRows.value.slice(0, inVisible.value))
+
+function handlePrint() {
+  window.print()
+}
+
 /*
 |--------------------------------------------------------------------------
-| Form state
+| Quick-action buttons — one-for-one with the legacy dashboard's IN/OUT tab
+| groups (see lib/cashTxnOptions.ts). SaleGold links to its own page (it
+| already has a full multi payment-source flow). Purchase Gold, Gold To
+| Cash, and Cash To Gold each open their own dedicated (UI-only, unwired)
+| modal — none of the three have a backend endpoint yet.
+|--------------------------------------------------------------------------
+*/
+
+const outActions: { type: CashTxnType; label: string; classes: string }[] = [
+  { type: 'EXPENSE', label: 'OUT', classes: 'bg-red-600 hover:bg-red-700' },
+]
+const inActions: { type: CashTxnType; label: string; classes: string }[] = [
+  { type: 'INCOME', label: 'IN', classes: 'bg-emerald-600 hover:bg-emerald-700' },
+]
+
+/*
+|--------------------------------------------------------------------------
+| Quick-create / edit modal
+|--------------------------------------------------------------------------
+*/
+
+const isModalOpen = ref(false)
+const modalType = ref<CashTxnType>('EXPENSE')
+const editingTxn = ref<CashTxnDetail | null>(null)
+const modalHead = ref<UserDetail | null>(null)
+const modalCounterparty = ref<UserDetail | null>(null)
+
+function openQuickCreate(type: CashTxnType) {
+  if (!headUser.value || !counterpartyUser.value) {
+    toastStore.show('Select a Head and a User first.', 'error')
+    return
+  }
+  modalType.value = type
+  editingTxn.value = null
+  modalHead.value = headUser.value
+  modalCounterparty.value = counterpartyUser.value
+  isModalOpen.value = true
+}
+
+// Purchase Gold has no backend endpoint yet (no controller, no route) —
+// this opens a UI-only form matching the legacy dialog's layout so it's
+// ready to wire up once that flow exists. See PurchaseGoldModal.vue.
+const isPurchaseGoldModalOpen = ref(false)
+
+function openPurchaseGoldModal() {
+  if (!headUser.value || !counterpartyUser.value) {
+    toastStore.show('Select a Head and a User first.', 'error')
+    return
+  }
+  isPurchaseGoldModalOpen.value = true
+}
+
+// Gold To Cash has no backend endpoint either — same UI-only situation.
+const isGoldToCashModalOpen = ref(false)
+
+function openGoldToCashModal() {
+  if (!headUser.value || !counterpartyUser.value) {
+    toastStore.show('Select a Head and a User first.', 'error')
+    return
+  }
+  isGoldToCashModalOpen.value = true
+}
+
+// Cash To Gold has no backend endpoint either — same UI-only situation.
+const isCashToGoldModalOpen = ref(false)
+
+function openCashToGoldModal() {
+  if (!headUser.value || !counterpartyUser.value) {
+    toastStore.show('Select a Head and a User first.', 'error')
+    return
+  }
+  isCashToGoldModalOpen.value = true
+}
+
+// Sale Gold has a real backend (SaleGoldController) — this opens a
+// functional in-context modal instead of navigating to the /sale-gold page.
+const isSaleGoldModalOpen = ref(false)
+
+function openSaleGoldModal() {
+  if (!headUser.value || !counterpartyUser.value) {
+    toastStore.show('Select a Head and a User first.', 'error')
+    return
+  }
+  isSaleGoldModalOpen.value = true
+}
+
+async function handleSaleGoldSaved() {
+  isSaleGoldModalOpen.value = false
+  await loadData()
+}
+
+// Auto Entry reuses the real cashTxnDetailsApi (type=AUTO_ENTRY is already
+// a working path) — see AutoEntryModal.vue for why it's its own component
+// rather than TransactionEntryModal (the legacy dialog batches rows).
+const isAutoEntryModalOpen = ref(false)
+
+function openAutoEntryModal() {
+  if (!headUser.value || !counterpartyUser.value) {
+    toastStore.show('Select a Head and a User first.', 'error')
+    return
+  }
+  isAutoEntryModalOpen.value = true
+}
+
+async function handleAutoEntrySaved() {
+  isAutoEntryModalOpen.value = false
+  await loadData()
+}
+
+function openEditRow(txn: CashTxnDetail) {
+  const head = users.value.find((u) => u.user_id === txn.given_by) ?? null
+  const counterparty = users.value.find((u) => u.user_id === txn.given_to) ?? null
+  if (!head || !counterparty) {
+    toastStore.show('Could not resolve the users on this transaction.', 'error')
+    return
+  }
+  modalType.value = txn.type
+  editingTxn.value = txn
+  modalHead.value = head
+  modalCounterparty.value = counterparty
+  isModalOpen.value = true
+}
+
+function closeModal() {
+  isModalOpen.value = false
+}
+
+async function handleModalSaved() {
+  isModalOpen.value = false
+  await loadData()
+}
+
+function handleUseAdvancedForm() {
+  isModalOpen.value = false
+  if (editingTxn.value) {
+    openEditForm(editingTxn.value)
+  } else {
+    openCreateForm()
+    form.given_by = modalHead.value?.user_id ?? null
+    form.given_to = modalCounterparty.value?.user_id ?? null
+    form.type = modalType.value
+  }
+}
+
+const deletingId = ref<number | null>(null)
+
+async function handleDelete(txn: CashTxnDetail) {
+  deletingId.value = txn.txn_id
+  try {
+    await cashTxnDetailsApi.remove(txn.txn_id)
+    await loadData()
+  } catch (err) {
+    loadError.value = err instanceof ApiError ? err.message : 'Failed to delete transaction.'
+  } finally {
+    deletingId.value = null
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| Advanced form — the full field set (retailer/vendor/bill-split/arithmetic
+| links/etc.), reachable via "Advanced entry" or the modal's escape hatch
+| for the rare entries the streamlined modal above doesn't cover.
 |--------------------------------------------------------------------------
 */
 
@@ -358,8 +524,6 @@ function closeForm() {
   isFormOpen.value = false
 }
 
-// Prefill helpers — convenience defaults only; every field stays editable
-// and nothing here is enforced server-side.
 function onGivenByChange(userId: number | null) {
   form.given_by = userId
   if (editingId.value !== null) return
@@ -375,16 +539,6 @@ function onBankChange(bankId: number | null) {
     form.opening_bank_account_balance = bank.current_balance
   }
 }
-
-/*
-|--------------------------------------------------------------------------
-| Live closing-balance preview
-|--------------------------------------------------------------------------
-| Mirrors CashTxnDetailController::calculateBalances() exactly: cash math
-| runs whenever type is INCOME/EXPENSE, bank math runs additionally when
-| souce_type is BANK. Every other type is a manual entry — closing equals
-| opening. Purely informational; the backend recalculates authoritatively.
-*/
 
 const balancePreview = computed(() => {
   const amount = form.amount ?? 0
@@ -420,16 +574,6 @@ const balancePreview = computed(() => {
 })
 
 const isAutoCalcType = computed(() => AUTO_CALC_TYPES.includes(form.type))
-
-/*
-|--------------------------------------------------------------------------
-| Validation
-|--------------------------------------------------------------------------
-| Mirrors CashTxnDetailController::storeValidator()/updateValidator():
-| core fields + arithmetic amount are always required, bank_id/bank_name/
-| opening_bank_account_balance are required only when souce_type is BANK,
-| and remarks/remainder carry the same max lengths as the backend.
-*/
 
 function validate(): boolean {
   clearFieldErrors()
@@ -477,30 +621,13 @@ function validate(): boolean {
   return true
 }
 
-/*
-|--------------------------------------------------------------------------
-| Images
-|--------------------------------------------------------------------------
-*/
-
-// Mirrors CashTxnDetailController::addImages()'s validator: image,
-// mimes:jpg,jpeg,png,webp, max:5120 (KB). Catching this client-side avoids
-// a generic 422 after the fact — and since the backend validates the whole
-// batch before storing anything, one bad file would otherwise reject every
-// good file selected alongside it.
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const MAX_IMAGE_SIZE_BYTES = 5120 * 1024
-
 function handleFileSelect(event: Event) {
   const input = event.target as HTMLInputElement
   if (input.files) {
     for (const file of Array.from(input.files)) {
-      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-        toastStore.show(`${file.name}: unsupported file type. Use JPG, PNG or WEBP.`, 'error')
-        continue
-      }
-      if (file.size > MAX_IMAGE_SIZE_BYTES) {
-        toastStore.show(`${file.name}: file is larger than 5MB.`, 'error')
+      const error = validateImageFile(file)
+      if (error) {
+        toastStore.show(error, 'error')
         continue
       }
       pendingImages.value.push(file)
@@ -527,12 +654,6 @@ async function handleRemoveExistingImage(image: CashTxnImage) {
     removingImageId.value = null
   }
 }
-
-/*
-|--------------------------------------------------------------------------
-| Save / delete
-|--------------------------------------------------------------------------
-*/
 
 async function handleSubmit() {
   if (!validate()) return
@@ -576,38 +697,379 @@ async function handleSubmit() {
     isSaving.value = false
   }
 }
-
-const deletingId = ref<number | null>(null)
-
-async function handleDelete(txn: CashTxnDetail) {
-  deletingId.value = txn.txn_id
-  try {
-    await cashTxnDetailsApi.remove(txn.txn_id)
-    await loadData()
-  } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to delete transaction.'
-  } finally {
-    deletingId.value = null
-  }
-}
 </script>
 
 <template>
   <div>
     <PageHeader
+      class="print:hidden"
       title="Cash Transactions"
       description="Record cash and bank ledger entries with automatic balance tracking."
     >
       <template #actions>
         <BaseButton variant="secondary" :icon="RefreshCw" @click="loadData">Refresh</BaseButton>
-        <BaseButton :icon="Plus" @click="openCreateForm">New transaction</BaseButton>
+        <BaseButton variant="secondary" :icon="Printer" @click="handlePrint">Print</BaseButton>
+        <BaseButton variant="secondary" :icon="Plus" @click="openCreateForm">Advanced entry</BaseButton>
       </template>
     </PageHeader>
 
-    <BaseCard v-if="isFormOpen" class="mb-6">
+    <!-- Filter bar -->
+    <BaseCard class="mb-6 print:hidden">
+      <div class="grid gap-3 sm:grid-cols-4">
+        <BaseSelect
+          id="head"
+          :model-value="headId"
+          label="Head"
+          size="sm"
+          placeholder="Select a head…"
+          :options="userOptions"
+          @update:model-value="(v) => onHeadFilterChange(v as number | null)"
+        />
+        <BaseSelect
+          id="counterparty"
+          :model-value="counterpartyId"
+          label="User"
+          size="sm"
+          placeholder="Select a user…"
+          :disabled="headId === null"
+          :options="userOptions"
+          @update:model-value="(v) => (counterpartyId = v as number | null)"
+        />
+        <BaseInput id="from_date" v-model="fromDate" label="From date" type="date" size="sm" />
+        <BaseInput id="to_date" v-model="toDate" label="Date" type="date" size="sm" />
+      </div>
+      <BaseInput
+        v-model="searchQuery"
+        type="search"
+        :icon="Search"
+        placeholder="Search transactions…"
+        aria-label="Search transactions"
+        class="mt-3 w-full max-w-xs"
+      />
+    </BaseCard>
+
+    <!-- Quick-action buttons -->
+    <div v-if="canQuickCreate" class="mb-6 grid gap-4 sm:grid-cols-2 print:hidden">
+      <div>
+        <p class="mb-2 text-xs font-semibold tracking-wide text-red-700 uppercase">Out</p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="a in outActions"
+            :key="a.type"
+            type="button"
+            class="rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors"
+            :class="a.classes"
+            @click="openQuickCreate(a.type)"
+          >
+            {{ a.label }}
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
+            @click="openPurchaseGoldModal"
+          >
+            Purchase Gold
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+            @click="openGoldToCashModal"
+          >
+            Gold To Cash
+          </button>
+        </div>
+      </div>
+      <div>
+        <p class="mb-2 text-xs font-semibold tracking-wide text-emerald-700 uppercase">In</p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="a in inActions"
+            :key="a.type"
+            type="button"
+            class="rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors"
+            :class="a.classes"
+            @click="openQuickCreate(a.type)"
+          >
+            {{ a.label }}
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
+            @click="openAutoEntryModal"
+          >
+            Auto Entry
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+            @click="openCashToGoldModal"
+          >
+            Cash To Gold
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700"
+            @click="openSaleGoldModal"
+          >
+            Sale Gold
+          </button>
+        </div>
+      </div>
+    </div>
+    <p v-else-if="headId !== null" class="mb-6 text-sm text-slate-500 print:hidden">
+      Select a User above to record a new transaction with this head.
+    </p>
+
+    <div
+      v-if="loadError"
+      class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+    >
+      {{ loadError }}
+    </div>
+
+    <div
+      v-if="isLoading"
+      class="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500"
+    >
+      Loading cash transactions…
+    </div>
+
+    <!-- Out / In ledger -->
+    <div v-else-if="headId !== null">
+      <p class="mb-4 hidden text-sm text-slate-600 print:block">
+        {{ headUser?.name }}<template v-if="counterpartyUser"> — {{ counterpartyUser.name }}</template>
+      </p>
+      <div class="grid gap-6 lg:grid-cols-2 print:grid-cols-1">
+      <div>
+        <div class="mb-2 flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-slate-900">Out</h3>
+          <span class="text-sm font-semibold text-red-700">{{ outTotal.toLocaleString() }}</span>
+        </div>
+        <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50">
+              <tr>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">ID</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Given To</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Given By</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Category</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Source</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Cash</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Type</th>
+                <th class="px-3 py-2 print:hidden"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-if="outRows.length === 0">
+                <td colspan="8" class="px-3 py-8 text-center text-sm text-slate-500">No out transactions.</td>
+              </tr>
+              <tr v-for="row in visibleOutRows" :key="row.txn_id" class="bg-red-50/40">
+                <td class="px-3 py-2">{{ row.txn_id }}</td>
+                <td class="px-3 py-2">{{ userName(row.given_to, row.given_to_user) }}</td>
+                <td class="px-3 py-2">{{ userName(row.given_by, row.given_by_user) }}</td>
+                <td class="px-3 py-2">{{ categoryLabel(row.category_id) }}</td>
+                <td class="px-3 py-2">
+                  {{ row.souce_type === 'BANK' ? `Bank · ${row.bank?.bank_name ?? '#' + row.bank_id}` : 'Cash on hand' }}
+                </td>
+                <td class="px-3 py-2 font-medium">{{ row.amount.toLocaleString() }}</td>
+                <td class="px-3 py-2">{{ typeLabel(row.type) }}</td>
+                <td class="px-3 py-2 print:hidden">
+                  <div class="flex items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                      aria-label="Edit transaction"
+                      @click="openEditRow(row)"
+                    >
+                      <Pencil class="h-4 w-4" />
+                    </button>
+                    <ConfirmPopover
+                      :message="`Delete transaction #${row.txn_id}? This restores the affected balances.`"
+                      @confirm="handleDelete(row)"
+                    >
+                      <template #default="{ toggle }">
+                        <button
+                          type="button"
+                          class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          aria-label="Delete transaction"
+                          :disabled="deletingId === row.txn_id"
+                          @click="toggle"
+                        >
+                          <Trash2 class="h-4 w-4" />
+                        </button>
+                      </template>
+                    </ConfirmPopover>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <BaseButton
+          v-if="outVisible < outRows.length"
+          variant="secondary"
+          class="mt-3 w-full print:hidden"
+          @click="outVisible += PAGE_SIZE"
+        >
+          Load more
+        </BaseButton>
+      </div>
+
+      <div>
+        <div class="mb-2 flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-slate-900">In</h3>
+          <span class="text-sm font-semibold text-emerald-700">{{ inTotal.toLocaleString() }}</span>
+        </div>
+        <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50">
+              <tr>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">ID</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Given To</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Given By</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Category</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Source</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Cash</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Type</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Remarks</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Reminder</th>
+                <th class="px-3 py-2 print:hidden"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-if="inRows.length === 0">
+                <td colspan="10" class="px-3 py-8 text-center text-sm text-slate-500">No in transactions.</td>
+              </tr>
+              <tr v-for="row in visibleInRows" :key="row.txn_id" class="bg-blue-50/40">
+                <td class="px-3 py-2">{{ row.txn_id }}</td>
+                <td class="px-3 py-2">{{ userName(row.given_to, row.given_to_user) }}</td>
+                <td class="px-3 py-2">{{ userName(row.given_by, row.given_by_user) }}</td>
+                <td class="px-3 py-2">{{ categoryLabel(row.category_id) }}</td>
+                <td class="px-3 py-2">
+                  {{ row.souce_type === 'BANK' ? `Bank · ${row.bank?.bank_name ?? '#' + row.bank_id}` : 'Cash on hand' }}
+                </td>
+                <td class="px-3 py-2 font-medium">{{ row.amount.toLocaleString() }}</td>
+                <td class="px-3 py-2">{{ typeLabel(row.type) }}</td>
+                <td class="px-3 py-2">{{ row.remarks || '—' }}</td>
+                <td class="px-3 py-2">{{ row.remainder || '—' }}</td>
+                <td class="px-3 py-2 print:hidden">
+                  <div class="flex items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                      aria-label="Edit transaction"
+                      @click="openEditRow(row)"
+                    >
+                      <Pencil class="h-4 w-4" />
+                    </button>
+                    <ConfirmPopover
+                      :message="`Delete transaction #${row.txn_id}? This restores the affected balances.`"
+                      @confirm="handleDelete(row)"
+                    >
+                      <template #default="{ toggle }">
+                        <button
+                          type="button"
+                          class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          aria-label="Delete transaction"
+                          :disabled="deletingId === row.txn_id"
+                          @click="toggle"
+                        >
+                          <Trash2 class="h-4 w-4" />
+                        </button>
+                      </template>
+                    </ConfirmPopover>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <BaseButton
+          v-if="inVisible < inRows.length"
+          variant="secondary"
+          class="mt-3 w-full print:hidden"
+          @click="inVisible += PAGE_SIZE"
+        >
+          Load more
+        </BaseButton>
+      </div>
+      </div>
+    </div>
+
+    <p
+      v-else
+      class="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500"
+    >
+      Select a Head above to view their cash ledger.
+    </p>
+
+    <TransactionEntryModal
+      v-if="isModalOpen && modalHead && modalCounterparty"
+      :head-user="modalHead"
+      :counterparty-user="modalCounterparty"
+      :type="modalType"
+      :banks="banks"
+      :latest-account-balance="transactions[0]?.closing_account_balance ?? 0"
+      :added-by="auth.user?.user_id ?? null"
+      :editing-transaction="editingTxn"
+      @close="closeModal"
+      @saved="handleModalSaved"
+      @use-advanced-form="handleUseAdvancedForm"
+    />
+
+    <PurchaseGoldModal
+      v-if="isPurchaseGoldModalOpen && headUser && counterpartyUser"
+      :head-user="headUser"
+      :counterparty-user="counterpartyUser"
+      :items="items"
+      :banks="banks"
+      @close="isPurchaseGoldModalOpen = false"
+    />
+
+    <GoldToCashModal
+      v-if="isGoldToCashModalOpen && headUser && counterpartyUser"
+      :head-user="headUser"
+      :counterparty-user="counterpartyUser"
+      :banks="banks"
+      @close="isGoldToCashModalOpen = false"
+    />
+
+    <CashToGoldModal
+      v-if="isCashToGoldModalOpen && headUser && counterpartyUser"
+      :head-user="headUser"
+      :counterparty-user="counterpartyUser"
+      :items="items"
+      :banks="banks"
+      @close="isCashToGoldModalOpen = false"
+    />
+
+    <SaleGoldQuickModal
+      v-if="isSaleGoldModalOpen && headUser && counterpartyUser"
+      :head-user="headUser"
+      :counterparty-user="counterpartyUser"
+      :items="items"
+      :banks="banks"
+      :latest-account-balance="transactions[0]?.closing_account_balance ?? 0"
+      @close="isSaleGoldModalOpen = false"
+      @saved="handleSaleGoldSaved"
+    />
+
+    <AutoEntryModal
+      v-if="isAutoEntryModalOpen && headUser && counterpartyUser"
+      :head-user="headUser"
+      :counterparty-user="counterpartyUser"
+      :latest-account-balance="transactions[0]?.closing_account_balance ?? 0"
+      :added-by="auth.user?.user_id ?? null"
+      @close="isAutoEntryModalOpen = false"
+      @saved="handleAutoEntrySaved"
+    />
+
+    <!-- Advanced form: full field set, reachable via "Advanced entry" above
+         or the streamlined modal's escape hatch. -->
+    <BaseCard v-if="isFormOpen" class="mt-6 print:hidden">
       <div class="mb-4 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-slate-900">
-          {{ editingId !== null ? 'Edit transaction' : 'New transaction' }}
+          {{ editingId !== null ? 'Edit transaction' : 'New transaction (advanced form)' }}
         </h2>
         <button
           type="button"
@@ -1234,113 +1696,5 @@ async function handleDelete(txn: CashTxnDetail) {
         </div>
       </form>
     </BaseCard>
-
-    <div class="mb-4 flex items-center gap-2">
-      <BaseInput
-        v-model="searchQuery"
-        type="search"
-        :icon="Search"
-        placeholder="Search transactions…"
-        aria-label="Search transactions"
-        class="w-full max-w-xs"
-      />
-    </div>
-
-    <div
-      v-if="loadError"
-      class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-    >
-      {{ loadError }}
-    </div>
-
-    <div
-      v-if="isLoading"
-      class="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500"
-    >
-      Loading cash transactions…
-    </div>
-
-    <DataTable
-      v-else
-      :columns="columns"
-      :rows="filteredTransactions"
-      empty-message="No cash transactions yet. Add your first one to get started."
-    >
-      <template #type="{ value }">{{ typeLabel(value as CashTxnType) }}</template>
-
-      <template #given_by="{ row }">
-        {{ userName((row as CashTxnDetail).given_by, (row as CashTxnDetail).givenByUser) }}
-      </template>
-
-      <template #given_to="{ row }">
-        {{ userName((row as CashTxnDetail).given_to, (row as CashTxnDetail).givenToUser) }}
-      </template>
-
-      <template #amount="{ value }">{{ Number(value).toLocaleString() }}</template>
-
-      <template #souce_type="{ row }">
-        {{
-          (row as CashTxnDetail).souce_type === 'BANK'
-            ? `Bank · ${(row as CashTxnDetail).bank?.bank_name ?? '#' + (row as CashTxnDetail).bank_id}`
-            : 'Cash on hand'
-        }}
-      </template>
-
-      <template #closing_account_balance="{ value }">
-        {{ Number(value).toLocaleString() }}
-      </template>
-
-      <template #is_active="{ row }">
-        <div class="flex flex-wrap gap-1">
-          <span
-            class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-            :class="
-              (row as CashTxnDetail).is_active
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-slate-100 text-slate-600'
-            "
-          >
-            {{ (row as CashTxnDetail).is_active ? 'Active' : 'Inactive' }}
-          </span>
-          <span
-            v-if="(row as CashTxnDetail).is_hidden"
-            class="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700"
-          >
-            Hidden
-          </span>
-        </div>
-      </template>
-
-      <template #added_at="{ value }">{{ formatDateTime(value as string) }}</template>
-
-      <template #txn_id="{ row }">
-        <div class="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Edit transaction"
-            @click="openEditForm(row as CashTxnDetail)"
-          >
-            <Pencil class="h-4 w-4" />
-          </button>
-          <ConfirmPopover
-            :message="`Delete transaction #${(row as CashTxnDetail).txn_id}? This restores the affected balances.`"
-            @confirm="handleDelete(row as CashTxnDetail)"
-          >
-            <template #default="{ toggle }">
-              <button
-                type="button"
-                class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                aria-label="Delete transaction"
-                :disabled="deletingId === (row as CashTxnDetail).txn_id"
-                @click="toggle"
-              >
-                <Trash2 class="h-4 w-4" />
-              </button>
-            </template>
-          </ConfirmPopover>
-        </div>
-      </template>
-    </DataTable>
   </div>
 </template>

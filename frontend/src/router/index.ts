@@ -41,6 +41,36 @@ const router = createRouter({
           name: 'cash-transactions',
           component: () => import('@/views/CashTransactionsView.vue'),
         },
+        {
+          path: 'cash-in-out',
+          name: 'cash-in-out',
+          component: () => import('@/views/CashInOutView.vue'),
+        },
+        {
+          path: 'sale-gold',
+          name: 'sale-gold',
+          component: () => import('@/views/SaleGoldView.vue'),
+        },
+        {
+          path: 'stock-out',
+          name: 'stock-out',
+          component: () => import('@/views/StockOutView.vue'),
+        },
+        {
+          path: 'stock-in',
+          name: 'stock-in',
+          component: () => import('@/views/StockInView.vue'),
+        },
+        {
+          path: 'gms-in',
+          name: 'gms-in',
+          component: () => import('@/views/GmsInView.vue'),
+        },
+        {
+          path: 'numeric-wastage-in',
+          name: 'numeric-wastage-in',
+          component: () => import('@/views/NumericWastageInView.vue'),
+        },
         { path: 'pages', name: 'pages', component: () => import('@/views/PagesView.vue') },
       ],
     },
