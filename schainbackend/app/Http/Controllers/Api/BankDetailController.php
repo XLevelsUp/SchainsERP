@@ -45,8 +45,8 @@ class BankDetailController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'bank_name' => 'required|string|max:150',
-            'current_balance' => 'nullable|numeric',
+            'account_name' => 'required|string|max:150',
+            'ledger_balance' => 'nullable|numeric',
             'is_active' => 'nullable|boolean',
         ]);
 
@@ -60,10 +60,9 @@ class BankDetailController extends Controller
 
         try {
             $bank = BankDetail::create([
-                'bank_name' => $request->bank_name,
-                'current_balance' => $request->input('current_balance', 0),
+                'account_name' => $request->account_name,
+                'ledger_balance' => $request->input('ledger_balance', 0),
                 'is_active' => $request->input('is_active', true),
-                'added_at' => now(),
             ]);
 
             return response()->json([
@@ -133,8 +132,8 @@ class BankDetailController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'bank_name' => 'sometimes|required|string|max:150',
-                'current_balance' => 'sometimes|numeric',
+                'account_name' => 'sometimes|required|string|max:150',
+                'ledger_balance' => 'sometimes|numeric',
                 'is_active' => 'sometimes|boolean',
             ]);
 

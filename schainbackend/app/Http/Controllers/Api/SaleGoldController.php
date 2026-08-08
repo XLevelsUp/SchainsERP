@@ -630,23 +630,20 @@ class SaleGoldController extends Controller
                                         'bank_id' =>
                                             $bankId,
 
-                                        'bank_name' =>
+                                        'account_name' =>
                                             $bankName,
 
-                                        'current_balance' =>
+                                        'ledger_balance' =>
                                             $bankOpeningBalance,
 
                                         'is_active' =>
                                             true,
-
-                                        'added_at' =>
-                                            now(),
                                     ]);
 
                             } else {
 
                                 $bank->update([
-                                    'bank_name' =>
+                                    'account_name' =>
                                         $bankName
                                 ]);
                             }
@@ -799,7 +796,7 @@ class SaleGoldController extends Controller
 
                             $bank->update([
 
-                                'current_balance' =>
+                                'ledger_balance' =>
                                     $closingBankBalance
                             ]);
 

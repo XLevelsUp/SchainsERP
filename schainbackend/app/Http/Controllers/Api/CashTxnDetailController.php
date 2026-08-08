@@ -240,23 +240,20 @@ class CashTxnDetailController extends Controller
                             'bank_id' =>
                                 $data['bank_id'],
 
-                            'bank_name' =>
+                            'account_name' =>
                                 $data['bank_name'],
 
-                            'current_balance' =>
+                            'ledger_balance' =>
                                 $openingBankAccountBalance,
 
                             'is_active' =>
                                 true,
-
-                            'added_at' =>
-                                now(),
                         ]);
 
                     } else {
 
                         $bank->update([
-                            'bank_name' =>
+                            'account_name' =>
                                 $data['bank_name'],
                         ]);
                     }
@@ -492,7 +489,7 @@ class CashTxnDetailController extends Controller
                 ) {
 
                     $bank->update([
-                        'current_balance' =>
+                        'ledger_balance' =>
                             $closingBankAccountBalance
                     ]);
                 }
@@ -908,7 +905,7 @@ class CashTxnDetailController extends Controller
 
                         $bankName =
                             $data['bank_name']
-                            ?? $transaction->bank?->bank_name
+                            ?? $transaction->bank?->account_name
                             ?? 'Unknown Bank';
 
                         $newBank = BankDetail::where(
@@ -924,23 +921,20 @@ class CashTxnDetailController extends Controller
                                 'bank_id' =>
                                     $bankId,
 
-                                'bank_name' =>
+                                'account_name' =>
                                     $bankName,
 
-                                'current_balance' =>
+                                'ledger_balance' =>
                                     $openingBankAccountBalance,
 
                                 'is_active' =>
                                     true,
-
-                                'added_at' =>
-                                    now(),
                             ]);
 
                         } else {
 
                             $newBank->update([
-                                'bank_name' =>
+                                'account_name' =>
                                     $bankName,
                             ]);
                         }
@@ -975,7 +969,7 @@ class CashTxnDetailController extends Controller
                     if ($oldBank) {
 
                         $oldBank->update([
-                            'current_balance' =>
+                            'ledger_balance' =>
                                 $oldOpeningBankBalance
                         ]);
                     }
@@ -1072,7 +1066,7 @@ class CashTxnDetailController extends Controller
                     if ($newBank) {
 
                         $newBank->update([
-                            'current_balance' =>
+                            'ledger_balance' =>
                                 $closingBankAccountBalance
                         ]);
                     }
@@ -1401,7 +1395,7 @@ class CashTxnDetailController extends Controller
                     if ($bank) {
 
                         $bank->update([
-                            'current_balance' =>
+                            'ledger_balance' =>
                                 $transaction
                                     ->opening_bank_account_balance
                         ]);
