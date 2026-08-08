@@ -34,6 +34,7 @@ class CashTxnDetail extends Model
         'bank_account_id',
         'remarks',
         'added_by',
+        'cash_to_gold_id',
     ];
 
     protected $casts = [
@@ -53,6 +54,7 @@ class CashTxnDetail extends Model
         'recipient_closing_rtgs' => 'decimal:2',
         'bank_account_id' => 'integer',
         'added_by' => 'integer',
+        'cash_to_gold_id' => 'integer',
     ];
 
     public function givenByUser(): BelongsTo

@@ -12,6 +12,7 @@ use App\Models\CashTxnDetail;
 use App\Models\BillingEntry;
 use App\Models\OverAllBill;
 use App\Models\WastageDetails;
+use App\Models\BankDetail;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -46,6 +47,7 @@ class StockTestDataSeeder extends Seeder
             DB::statement("SELECT setval('user_details_user_id_seq', COALESCE((SELECT MAX(user_id)+1 FROM user_details), 1), false);");
             DB::statement("SELECT setval('items_item_id_seq', COALESCE((SELECT MAX(item_id)+1 FROM items), 1), false);");
             DB::statement("SELECT setval('users_items_mappings_id_seq', COALESCE((SELECT MAX(id)+1 FROM users_items_mappings), 1), false);");
+            DB::statement("SELECT setval('bank_details_bank_id_seq', COALESCE((SELECT MAX(bank_id)+1 FROM bank_details), 1), false);");
         }
 
         // 2. Create Items
@@ -69,6 +71,17 @@ class StockTestDataSeeder extends Seeder
             'is_need_fitem_shown' => false,
             'is_barcode' => true,
             'is_no_barcode' => false,
+        ]);
+
+        Item::create([
+            'item_id' => 3,
+            'item_name' => 'Gold',
+            'is_active' => true,
+            'default_touch' => 100.00,
+            'item_touch' => 100.00,
+            'is_need_fitem_shown' => false,
+            'is_barcode' => false,
+            'is_no_barcode' => true,
         ]);
 
         // 3. Create Users
@@ -140,6 +153,14 @@ class StockTestDataSeeder extends Seeder
         ]);
 
         UsersItemsMapping::create([
+            'user_id' => 1,
+            'item_id' => 3,
+            'item_grams_total' => 0.0000,
+            'item_purity_total' => 0.0000,
+            'is_primary' => 0,
+        ]);
+
+        UsersItemsMapping::create([
             'user_id' => 2,
             'item_id' => 1,
             'item_grams_total' => 0.0000,
@@ -155,10 +176,33 @@ class StockTestDataSeeder extends Seeder
             'is_primary' => 1,
         ]);
 
-        WastageDetails::create([
-            'waste_id' => 1,
-            'waste_name' => 'RUVIE DYE',
-            'waste_value' => '0.1800',
+        UsersItemsMapping::create([
+            'user_id' => 2,
+            'item_id' => 3,
+            'item_grams_total' => 0.0000,
+            'item_purity_total' => 0.0000,
+            'is_primary' => 0,
+        ]);
+
+        // WastageDetails::create([
+        //     'waste_id' => 1,
+        //     'waste_name' => 'RUVIE DYE',
+        //     'waste_value' => '0.1800',
+        // ]);
+
+        BankDetail::create([
+            'bank_id' => 1,
+            'account_name' => 'HDFC Bank Ltd',
+            'ledger_balance' => 10000.00,
+            'is_active' => true,
+        ]);
+        
+        BankDetail::create([
+            'bank_id' => 2,
+            'account_name' => 'ICICI Bank Ltd',
+            'ledger_balance' => 15000.00,
+            'is_active' => true,
         ]);
     }
 }
+
