@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashTxnDetailController;
 use App\Http\Controllers\Api\BankDetailController;
 use App\Http\Controllers\Api\SaleGoldController;
+use App\Http\Controllers\Api\PurchaseGoldController;
 use App\Http\Controllers\Api\StockDetailsController;
 use App\Http\Controllers\Api\CashToGoldController;
 use App\Http\Controllers\Api\GoldToCashController;
@@ -34,7 +35,9 @@ Route::apiResource( 'cash-txn-details',CashTxnDetailController::class);
 Route::post( 'cash-txn-details/{id}/images',[CashTxnDetailController::class, 'addImages']);
 Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage']);
 Route::apiResource('bank-details',BankDetailController::class);
-Route::apiResource('sale-gold',SaleGoldController::class);
+
+Route::post('purchase-gold',            [PurchaseGoldController::class, 'store']);
+Route::post('sale-gold',                [SaleGoldController::class, 'store']);
 
 Route::post('cash-txn-details/in', [CashTxnDetailController::class, 'postIncome']);
 Route::post('cash-txn-details/out', [CashTxnDetailController::class, 'postExpense']);
