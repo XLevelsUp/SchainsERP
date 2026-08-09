@@ -25,22 +25,54 @@ class UserDetailController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         try {
 
-            $users = UserDetail::with([
+            $query = UserDetail::with([
                 'itemMappings',
                 'headEmployeeMappings',
-                'cashHeadEmployeeMappings'
+                'cashHeadEmployeeMappings',
+                'role'
             ])
-            ->orderBy('user_id', 'desc')
-            ->get();
+            ->orderBy('user_id', 'desc');
+
+            // Filter by type if provided (e.g., ?type=EMPLOYEE or ?type=HEAD)
+            if ($request->has('type')) {
+                // Fetch the role first to avoid Postgres character varying vs bigint join errors
+                $role = \App\Models\Role::where('role', $request->type)->first();
+                
+                if ($role) {
+                    $query->where('role_id', (string) $role->id);
+                } else {
+                    // If the role doesn't exist, return no users
+                    $query->whereRaw('1 = 0');
+                }
+            }
+
+            $users = $query->get();
+
+            $formattedUsers = $users->map(function ($user) {
+                return [
+                    'id' => $user->user_id,
+                    'full_name' => $user->name,
+                    'type' => $user->role ? $user->role->role : null,
+                    'category_name' => $user->category_name,
+                    'retailer_user_name' => 'Normal user',
+                    'gm' => sprintf('%0.3f', $user->grams_grand_total ?? 0),
+                    'purity' => sprintf('%0.3f', $user->purity_grand_total ?? 0),
+                    'phone_number' => $user->phone_no,
+                    'profile_image' => '',
+                    'name' => $user->name,
+                    'profile_img' => $user->profile_image ? asset('storage/' . $user->profile_image) : null,
+                    'is_active' => $user->is_active,
+                ];
+            });
 
             return response()->json([
                 'success' => true,
                 'message' => 'Users retrieved successfully',
-                'data' => $users
+                'data' => $formattedUsers
             ], 200);
 
         } catch (\Exception $e) {
@@ -562,10 +594,11 @@ class UserDetailController extends Controller
             $user = UserDetail::with([
                 'itemMappings',
                 'headEmployeeMappings',
-                'cashHeadEmployeeMappings'
+                'cashHeadEmployeeMappings',
+                'role'
             ])
-            ->where('user_id', $id)
-            ->first();
+                ->where('user_id', $id)
+                ->first();
 
             if (!$user) {
 
@@ -580,6 +613,15 @@ class UserDetailController extends Controller
             }
 
 
+            $userArray = $user->toArray();
+            $userArray['gm'] = sprintf('%0.3f', $user->grams_grand_total ?? 0);
+            $userArray['purity'] = sprintf('%0.3f', $user->purity_grand_total ?? 0);
+            $userArray['id'] = $user->user_id;
+            $userArray['full_name'] = $user->name;
+            $userArray['phone_number'] = $user->phone_no;
+            $userArray['profile_img'] = $user->profile_image ? asset('storage/' . $user->profile_image) : null;
+            $userArray['type'] = $user->role ? $user->role->role : null;
+
             return response()->json([
 
                 'success' => true,
@@ -590,7 +632,7 @@ class UserDetailController extends Controller
                 'data' => [
 
                     'user' =>
-                        $user,
+                        $userArray,
 
                     'profile_image_url' =>
                         $user->profile_image
@@ -802,10 +844,7 @@ class UserDetailController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            DB::transaction(function () use (
-                $request,
-                $user
-            ) {
+            DB::transaction(function () use ($request, $user) {
 
                 /*
                 |--------------------------------------------------------------------------
