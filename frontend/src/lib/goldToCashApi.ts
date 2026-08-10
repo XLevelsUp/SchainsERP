@@ -1,9 +1,10 @@
 import { api, type ApiResponse } from './api'
+import { buildGoldConversionForm } from './multipartForm'
 import type { GoldToCashFormValues, GoldToCashRecord } from '@/types'
 
 const RESOURCE = '/gold-to-cash'
 
-function toPayload(form: GoldToCashFormValues) {
+function toFields(form: GoldToCashFormValues) {
   return {
     head_id: form.head_id,
     customer_id: form.customer_id,
@@ -23,8 +24,12 @@ function toPayload(form: GoldToCashFormValues) {
 }
 
 // GoldToCashController also defines index()/show()/destroy(), but only
-// store() is routed in routes/api.php — create-only for now.
+// store() is routed in routes/api.php — create-only for now. Always sent
+// as multipart since the endpoint accepts an optional images[] receipt
+// upload (PR #15).
 export const goldToCashApi = {
-  create: (form: GoldToCashFormValues) =>
-    api.post<ApiResponse<GoldToCashRecord>>(RESOURCE, toPayload(form)).then((r) => r.data),
+  create: (form: GoldToCashFormValues, images: File[] = []) =>
+    api
+      .postForm<ApiResponse<GoldToCashRecord>>(RESOURCE, buildGoldConversionForm(toFields(form), images))
+      .then((r) => r.data),
 }

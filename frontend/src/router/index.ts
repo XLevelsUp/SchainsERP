@@ -47,6 +47,11 @@ const router = createRouter({
           component: () => import('@/views/SaleGoldView.vue'),
         },
         {
+          path: 'purchase-gold',
+          name: 'purchase-gold',
+          component: () => import('@/views/PurchaseGoldView.vue'),
+        },
+        {
           path: 'cash-to-gold',
           name: 'cash-to-gold',
           component: () => import('@/views/CashToGoldView.vue'),

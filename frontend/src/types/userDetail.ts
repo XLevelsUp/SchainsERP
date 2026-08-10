@@ -1,5 +1,27 @@
 export type CategoryName = 'GRAMS' | 'PURITY' | 'BOTH'
 
+// GET /user-details (index) — PR #15 changed this to a flattened, formatted
+// row shape that's unrelated to the full UserDetail below: `id` not
+// `user_id`, `gm`/`purity` as fixed-3-decimal strings (not
+// grams_grand_total/purity_grand_total numbers), no `user_name`, and no
+// cash_balance/rtgs_balance at all. GET /user-details/{id} (show) was NOT
+// changed the same way — it still returns the full UserDetail shape below
+// plus a few of these same fields merged on top. So list and show diverge;
+// anything needing the full record for a specific user (editing, balances)
+// has to call get(id), not rely on a row from list().
+export interface UserDetailListItem {
+  id: number
+  name: string
+  full_name: string
+  type: string | null
+  category_name: CategoryName
+  gm: string
+  purity: string
+  phone_number: string
+  profile_img: string | null
+  is_active: boolean
+}
+
 // A user record as returned by the backend (password_hash/otp/report_password are hidden by the model).
 export interface UserDetail {
   user_id: number

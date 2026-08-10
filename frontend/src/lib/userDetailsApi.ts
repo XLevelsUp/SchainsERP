@@ -1,5 +1,5 @@
 import { api, type ApiResponse } from './api'
-import type { UserDetail, UserDetailFormValues } from '@/types'
+import type { UserDetail, UserDetailFormValues, UserDetailListItem } from '@/types'
 
 const RESOURCE = '/user-details'
 
@@ -50,19 +50,35 @@ function toPayload(form: UserDetailFormValues, includePassword = true) {
   return payload
 }
 
-export const userDetailsApi = {
-  list: () => api.get<ApiResponse<UserDetail[]>>(RESOURCE).then((r) => r.data),
+// store()/show()/update() all wrap the user object one level deeper than
+// the ApiResponse envelope: { success, data: { user, profile_image_url } }.
+interface UserDetailEnvelope {
+  user: UserDetail
+  profile_image_url: string | null
+}
 
-  get: (id: number) => api.get<ApiResponse<UserDetail>>(`${RESOURCE}/${id}`).then((r) => r.data),
+export const userDetailsApi = {
+  // Flattened summary shape (PR #15) — fine for pickers/tables, not for
+  // editing. Pass ?type= to filter by role (HEAD/EMPLOYEE/CUSTOMER/...).
+  list: (type?: string) =>
+    api
+      .get<ApiResponse<UserDetailListItem[]>>(type ? `${RESOURCE}?type=${type}` : RESOURCE)
+      .then((r) => r.data),
+
+  get: (id: number) =>
+    api.get<ApiResponse<UserDetailEnvelope>>(`${RESOURCE}/${id}`).then((r) => r.data),
 
   create: (form: UserDetailFormValues) =>
-    api.post<ApiResponse<UserDetail>>(RESOURCE, toPayload(form)).then((r) => r.data),
+    api.post<ApiResponse<UserDetailEnvelope>>(RESOURCE, toPayload(form)).then((r) => r.data),
 
   // Frontend-ready for when the backend adds PUT /user-details/{id}.
   // Password only sent if the user typed a new one.
   update: (id: number, form: UserDetailFormValues) =>
     api
-      .put<ApiResponse<UserDetail>>(`${RESOURCE}/${id}`, toPayload(form, form.password.length > 0))
+      .put<ApiResponse<UserDetailEnvelope>>(
+        `${RESOURCE}/${id}`,
+        toPayload(form, form.password.length > 0),
+      )
       .then((r) => r.data),
 
   remove: (id: number) => api.delete<ApiResponse<null>>(`${RESOURCE}/${id}`),

@@ -12,6 +12,7 @@ import {
   Coins,
   Banknote,
   CircleDollarSign,
+  Wallet,
   PackageMinus,
   PackagePlus,
   FileText,
@@ -49,6 +50,7 @@ export const navItems: NavItem[] = [
     children: [
       { type: 'link', label: 'Cash Transactions', to: '/cash-transactions', icon: ArrowLeftRight },
       { type: 'link', label: 'Sale Gold', to: '/sale-gold', icon: Coins },
+      { type: 'link', label: 'Purchase Gold', to: '/purchase-gold', icon: Wallet },
       { type: 'link', label: 'Cash To Gold', to: '/cash-to-gold', icon: Banknote },
       { type: 'link', label: 'Gold To Cash', to: '/gold-to-cash', icon: CircleDollarSign },
       { type: 'link', label: 'Stock Out', to: '/stock-out', icon: PackageMinus },

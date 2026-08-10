@@ -14,7 +14,13 @@ import { ApiError } from '@/lib/api'
 import { sourceTypeOptions } from '@/lib/cashTxnOptions'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
-import type { BankDetail, CashTxnPostFormValues, CashTxnPostResult, CashTxnSourceType, UserDetail } from '@/types'
+import type {
+  BankDetail,
+  CashTxnPostFormValues,
+  CashTxnPostResult,
+  CashTxnSourceType,
+  UserDetailListItem,
+} from '@/types'
 
 /*
 |--------------------------------------------------------------------------
@@ -34,22 +40,22 @@ import type { BankDetail, CashTxnPostFormValues, CashTxnPostResult, CashTxnSourc
 const auth = useAuthStore()
 const toastStore = useToastStore()
 
-const users = ref<UserDetail[]>([])
+const users = ref<UserDetailListItem[]>([])
 const banks = ref<BankDetail[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 
-function userLabel(user: UserDetail) {
-  return `${user.name} (${user.user_name})`
+// GET /user-details no longer returns user_name in the list shape (PR #15)
+// — id + name is the only reliable disambiguator now.
+function userLabel(user: UserDetailListItem) {
+  return `${user.name} (#${user.id})`
 }
 
 function bankLabel(bank: BankDetail) {
-  return bank.account_name ?? bank.bank_name ?? `#${bank.bank_id}`
+  return bank.account_name || `#${bank.bank_id}`
 }
 
-const userOptions = computed(() =>
-  users.value.map((u) => ({ value: u.user_id, label: userLabel(u) })),
-)
+const userOptions = computed(() => users.value.map((u) => ({ value: u.id, label: userLabel(u) })))
 const bankOptions = computed(() => banks.value.map((b) => ({ value: b.bank_id, label: bankLabel(b) })))
 
 async function loadData() {

@@ -14,29 +14,33 @@ import { ApiError } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 import { formatDateTime } from '@/lib/date'
-import type { DataTableColumn, GmsInFormValues, GmsInItemInput, GmsInResultRow, Item, UserDetail } from '@/types'
+import type {
+  DataTableColumn,
+  GmsInFormValues,
+  GmsInItemInput,
+  GmsInResultRow,
+  Item,
+  UserDetailListItem,
+} from '@/types'
 
 const auth = useAuthStore()
 const toastStore = useToastStore()
 
 const items = ref<Item[]>([])
-const users = ref<UserDetail[]>([])
+const users = ref<UserDetailListItem[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 
-function userLabel(user: UserDetail) {
-  return `${user.name} (${user.user_name})`
+// GET /user-details no longer returns user_name in the list shape (PR #15)
+// — id + name is the only reliable disambiguator now.
+function userLabel(user: UserDetailListItem) {
+  return `${user.name} (#${user.id})`
 }
-const userOptions = computed(() =>
-  users.value.map((u) => ({ value: u.user_id, label: userLabel(u) })),
-)
+const userOptions = computed(() => users.value.map((u) => ({ value: u.id, label: userLabel(u) })))
 const itemOptions = computed(() => items.value.map((i) => ({ value: i.item_id, label: i.item_name })))
 
 function itemName(id: number) {
   return items.value.find((i) => i.item_id === id)?.item_name ?? `#${id}`
-}
-function userName(id: number) {
-  return users.value.find((u) => u.user_id === id)?.name ?? `#${id}`
 }
 
 async function loadData() {

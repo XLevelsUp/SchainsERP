@@ -1,24 +1,18 @@
-// WARNING: bank_name/current_balance are stale. The bank_details migration
-// in PR #13 renamed these columns to account_name/ledger_balance, but
-// BankDetailController's store()/update() still validate/write
-// bank_name/current_balance — those two endpoints now 500 with an
-// "unknown column" SQL error. index()/show() still work (they just
-// return whichever columns exist), so GET responses actually carry
-// account_name/ledger_balance, not bank_name/current_balance — added
-// here as optional so code reading a live response can use the real
-// field without widening the broken create/update payload shape.
+// PR #15 fixed BankDetailController::store()/update() to write account_name/
+// ledger_balance (the real bank_details columns) instead of the stale
+// bank_name/current_balance — index()/show() already returned the real
+// columns before that. added_at was never a real column (the table only has
+// Eloquent's default created_at/updated_at timestamps).
 export interface BankDetail {
   bank_id: number
-  bank_name: string
-  current_balance: number
+  account_name: string
+  ledger_balance: number
   is_active: boolean
-  added_at?: string
-  account_name?: string
-  ledger_balance?: number
+  created_at?: string
 }
 
 export interface BankDetailFormValues {
-  bank_name: string
-  current_balance: number | null
+  account_name: string
+  ledger_balance: number | null
   is_active: boolean
 }

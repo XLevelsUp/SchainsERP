@@ -16,14 +16,18 @@ import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
 import type {
   DataTableColumn,
-  UserDetail,
   UserDetailFormValues,
+  UserDetailListItem,
   CategoryName,
   Item,
   Role,
 } from '@/types'
 
-const users = ref<UserDetail[]>([])
+// GET /user-details (list) returns a flattened summary row (PR #15) — no
+// user_name, no address/signature/etc, so it's only good for the table and
+// the head/cash-head pickers. Editing fetches the full record separately
+// via GET /user-details/{id}, which still returns everything.
+const users = ref<UserDetailListItem[]>([])
 const items = ref<Item[]>([])
 const roles = ref<Role[]>([])
 const isLoading = ref(false)
@@ -31,13 +35,12 @@ const loadError = ref('')
 const searchQuery = ref('')
 const toastStore = useToastStore()
 
-const columns: DataTableColumn<UserDetail>[] = [
+const columns: DataTableColumn<UserDetailListItem>[] = [
   { key: 'name', label: 'Name' },
-  { key: 'user_name', label: 'Username' },
-  { key: 'phone_no', label: 'Phone' },
+  { key: 'phone_number', label: 'Phone' },
   { key: 'category_name', label: 'Category' },
   { key: 'is_active', label: 'Status' },
-  { key: 'user_id', label: '' },
+  { key: 'id', label: '' },
 ]
 
 async function loadData() {
@@ -71,10 +74,7 @@ onMounted(loadRoles)
 const filteredUsers = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   if (!query) return users.value
-  return users.value.filter(
-    (u) =>
-      u.name.toLowerCase().includes(query) || u.user_name.toLowerCase().includes(query),
-  )
+  return users.value.filter((u) => u.name.toLowerCase().includes(query))
 })
 
 const categories: CategoryName[] = ['GRAMS', 'PURITY', 'BOTH']
@@ -109,6 +109,7 @@ const editingId = ref<number | null>(null)
 const form = reactive<UserDetailFormValues>(makeEmptyForm())
 const formError = ref('')
 const isSaving = ref(false)
+const isLoadingEditUser = ref(false)
 
 function resetForm(values: UserDetailFormValues) {
   Object.assign(form, values)
@@ -122,31 +123,47 @@ function openCreateForm() {
   isFormOpen.value = true
 }
 
-function openEditForm(user: UserDetail) {
-  editingId.value = user.user_id
-  resetForm({
-    ...makeEmptyForm(),
-    name: user.name,
-    user_name: user.user_name,
-    address: user.address,
-    signature: user.signature,
-    code: user.code,
-    phone_no: user.phone_no,
-    remarks: user.remarks ?? '',
-    proff: user.proff,
-    role_id: user.role_id,
-    system_id: user.system_id,
-    mailing_name: user.mailing_name,
-    customer_commants: user.customer_commants ?? '',
-    category_name: user.category_name,
-    is_active: user.is_active,
-    is_delete: user.is_delete,
-    is_billable: user.is_billable,
-    // Note: backend show() does not return mappings, so they start empty on edit.
-  })
+// The table/picker row (UserDetailListItem) no longer carries address/
+// signature/code/role_id/etc — those only exist on the full record, so
+// editing now needs its own GET /user-details/{id} instead of reusing the
+// list row like it used to.
+async function openEditForm(row: UserDetailListItem) {
+  editingId.value = row.id
   formError.value = ''
   clearFieldErrors()
   isFormOpen.value = true
+  isLoadingEditUser.value = true
+  try {
+    const { user } = await userDetailsApi.get(row.id)
+    resetForm({
+      ...makeEmptyForm(),
+      name: user.name,
+      user_name: user.user_name,
+      address: user.address,
+      signature: user.signature,
+      code: user.code,
+      phone_no: user.phone_no,
+      remarks: user.remarks ?? '',
+      proff: user.proff,
+      role_id: user.role_id,
+      system_id: user.system_id,
+      mailing_name: user.mailing_name,
+      customer_commants: user.customer_commants ?? '',
+      category_name: user.category_name,
+      is_active: user.is_active,
+      is_delete: user.is_delete,
+      is_billable: user.is_billable,
+      // Note: backend show() does not return mappings, so they start empty on edit.
+    })
+  } catch (err) {
+    isFormOpen.value = false
+    toastStore.show(
+      err instanceof ApiError ? err.message : 'Failed to load user details.',
+      'error',
+    )
+  } finally {
+    isLoadingEditUser.value = false
+  }
 }
 
 function closeForm() {
@@ -293,10 +310,10 @@ async function handleSubmit() {
 
 const deletingId = ref<number | null>(null)
 
-async function handleDelete(user: UserDetail) {
-  deletingId.value = user.user_id
+async function handleDelete(user: UserDetailListItem) {
+  deletingId.value = user.id
   try {
-    await userDetailsApi.remove(user.user_id)
+    await userDetailsApi.remove(user.id)
     await loadData()
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to delete user.'
@@ -337,7 +354,11 @@ async function handleDelete(user: UserDetail) {
         {{ formError }}
       </p>
 
-      <form class="flex flex-col gap-6" @submit.prevent="handleSubmit">
+      <p v-if="isLoadingEditUser" class="py-6 text-center text-sm text-slate-500">
+        Loading user…
+      </p>
+
+      <form v-else class="flex flex-col gap-6" @submit.prevent="handleSubmit">
         <!-- Core details -->
         <section class="grid gap-3 sm:grid-cols-3">
           <BaseInput
@@ -558,8 +579,8 @@ async function handleDelete(user: UserDetail) {
               :error="fieldErrors[`head_mappings.${index}`]"
             >
               <option :value="null" disabled>Select a user…</option>
-              <option v-for="u in users" :key="u.user_id" :value="u.user_id">
-                {{ u.name }} ({{ u.user_name }})
+              <option v-for="u in users" :key="u.id" :value="u.id">
+                {{ u.name }} (#{{ u.id }})
               </option>
             </BaseSelect>
             <button
@@ -597,8 +618,8 @@ async function handleDelete(user: UserDetail) {
               :error="fieldErrors[`cash_head_mappings.${index}`]"
             >
               <option :value="null" disabled>Select a user…</option>
-              <option v-for="u in users" :key="u.user_id" :value="u.user_id">
-                {{ u.name }} ({{ u.user_name }})
+              <option v-for="u in users" :key="u.id" :value="u.id">
+                {{ u.name }} (#{{ u.id }})
               </option>
             </BaseSelect>
             <button
@@ -661,26 +682,26 @@ async function handleDelete(user: UserDetail) {
         </span>
       </template>
 
-      <template #user_id="{ row }">
+      <template #id="{ row }">
         <div class="flex items-center justify-end gap-1">
           <button
             type="button"
             class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
             aria-label="Edit user"
-            @click="openEditForm(row as UserDetail)"
+            @click="openEditForm(row as UserDetailListItem)"
           >
             <Pencil class="h-4 w-4" />
           </button>
           <ConfirmPopover
-            :message="`Delete ${(row as UserDetail).name}? This also removes their mappings.`"
-            @confirm="handleDelete(row as UserDetail)"
+            :message="`Delete ${(row as UserDetailListItem).name}? This also removes their mappings.`"
+            @confirm="handleDelete(row as UserDetailListItem)"
           >
             <template #default="{ toggle }">
               <button
                 type="button"
                 class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                 aria-label="Delete user"
-                :disabled="deletingId === (row as UserDetail).user_id"
+                :disabled="deletingId === (row as UserDetailListItem).id"
                 @click="toggle"
               >
                 <Trash2 class="h-4 w-4" />

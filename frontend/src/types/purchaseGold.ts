@@ -1,12 +1,13 @@
 import type { CashTxnSourceType } from './cashTxnDetail'
 import type { CashToGoldPartyBalance } from './cashToGold'
 
-// SaleGoldService branches real accounting behavior on this, not just a
-// label: which side's gold/cash balance moves, stock IN vs OUT, and
-// whether it lands on the IN or OUT billing ledger.
-export type SaleGoldType = 'SALE_GOLD' | 'SALE_GOLD_CASH' | 'IN_CASH_CONVERTER'
+// PurchaseGoldService branches real accounting behavior on this: HEAD is
+// the standard "head buys gold from customer" flow (stock IN); OUT_CASH_
+// CONVERTER moves gold out to a customer/retailer without a purchase
+// (stock OUT) — a distinct, unrelated use of the same endpoint.
+export type PurchaseGoldType = 'HEAD' | 'OUT_CASH_CONVERTER'
 
-export interface SaleGoldAmountSource {
+export interface PurchaseGoldAmountSource {
   id: number
   source: CashTxnSourceType
   bank_id: number | null
@@ -14,12 +15,11 @@ export interface SaleGoldAmountSource {
   cash_txn_id: number | null
 }
 
-// A row as returned by POST /sale-gold (SaleGoldResource). SaleGoldController
-// only routes store() as of PR #15 (the old apiResource index/show/update/
-// destroy routes are gone) — create-only.
-export interface SaleGoldRecord {
+// A row as returned by POST /purchase-gold (PurchaseGoldResource).
+// PurchaseGoldController only routes store() — create-only, no list/get.
+export interface PurchaseGoldRecord {
   cash_to_gold_id: number
-  type: SaleGoldType
+  type: PurchaseGoldType
   head_id: number
   customer_id: number
   total_cash: number
@@ -41,24 +41,23 @@ export interface SaleGoldRecord {
   added_at?: string
   head?: CashToGoldPartyBalance
   customer?: CashToGoldPartyBalance
-  amount_sources?: SaleGoldAmountSource[]
+  amount_sources?: PurchaseGoldAmountSource[]
   cash_txn_ids?: number[]
 }
 
 // One payment-source row in the create form.
-export interface SaleGoldAmountSourceInput {
+export interface PurchaseGoldAmountSourceInput {
   source: CashTxnSourceType
   bank_id: number | null
   amount: number | null
 }
 
-// The full payload POST /sale-gold accepts (StoreSaleGoldRequest).
+// The full payload POST /purchase-gold accepts (StorePurchaseGoldRequest).
 // taken_total_cash/taken_total_grams/taken_purity (partial-delivery
-// tracking) are left out — SaleGoldService defaults them to the full
-// total_cash/total_grams/purity when omitted, which is the right default
-// until there's an actual partial-fulfillment UI to drive them.
-export interface SaleGoldFormValues {
-  type: SaleGoldType
+// tracking) are left out for the same reason as Sale Gold — the service
+// defaults them to the full totals when omitted.
+export interface PurchaseGoldFormValues {
+  type: PurchaseGoldType
   head_id: number | null
   customer_id: number | null
   total_cash: number | null
@@ -70,6 +69,5 @@ export interface SaleGoldFormValues {
   amnt_transfer_to_head: boolean
   remarks: string
   retailer_id: number | null
-  stock_in_id: number | null
-  amount_sources: SaleGoldAmountSourceInput[]
+  amount_sources: PurchaseGoldAmountSourceInput[]
 }

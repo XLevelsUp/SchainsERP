@@ -9,7 +9,7 @@ import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
-import { cashToGoldApi } from '@/lib/cashToGoldApi'
+import { purchaseGoldApi } from '@/lib/purchaseGoldApi'
 import { itemsApi } from '@/lib/itemsApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
@@ -18,25 +18,35 @@ import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
 import type {
   BankDetail,
-  CashToGoldAmountSourceInput,
-  CashToGoldFormValues,
-  CashToGoldRecord,
   CashTxnSourceType,
   Item,
+  PurchaseGoldAmountSourceInput,
+  PurchaseGoldFormValues,
+  PurchaseGoldRecord,
+  PurchaseGoldType,
   UserDetailListItem,
 } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
-| Cash To Gold — customer gives cash, head gives gold (POST /cash-to-gold)
+| Purchase Gold — head buys gold from a customer, paying cash
 |--------------------------------------------------------------------------
-| CashToGoldController also defines index()/show()/destroy(), but only
-| store() is routed in routes/api.php, so this is create-only — no ledger
-| view to build here, same situation as Cash Transactions/Sale Gold.
+| New in PR #15 (POST /purchase-gold, PurchaseGoldService). Create-only —
+| PurchaseGoldController also defines index()/show()/destroy(), but only
+| store() is routed. `type` drives real accounting behavior, not just a
+| label: HEAD is the standard purchase (stock IN, head pays customer);
+| OUT_CASH_CONVERTER moves gold out to a customer/retailer without a
+| purchase (stock OUT) — an unrelated use of the same endpoint, kept as a
+| selector rather than assumed away.
 |--------------------------------------------------------------------------
 */
 
 const toastStore = useToastStore()
+
+const typeOptions: { value: PurchaseGoldType; label: string }[] = [
+  { value: 'HEAD', label: 'Purchase Gold (head buys from customer)' },
+  { value: 'OUT_CASH_CONVERTER', label: 'Out Cash Converter' },
+]
 
 const users = ref<UserDetailListItem[]>([])
 const items = ref<Item[]>([])
@@ -84,12 +94,13 @@ onMounted(loadData)
 |--------------------------------------------------------------------------
 */
 
-function makeEmptySource(): CashToGoldAmountSourceInput {
+function makeEmptySource(): PurchaseGoldAmountSourceInput {
   return { source: 'CASH_ON_HAND', bank_id: null, amount: null }
 }
 
-function makeEmptyForm(): Omit<CashToGoldFormValues, 'purity' | 'total_cash'> {
+function makeEmptyForm(): Omit<PurchaseGoldFormValues, 'purity' | 'total_cash'> {
   return {
+    type: 'HEAD',
     head_id: null,
     customer_id: null,
     per_gram_cash: null,
@@ -108,15 +119,13 @@ const images = ref<File[]>([])
 const fieldErrors = reactive<Record<string, string>>({})
 const formError = ref('')
 const isSaving = ref(false)
-const lastResult = ref<CashToGoldRecord | null>(null)
+const lastResult = ref<PurchaseGoldRecord | null>(null)
 
-// Neither CashToGoldService::store() nor any FormRequest rule cross-checks
-// purity/total_cash against grams/touch/per_gram_cash — the backend just
-// trusts whatever numbers are sent. So these two are computed here and
-// never directly editable, to guarantee the ledger always reflects
-// grams * touch/100 = purity, purity * per_gram_cash = total_cash (the
-// exact formula CashToGoldService bakes into its audit remarks/billing
-// entries), rather than risking a hand-typed mismatch going to the API.
+// PurchaseGoldService never cross-checks purity/total_cash against grams/
+// touch/per_gram_cash — it just trusts whatever's sent, same as the other
+// three gold-conversion endpoints. So both are computed here, never
+// directly editable: purity from grams * touch/100 (pure gold weight),
+// total_cash from purity * per_gram_cash.
 const purity = computed(() => {
   if (form.total_grams === null || form.touch === null) return null
   return Number(((form.total_grams * form.touch) / 100).toFixed(4))
@@ -152,7 +161,7 @@ const sourceTotalMatches = computed(
 
 /*
 |--------------------------------------------------------------------------
-| Validation — mirrors StoreCashToGoldRequest::rules() exactly
+| Validation — mirrors StorePurchaseGoldRequest::rules() exactly
 |--------------------------------------------------------------------------
 */
 
@@ -164,23 +173,23 @@ function validate(): boolean {
   if (form.customer_id === null) fieldErrors.customer_id = 'Customer is required.'
   if (form.item_id === null) fieldErrors.item_id = 'Item is required.'
 
-  if (form.total_grams === null || form.total_grams < 0.001) {
-    fieldErrors.total_grams = 'Total grams is required (min 0.001).'
+  if (form.total_grams === null || form.total_grams < 0) {
+    fieldErrors.total_grams = 'Total grams is required.'
   }
   if (form.touch === null || form.touch < 0 || form.touch > 100) {
     fieldErrors.touch = 'Touch is required (0–100).'
   }
-  if (form.per_gram_cash === null || form.per_gram_cash < 0.01) {
-    fieldErrors.per_gram_cash = 'Per-gram cash is required (min 0.01).'
+  if (form.per_gram_cash === null || form.per_gram_cash < 0) {
+    fieldErrors.per_gram_cash = 'Per-gram cash is required.'
   }
-  if (purity.value === null || purity.value < 0.001) {
-    fieldErrors.purity = 'Purity works out to 0 — check total grams and touch.'
+  if (purity.value === null) {
+    fieldErrors.purity = 'Purity could not be calculated — check total grams and touch.'
   }
-  if (totalCash.value === null || totalCash.value < 0.01) {
-    fieldErrors.total_cash = 'Total cash works out to 0 — check purity and per-gram cash.'
+  if (totalCash.value === null) {
+    fieldErrors.total_cash = 'Total cash could not be calculated — check purity and per-gram cash.'
   }
 
-  // Mirrors StoreCashToGoldRequest's images.* rule (image|mimes:jpg,jpeg,png,webp|max:5120).
+  // Mirrors StorePurchaseGoldRequest's images.* rule (image|mimes:jpg,jpeg,png,webp|max:5120).
   const oversized = images.value.find((f) => f.size > 5 * 1024 * 1024)
   if (oversized) {
     fieldErrors.images = `${oversized.name} is over 5 MB — remove it or use a smaller image.`
@@ -218,7 +227,7 @@ async function handleSubmit() {
 
   isSaving.value = true
   try {
-    const result = await cashToGoldApi.create(
+    const result = await purchaseGoldApi.create(
       {
         ...form,
         purity: purity.value,
@@ -228,7 +237,7 @@ async function handleSubmit() {
       images.value,
     )
     lastResult.value = result
-    toastStore.show('Cash To Gold transaction saved successfully.', 'success')
+    toastStore.show('Purchase Gold transaction saved successfully.', 'success')
     resetForm()
   } catch (err) {
     if (err instanceof ApiError) {
@@ -242,8 +251,8 @@ async function handleSubmit() {
         toastStore.show(err.message, 'error')
       }
     } else {
-      formError.value = 'Failed to save Cash To Gold transaction.'
-      toastStore.show('Failed to save Cash To Gold transaction.', 'error')
+      formError.value = 'Failed to save Purchase Gold transaction.'
+      toastStore.show('Failed to save Purchase Gold transaction.', 'error')
     }
   } finally {
     isSaving.value = false
@@ -254,8 +263,8 @@ async function handleSubmit() {
 <template>
   <div>
     <PageHeader
-      title="Cash To Gold"
-      description="Customer hands over cash, head hands over gold. Splits payment across one or more sources."
+      title="Purchase Gold"
+      description="Head buys gold from a customer for cash, split across one or more payment sources."
     >
       <template #actions>
         <BaseButton variant="secondary" :icon="RefreshCw" @click="loadData">Refresh</BaseButton>
@@ -280,7 +289,7 @@ async function handleSubmit() {
         v-if="lastResult"
         class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
       >
-        Saved Cash To Gold #{{ lastResult.cash_to_gold_id }}.
+        Saved Purchase Gold #{{ lastResult.cash_to_gold_id }}.
         <template v-if="lastResult.head">
           Head cash balance: {{ lastResult.head.cash_balance }} · Head grams total:
           {{ lastResult.head.grams_grand_total }}
@@ -289,6 +298,15 @@ async function handleSubmit() {
 
       <form class="flex flex-col gap-6" @submit.prevent="handleSubmit">
         <section class="grid gap-3 sm:grid-cols-3">
+          <BaseSelect
+            id="type"
+            :model-value="form.type"
+            label="Type"
+            required
+            size="sm"
+            :options="typeOptions"
+            @update:model-value="(v) => (form.type = v as PurchaseGoldType)"
+          />
           <BaseSelect
             id="head_id"
             :model-value="form.head_id"
@@ -311,6 +329,7 @@ async function handleSubmit() {
             :error="fieldErrors.customer_id"
             @update:model-value="(v) => (form.customer_id = v as number | null)"
           />
+
           <BaseSelect
             id="item_id"
             :model-value="form.item_id"
@@ -328,7 +347,6 @@ async function handleSubmit() {
               }
             "
           />
-
           <BaseInput
             id="total_grams"
             :model-value="form.total_grams === null ? '' : String(form.total_grams)"
@@ -351,6 +369,7 @@ async function handleSubmit() {
             :error="fieldErrors.touch"
             @update:model-value="(v) => (form.touch = v === '' ? null : Number(v))"
           />
+
           <BaseInput
             id="purity"
             :model-value="purity === null ? '' : String(purity)"
@@ -360,7 +379,6 @@ async function handleSubmit() {
             size="sm"
             :error="fieldErrors.purity"
           />
-
           <BaseInput
             id="per_gram_cash"
             :model-value="form.per_gram_cash === null ? '' : String(form.per_gram_cash)"
@@ -381,12 +399,12 @@ async function handleSubmit() {
             size="sm"
             :error="fieldErrors.total_cash"
           />
+
           <BaseCheckbox
             v-model="form.amnt_transfer_to_head"
             label="Transfer amount to head"
             class="self-end pb-2"
           />
-
           <BaseInput
             id="retailer_id"
             :model-value="form.retailer_id === null ? '' : String(form.retailer_id)"
@@ -487,7 +505,7 @@ async function handleSubmit() {
 
         <div class="flex items-center gap-3 border-t border-slate-200 pt-4">
           <BaseButton type="submit" :disabled="isSaving || isLoading">
-            {{ isSaving ? 'Saving…' : 'Save Cash To Gold' }}
+            {{ isSaving ? 'Saving…' : 'Save Purchase Gold' }}
           </BaseButton>
           <BaseButton variant="secondary" type="button" @click="resetForm">Clear</BaseButton>
         </div>

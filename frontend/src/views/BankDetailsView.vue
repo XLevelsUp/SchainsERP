@@ -19,10 +19,10 @@ const loadError = ref('')
 const searchQuery = ref('')
 
 const columns: DataTableColumn<BankDetail>[] = [
-  { key: 'bank_name', label: 'Bank' },
-  { key: 'current_balance', label: 'Current balance' },
+  { key: 'account_name', label: 'Bank' },
+  { key: 'ledger_balance', label: 'Ledger balance' },
   { key: 'is_active', label: 'Status' },
-  { key: 'added_at', label: 'Added' },
+  { key: 'created_at', label: 'Added' },
   { key: 'bank_id', label: '' },
 ]
 
@@ -43,12 +43,12 @@ onMounted(loadBanks)
 const filteredBanks = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   if (!query) return banks.value
-  return banks.value.filter((b) => b.bank_name.toLowerCase().includes(query))
+  return banks.value.filter((b) => b.account_name.toLowerCase().includes(query))
 })
 
 const emptyForm: BankDetailFormValues = {
-  bank_name: '',
-  current_balance: 0,
+  account_name: '',
+  ledger_balance: 0,
   is_active: true,
 }
 
@@ -68,8 +68,8 @@ function openCreateForm() {
 function openEditForm(bank: BankDetail) {
   editingId.value = bank.bank_id
   Object.assign(form, {
-    bank_name: bank.bank_name,
-    current_balance: bank.current_balance,
+    account_name: bank.account_name,
+    ledger_balance: bank.ledger_balance,
     is_active: bank.is_active,
   })
   formError.value = ''
@@ -81,7 +81,7 @@ function closeForm() {
 }
 
 async function handleSubmit() {
-  if (!form.bank_name.trim()) {
+  if (!form.account_name.trim()) {
     formError.value = 'Bank name is required.'
     return
   }
@@ -144,8 +144,8 @@ async function handleDelete(bank: BankDetail) {
 
       <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="handleSubmit">
         <BaseInput
-          id="bank_name"
-          v-model="form.bank_name"
+          id="account_name"
+          v-model="form.account_name"
           label="Bank name"
           placeholder="HDFC Bank"
           required
@@ -153,12 +153,12 @@ async function handleDelete(bank: BankDetail) {
           :error="formError"
         />
         <BaseInput
-          id="current_balance"
-          :model-value="form.current_balance === null ? '' : String(form.current_balance)"
-          label="Current balance"
+          id="ledger_balance"
+          :model-value="form.ledger_balance === null ? '' : String(form.ledger_balance)"
+          label="Ledger balance"
           type="number"
           step="0.01"
-          @update:model-value="(v) => (form.current_balance = v === '' ? null : Number(v))"
+          @update:model-value="(v) => (form.ledger_balance = v === '' ? null : Number(v))"
         />
 
         <BaseCheckbox v-model="form.is_active" label="Active" class="sm:col-span-2" />
@@ -203,7 +203,7 @@ async function handleDelete(bank: BankDetail) {
       :rows="filteredBanks"
       empty-message="No banks yet. Add your first one to get started."
     >
-      <template #current_balance="{ value }">{{ Number(value).toLocaleString() }}</template>
+      <template #ledger_balance="{ value }">{{ Number(value).toLocaleString() }}</template>
 
       <template #is_active="{ value }">
         <span
@@ -214,7 +214,7 @@ async function handleDelete(bank: BankDetail) {
         </span>
       </template>
 
-      <template #added_at="{ value }">{{ value ? formatDateTime(value as string) : '—' }}</template>
+      <template #created_at="{ value }">{{ value ? formatDateTime(value as string) : '—' }}</template>
 
       <template #bank_id="{ row }">
         <div class="flex items-center justify-end gap-1">
@@ -227,7 +227,7 @@ async function handleDelete(bank: BankDetail) {
             <Pencil class="h-4 w-4" />
           </button>
           <ConfirmPopover
-            :message="`Delete ${(row as BankDetail).bank_name}?`"
+            :message="`Delete ${(row as BankDetail).account_name}?`"
             @confirm="handleDelete(row as BankDetail)"
           >
             <template #default="{ toggle }">

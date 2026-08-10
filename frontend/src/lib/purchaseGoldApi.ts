@@ -1,10 +1,10 @@
 import { api, type ApiResponse } from './api'
 import { buildGoldConversionForm } from './multipartForm'
-import type { SaleGoldFormValues, SaleGoldRecord } from '@/types'
+import type { PurchaseGoldFormValues, PurchaseGoldRecord } from '@/types'
 
-const RESOURCE = '/sale-gold'
+const RESOURCE = '/purchase-gold'
 
-function toFields(form: SaleGoldFormValues) {
+function toFields(form: PurchaseGoldFormValues) {
   return {
     type: form.type,
     head_id: form.head_id,
@@ -18,9 +18,8 @@ function toFields(form: SaleGoldFormValues) {
     amnt_transfer_to_head: form.amnt_transfer_to_head,
     remarks: form.remarks || null,
     retailer_id: form.retailer_id,
-    stock_in_id: form.stock_in_id,
     // required_if:amnt_transfer_to_head,true on the backend — omitted
-    // entirely (not just empty) when the head isn't the one paid.
+    // entirely (not just empty) when the head isn't the one paying.
     ...(form.amnt_transfer_to_head
       ? {
           amount_sources: form.amount_sources.map((s) => ({
@@ -33,12 +32,15 @@ function toFields(form: SaleGoldFormValues) {
   }
 }
 
-// SaleGoldController only routes store() as of PR #15 (the old apiResource
-// index/show/update/destroy routes are gone) — create-only. Always sent as
-// multipart since the endpoint accepts an optional images[] receipt upload.
-export const saleGoldApi = {
-  create: (form: SaleGoldFormValues, images: File[] = []) =>
+// PurchaseGoldController only routes store() — create-only, no list/get.
+// Always sent as multipart since the endpoint accepts an optional images[]
+// receipt upload.
+export const purchaseGoldApi = {
+  create: (form: PurchaseGoldFormValues, images: File[] = []) =>
     api
-      .postForm<ApiResponse<SaleGoldRecord>>(RESOURCE, buildGoldConversionForm(toFields(form), images))
+      .postForm<ApiResponse<PurchaseGoldRecord>>(
+        RESOURCE,
+        buildGoldConversionForm(toFields(form), images),
+      )
       .then((r) => r.data),
 }

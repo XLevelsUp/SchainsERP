@@ -7,6 +7,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
+import BaseFileInput from '@/components/ui/BaseFileInput.vue'
 import { goldToCashApi } from '@/lib/goldToCashApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
@@ -19,7 +20,7 @@ import type {
   CashTxnSourceType,
   GoldToCashFormValues,
   GoldToCashRecord,
-  UserDetail,
+  UserDetailListItem,
 } from '@/types'
 
 /*
@@ -38,19 +39,21 @@ import type {
 
 const toastStore = useToastStore()
 
-const users = ref<UserDetail[]>([])
+const users = ref<UserDetailListItem[]>([])
 const banks = ref<BankDetail[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 
-function userLabel(user: UserDetail) {
-  return `${user.name} (${user.user_name})`
+// GET /user-details no longer returns user_name in the list shape (PR #15)
+// — id + name is the only reliable disambiguator now.
+function userLabel(user: UserDetailListItem) {
+  return `${user.name} (#${user.id})`
 }
 function bankLabel(bank: BankDetail) {
-  return bank.account_name ?? bank.bank_name ?? `#${bank.bank_id}`
+  return bank.account_name || `#${bank.bank_id}`
 }
 
-const userOptions = computed(() => users.value.map((u) => ({ value: u.user_id, label: userLabel(u) })))
+const userOptions = computed(() => users.value.map((u) => ({ value: u.id, label: userLabel(u) })))
 const bankOptions = computed(() => banks.value.map((b) => ({ value: b.bank_id, label: bankLabel(b) })))
 
 async function loadData() {
@@ -93,6 +96,7 @@ function makeEmptyForm(): Omit<GoldToCashFormValues, 'total_grams' | 'total_cash
 }
 
 const form = reactive(makeEmptyForm())
+const images = ref<File[]>([])
 const fieldErrors = reactive<Record<string, string>>({})
 const formError = ref('')
 const isSaving = ref(false)
@@ -122,6 +126,7 @@ function clearFieldErrors() {
 
 function resetForm() {
   Object.assign(form, makeEmptyForm())
+  images.value = []
   clearFieldErrors()
   formError.value = ''
   lastResult.value = null
@@ -168,6 +173,12 @@ function validate(): boolean {
     fieldErrors.total_cash = 'Total cash works out to 0 — check total gold and per-gram cash.'
   }
 
+  // Mirrors StoreGoldToCashRequest's images.* rule (image|mimes:jpg,jpeg,png,webp|max:5120).
+  const oversized = images.value.find((f) => f.size > 5 * 1024 * 1024)
+  if (oversized) {
+    fieldErrors.images = `${oversized.name} is over 5 MB — remove it or use a smaller image.`
+  }
+
   if (form.amount_sources.length === 0) {
     fieldErrors.amount_sources = 'Add at least one payment source.'
   }
@@ -198,12 +209,15 @@ async function handleSubmit() {
 
   isSaving.value = true
   try {
-    const result = await goldToCashApi.create({
-      ...form,
-      total_grams: totalGrams.value,
-      total_cash: totalCash.value,
-      amount_sources: form.amount_sources.map((s) => ({ ...s })),
-    })
+    const result = await goldToCashApi.create(
+      {
+        ...form,
+        total_grams: totalGrams.value,
+        total_cash: totalCash.value,
+        amount_sources: form.amount_sources.map((s) => ({ ...s })),
+      },
+      images.value,
+    )
     lastResult.value = result
     toastStore.show('Gold To Cash transaction saved successfully.', 'success')
     resetForm()
@@ -358,6 +372,17 @@ async function handleSubmit() {
             :rows="2"
             class="sm:col-span-3"
           />
+        </section>
+
+        <!-- Receipt images -->
+        <section class="border-t border-slate-200 pt-4">
+          <BaseFileInput
+            id="images"
+            v-model="images"
+            label="Receipt images (optional)"
+            hint="JPG, PNG, or WEBP, up to 5 MB each."
+          />
+          <p v-if="fieldErrors.images" class="mt-2 text-sm text-red-600">{{ fieldErrors.images }}</p>
         </section>
 
         <!-- Payment sources -->
