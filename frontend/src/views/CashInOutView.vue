@@ -7,7 +7,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
-import { cashTxnPostApi } from '@/lib/cashTxnDetailsApi'
+import { cashTxnDetailsApi } from '@/lib/cashTxnDetailsApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
 import { ApiError } from '@/lib/api'
@@ -18,14 +18,16 @@ import type { BankDetail, CashTxnPostFormValues, CashTxnPostResult, CashTxnSourc
 
 /*
 |--------------------------------------------------------------------------
-| Cash In / Out — quick posting screen
+| Cash Transactions — quick in/out posting screen
 |--------------------------------------------------------------------------
 | Targets POST /cash-txn-details/in and /cash-txn-details/out
-| (CashTxnDetailController::postIncome/postExpense), the only cash-txn
-| write endpoints that match the current backend schema as of PR #13.
-| See the warning block at the top of types/cashTxnDetail.ts for why the
-| full ledger CRUD on CashTransactionsView.vue is currently broken and
-| was left alone rather than folded into this screen.
+| (CashTxnDetailController::postIncome/postExpense) — the only cash-txn
+| endpoints the backend exposes as of PR #13. The old full CRUD ledger
+| (list/edit/delete individual transactions) was dropped when
+| cash_txn_details/cash_txn_images were reshaped to
+| sender_id/recipient_id/payment_method/cash_txn_id/image_path, with no
+| replacement list/get endpoint — so there is no ledger view to build
+| here, only posting new entries.
 |--------------------------------------------------------------------------
 */
 
@@ -139,8 +141,8 @@ async function handleSubmit() {
     const actingUserId = auth.user?.user_id ?? 1
     const result =
       direction.value === 'in'
-        ? await cashTxnPostApi.postIncome(form, actingUserId)
-        : await cashTxnPostApi.postExpense(form, actingUserId)
+        ? await cashTxnDetailsApi.postIncome(form, actingUserId)
+        : await cashTxnDetailsApi.postExpense(form, actingUserId)
 
     lastResult.value = result
     toastStore.show(
@@ -172,8 +174,8 @@ async function handleSubmit() {
 <template>
   <div>
     <PageHeader
-      title="Cash In / Out"
-      description="Record a cash or bank transfer between two users. Uses the current backend schema (sender/recipient balances)."
+      title="Cash Transactions"
+      description="Record a cash or bank transfer between two users."
     >
       <template #actions>
         <BaseButton variant="secondary" :icon="RefreshCw" @click="loadData">Refresh</BaseButton>

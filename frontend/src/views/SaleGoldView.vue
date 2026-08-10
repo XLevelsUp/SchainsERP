@@ -13,7 +13,6 @@ import { saleGoldApi } from '@/lib/saleGoldApi'
 import { itemsApi } from '@/lib/itemsApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
-import { cashTxnDetailsApi } from '@/lib/cashTxnDetailsApi'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
 import { formatDateTime } from '@/lib/date'
@@ -34,6 +33,11 @@ const sales = ref<SaleGoldRecord[]>([])
 const items = ref<Item[]>([])
 const users = ref<UserDetail[]>([])
 const banks = ref<BankDetail[]>([])
+// There's no endpoint left to derive this from — the cash_txn_details
+// index/list endpoint was dropped in PR #13 (see cashTxnDetailsApi.ts).
+// opening_account_balance is sent to the backend as-is, so this now
+// always starts at 0 and must be entered manually until SaleGoldController
+// exposes a real balance lookup.
 const latestAccountBalance = ref(0)
 const isLoading = ref(false)
 const loadError = ref('')
@@ -83,18 +87,16 @@ async function loadData() {
   isLoading.value = true
   loadError.value = ''
   try {
-    const [salesData, itemsData, usersData, banksData, txnData] = await Promise.all([
+    const [salesData, itemsData, usersData, banksData] = await Promise.all([
       saleGoldApi.list(),
       itemsApi.list(),
       userDetailsApi.list(),
       bankDetailsApi.list(),
-      cashTxnDetailsApi.list(),
     ])
     sales.value = salesData
     items.value = itemsData
     users.value = usersData
     banks.value = banksData
-    latestAccountBalance.value = txnData[0]?.closing_account_balance ?? 0
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load sale gold records.'
   } finally {

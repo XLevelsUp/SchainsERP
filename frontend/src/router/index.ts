@@ -39,17 +39,22 @@ const router = createRouter({
         {
           path: 'cash-transactions',
           name: 'cash-transactions',
-          component: () => import('@/views/CashTransactionsView.vue'),
-        },
-        {
-          path: 'cash-in-out',
-          name: 'cash-in-out',
           component: () => import('@/views/CashInOutView.vue'),
         },
         {
           path: 'sale-gold',
           name: 'sale-gold',
           component: () => import('@/views/SaleGoldView.vue'),
+        },
+        {
+          path: 'cash-to-gold',
+          name: 'cash-to-gold',
+          component: () => import('@/views/CashToGoldView.vue'),
+        },
+        {
+          path: 'gold-to-cash',
+          name: 'gold-to-cash',
+          component: () => import('@/views/GoldToCashView.vue'),
         },
         {
           path: 'stock-out',
