@@ -30,6 +30,10 @@ class StoreGoldToCashRequest extends FormRequest
             'is_rate_avg'                    => 'nullable|boolean',
             'retailer_id'                    => 'nullable|integer',
 
+            // Top-level receipt images (all-in-one upload)
+            'images'                         => 'nullable|array',
+            'images.*'                       => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+
             // Multiple amount sources — head always pays out (amnt_transfer_to_head=1 hardcoded)
             'amount_sources'                 => 'required|array|min:1',
             'amount_sources.*.source'        => 'required|in:CASH_ON_HAND,BANK',

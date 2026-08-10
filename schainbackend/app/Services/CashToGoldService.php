@@ -10,6 +10,7 @@ use App\Models\CashTxnDetail;
 use App\Models\StockDetails;
 use App\Models\UserDetail;
 use Illuminate\Support\Facades\DB;
+use App\Models\CashTxnImage;
 
 class CashToGoldService extends BaseStockService
 {
@@ -56,6 +57,8 @@ class CashToGoldService extends BaseStockService
             $customerObPurity = (float) $customer->purity_grand_total;
             $headObGrams      = (float) $head->grams_grand_total;
             $headObPurity     = (float) $head->purity_grand_total;
+
+            $createdTxnIds = [];
 
             // ── 1. Save primary cash_to_gold record ──────────────────────────
             $record = CashToGold::create([
@@ -152,6 +155,8 @@ class CashToGoldService extends BaseStockService
                     'added_by'              => $addedBy,
                 ]);
 
+                $createdTxnIds[] = $txn->txn_id;
+
                 // Back-fill cash_txn_id into the amount source
                 $amtSource->cash_txn_id = $txn->txn_id;
                 $amtSource->save();
@@ -226,6 +231,21 @@ class CashToGoldService extends BaseStockService
             // ── 7. Back-fill stock_id into cash_to_gold ──────────────────────
             $record->stock_id = $stock->stock_id;
             $record->save();
+
+            // Save uploaded receipt images if present
+            if (!empty($data['images'])) {
+                foreach ($data['images'] as $image) {
+                    if ($image->isValid()) {
+                        $path = $image->store('cash_txn_images', 'public');
+                        foreach ($createdTxnIds as $txnId) {
+                            CashTxnImage::create([
+                                'cash_txn_id' => $txnId,
+                                'image_path'  => $path,
+                            ]);
+                        }
+                    }
+                }
+            }
 
             return $record->load(['amountSources', 'cashTxnDetails', 'head', 'customer', 'item']);
         });
