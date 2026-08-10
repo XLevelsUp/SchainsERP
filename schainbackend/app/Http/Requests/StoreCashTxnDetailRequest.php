@@ -46,7 +46,7 @@ class StoreCashTxnDetailRequest extends FormRequest
             'bank_account_id' => 'nullable|integer|required_if:payment_method,BANK|exists:bank_details,bank_id',
             'remarks' => 'nullable|string|max:5000',
             'images' => 'nullable|array',
-            'images.*' => 'string|max:255', // paths of pre-uploaded receipt attachments
+            'images.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
         ];
     }
 

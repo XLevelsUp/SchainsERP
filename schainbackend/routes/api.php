@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\PurchaseGoldController;
 use App\Http\Controllers\Api\StockDetailsController;
 use App\Http\Controllers\Api\CashToGoldController;
 use App\Http\Controllers\Api\GoldToCashController;
+use App\Http\Controllers\Api\CashCategoryController;
 
 
 Route::prefix('v1')->group(function () {
@@ -31,21 +32,18 @@ Route::apiResource( 'users-items-mappings',UsersItemsMappingController::class);
 Route::apiResource('head-employee-mappings', HeadEmployeeMappingController::class);
 Route::apiResource('cash-head-employee-mappings',CashHeadEmployeeMappingController::class);
 Route::post('/login', [AuthController::class, 'login']);
-Route::apiResource( 'cash-txn-details',CashTxnDetailController::class);
+Route::apiResource('cash-txn-details',CashTxnDetailController::class);
+Route::apiResource('cash-categories', CashCategoryController::class);
 Route::post( 'cash-txn-details/{id}/images',[CashTxnDetailController::class, 'addImages']);
 Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage']);
 Route::apiResource('bank-details',BankDetailController::class);
 
 Route::post('purchase-gold',            [PurchaseGoldController::class, 'store']);
 Route::post('sale-gold',                [SaleGoldController::class, 'store']);
-
 Route::post('cash-txn-details/in', [CashTxnDetailController::class, 'postIncome']);
 Route::post('cash-txn-details/out', [CashTxnDetailController::class, 'postExpense']);
-
-// Cash To Gold — customer gives cash, head gives gold (Save)
+Route::post('cash-txn-details/auto-entry', [CashTxnDetailController::class, 'autoEntry']);
 Route::post('cash-to-gold',             [CashToGoldController::class, 'store']);
-
-// Gold To Cash — customer gives gold, head gives cash (Save)
 Route::post('gold-to-cash',            [GoldToCashController::class, 'store']);
 });
 
