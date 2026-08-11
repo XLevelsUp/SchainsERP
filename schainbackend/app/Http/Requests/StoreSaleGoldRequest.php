@@ -35,7 +35,7 @@ class StoreSaleGoldRequest extends FormRequest
 
             // Top-level receipt images (all-in-one upload)
             'images'                         => 'nullable|array',
-            'images.*'                       => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'images.*'                       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
 
             // Optional fields representing frontend inputs
             'taken_total_cash'               => 'nullable|numeric',

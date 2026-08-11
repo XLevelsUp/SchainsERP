@@ -100,11 +100,14 @@ class CashTxnDetailService
 
             // Save attachment file paths if present
             if (!empty($data['images'])) {
-                foreach ($data['images'] as $path) {
-                    CashTxnImage::create([
-                        'cash_txn_id' => $txn->txn_id,
-                        'image_path' => $path,
-                    ]);
+                foreach ($data['images'] as $image) {
+                    if ($image->isValid()) {
+                        $path = $image->store('cash_txn_images', 'public');
+                        CashTxnImage::create([
+                            'cash_txn_id' => $txn->txn_id,
+                            'image_path' => $path,
+                        ]);
+                    }
                 }
             }
 
@@ -179,11 +182,14 @@ class CashTxnDetailService
             ]);
 
             if (!empty($data['images'])) {
-                foreach ($data['images'] as $path) {
-                    CashTxnImage::create([
-                        'cash_txn_id' => $txn->txn_id,
-                        'image_path' => $path,
-                    ]);
+                foreach ($data['images'] as $image) {
+                    if ($image->isValid()) {
+                        $path = $image->store('cash_txn_images', 'public');
+                        CashTxnImage::create([
+                            'cash_txn_id' => $txn->txn_id,
+                            'image_path' => $path,
+                        ]);
+                    }
                 }
             }
 
