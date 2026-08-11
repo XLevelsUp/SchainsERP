@@ -36,7 +36,7 @@ class CashTxnDetailController extends Controller
             $perPage = $request->query('per_page', 15);
 
             $query = CashTxnDetail::with(['givenByUser', 'givenToUser', 'category', 'bank'])
-                ->whereIn('type', ['EXPENSE', 'PURCHASE_GOLD', 'SALE_GOLD', 'INTERNAL_TRANSFER']);
+                ->whereIn('type', ['EXPENSE', 'PURCHASE_GOLD', 'INTERNAL_TRANSFER', 'GOLD_TO_CASH']);
 
             if ($headId) {
                 // Usually OUT means given_by = head_id and given_to = cash_user_id
@@ -86,7 +86,7 @@ class CashTxnDetailController extends Controller
             $perPage = $request->query('per_page', 15);
 
             $query = CashTxnDetail::with(['givenByUser', 'givenToUser', 'category', 'bank'])
-                ->whereIn('type', ['INCOME', 'AUTO_ENTRY', 'CASH_TO_GOLD']);
+                ->whereIn('type', ['INCOME', 'AUTO_ENTRY', 'CASH_TO_GOLD', 'SALE_GOLD']);
 
             if ($headId) {
                 // IN means given_to = head_id and given_by = cash_user_id
