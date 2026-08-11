@@ -8,10 +8,12 @@ import CashToGoldModal from '@/components/cash-txn/CashToGoldModal.vue'
 import GoldToCashModal from '@/components/cash-txn/GoldToCashModal.vue'
 import SaleGoldModal from '@/components/cash-txn/SaleGoldModal.vue'
 import PurchaseGoldModal from '@/components/cash-txn/PurchaseGoldModal.vue'
+import CashAutoEntryModal from '@/components/cash-txn/CashAutoEntryModal.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { rolesApi } from '@/lib/rolesApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
 import { itemsApi } from '@/lib/itemsApi'
+import { userOptionLabel } from '@/lib/userLabel'
 import { ApiError } from '@/lib/api'
 import type { BankDetail, Item, Role, UserDetailListItem } from '@/types'
 
@@ -23,23 +25,34 @@ import type { BankDetail, Item, Role, UserDetailListItem } from '@/types'
 | optionally narrow the User picker by Role, pick a User, then quick-action
 | buttons appear and open an in-context modal.
 |
-| Two things from the legacy screen are NOT rebuildable against the current
-| backend and are left out rather than faked:
+| Two things from the legacy screen are still NOT rebuildable against the
+| current backend and are left out rather than faked:
 |  - The Out/In ledger tables — cash_txn_details has no working GET/list
 |    endpoint (index/show/update/destroy still reference sender_id-era
-|    columns that don't exist; only postIncome/postExpense work). From
-|    Date/To Date/Print are dropped for the same reason — nothing to filter
-|    or print.
-|  - INTERNAL and AUTO_ENTRY buttons — no current endpoint accepts either
-|    as a transaction type. Shown disabled with an explanation instead of
-|    silently vanishing, so it's clear this is a gap, not an oversight.
+|    columns that don't exist; only postIncome/postExpense/auto-entry
+|    work). From Date/To Date/Print are dropped for the same reason —
+|    nothing to filter or print.
+|  - INTERNAL — no current endpoint accepts it as a transaction type.
+|    Shown disabled with an explanation instead of silently vanishing.
+|
+| AUTO_ENTRY is now wired up (PR #16 added the endpoint) — see
+| CashAutoEntryModal.vue for the balance-direction caveat (only the head's
+| side moves).
+|
+| Head picker: NOT filtered by ?type=HEAD. Role numbering has proven
+| unreliable across seeders — StockTestDataSeeder assigns "Head Admin"
+| role_id=1, which RoleSeeder defines as CUSTOMER, not HEAD, so a
+| role-filtered picker would hide the very user meant to be the head.
+| Showing every user for both Head and User avoids depending on role_id
+| being right; the "Roles" dropdown still exists purely as an optional
+| narrower for the User picker, since that's the legacy UI shape.
 |--------------------------------------------------------------------------
 */
 
 const loadError = ref('')
 const isLoading = ref(false)
 
-const heads = ref<UserDetailListItem[]>([])
+const allUsers = ref<UserDetailListItem[]>([])
 const roles = ref<Role[]>([])
 const filteredUsers = ref<UserDetailListItem[]>([])
 const banks = ref<BankDetail[]>([])
@@ -53,16 +66,15 @@ async function loadBaseData() {
   isLoading.value = true
   loadError.value = ''
   try {
-    const [headsData, rolesData, allUsers, banksData, itemsData] = await Promise.all([
-      userDetailsApi.list('HEAD'),
-      rolesApi.list(),
+    const [usersData, rolesData, banksData, itemsData] = await Promise.all([
       userDetailsApi.list(),
+      rolesApi.list(),
       bankDetailsApi.list(),
       itemsApi.list(),
     ])
-    heads.value = headsData
+    allUsers.value = usersData
     roles.value = rolesData
-    filteredUsers.value = allUsers
+    filteredUsers.value = usersData
     banks.value = banksData
     items.value = itemsData
   } catch (err) {
@@ -84,14 +96,18 @@ async function onRoleFilterChange(role: string) {
   }
 }
 
-const headOptions = computed(() => heads.value.map((h) => ({ value: h.id, label: h.name })))
+const headOptions = computed(() =>
+  allUsers.value.map((h) => ({ value: h.id, label: userOptionLabel(h) })),
+)
 const roleOptions = computed(() => [
   { value: '', label: 'All roles' },
   ...roles.value.map((r) => ({ value: r.role, label: r.role })),
 ])
-const userOptions = computed(() => filteredUsers.value.map((u) => ({ value: u.id, label: u.name })))
+const userOptions = computed(() =>
+  filteredUsers.value.map((u) => ({ value: u.id, label: userOptionLabel(u) })),
+)
 
-const headUser = computed(() => heads.value.find((h) => h.id === headId.value) ?? null)
+const headUser = computed(() => allUsers.value.find((h) => h.id === headId.value) ?? null)
 const selectedUser = computed(() => filteredUsers.value.find((u) => u.id === userId.value) ?? null)
 
 /*
@@ -144,7 +160,15 @@ function onHeadChange(id: number | null) {
 |--------------------------------------------------------------------------
 */
 
-type ActiveModal = 'out' | 'in' | 'cash-to-gold' | 'gold-to-cash' | 'sale-gold' | 'purchase-gold' | null
+type ActiveModal =
+  | 'out'
+  | 'in'
+  | 'cash-to-gold'
+  | 'gold-to-cash'
+  | 'sale-gold'
+  | 'purchase-gold'
+  | 'auto-entry'
+  | null
 
 const activeModal = ref<ActiveModal>(null)
 const canQuickCreate = computed(
@@ -294,9 +318,8 @@ async function handleSaved() {
             </button>
             <button
               type="button"
-              disabled
-              title="No backend endpoint for AUTO_ENTRY transactions yet"
-              class="cursor-not-allowed rounded-lg bg-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
+              class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
+              @click="openModal('auto-entry')"
             >
               AUTO_ENTRY
             </button>
@@ -374,6 +397,16 @@ async function handleSaved() {
       :customer-name="selectedUser.name"
       :items="items"
       :banks="banks"
+      @close="closeModal"
+      @saved="handleSaved"
+    />
+
+    <CashAutoEntryModal
+      v-if="activeModal === 'auto-entry' && headUser && selectedUser"
+      :head-id="headUser.id"
+      :head-name="headUser.name"
+      :cash-user-id="selectedUser.id"
+      :cash-user-name="selectedUser.name"
       @close="closeModal"
       @saved="handleSaved"
     />

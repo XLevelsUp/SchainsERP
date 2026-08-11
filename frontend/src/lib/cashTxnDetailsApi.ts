@@ -1,4 +1,5 @@
 import { api, type ApiResponse } from './api'
+import { buildMultipartForm } from './multipartForm'
 import type { CashTxnPostFormValues, CashTxnPostResult } from '@/types'
 
 const RESOURCE = '/cash-txn-details'
@@ -37,17 +38,18 @@ export const cashTxnDetailsApi = {
   // resolve the acting user (added_by) from an X-User-ID header (falling
   // back to a hardcoded id if it's missing, see
   // CashTxnDetailController::postIncome/postExpense), so it must be sent
-  // explicitly, same pattern as stockApi.ts.
+  // explicitly, same pattern as stockApi.ts. Always sent as multipart since
+  // PR #16 made images real file uploads on this endpoint.
   postIncome: (form: CashTxnPostFormValues, actingUserId: number) =>
     api
-      .post<ApiResponse<CashTxnPostResult>>(`${RESOURCE}/in`, toPayload(form), {
+      .postForm<ApiResponse<CashTxnPostResult>>(`${RESOURCE}/in`, buildMultipartForm(toPayload(form)), {
         'X-User-ID': String(actingUserId),
       })
       .then((r) => r.data),
 
   postExpense: (form: CashTxnPostFormValues, actingUserId: number) =>
     api
-      .post<ApiResponse<CashTxnPostResult>>(`${RESOURCE}/out`, toPayload(form), {
+      .postForm<ApiResponse<CashTxnPostResult>>(`${RESOURCE}/out`, buildMultipartForm(toPayload(form)), {
         'X-User-ID': String(actingUserId),
       })
       .then((r) => r.data),

@@ -24,10 +24,10 @@ export interface CashTxnPostFormValues {
   payment_method: CashTxnSourceType
   bank_account_id: number | null
   remarks: string
-  // Paths of already-uploaded attachments (this endpoint takes JSON, not
-  // multipart — there is currently no separate upload endpoint for these
-  // paths; images.* is validated as plain strings server-side).
-  images: string[]
+  // PR #16 fixed this endpoint to accept real receipt uploads (was
+  // string|max:255 — pre-uploaded paths nothing could ever produce; now
+  // nullable|image, same as the four gold-conversion endpoints).
+  images: File[]
 }
 
 // Shape returned by postIncome/postExpense — a raw CashTxnDetail row on

@@ -12,6 +12,7 @@ import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { itemsApi } from '@/lib/itemsApi'
 import { rolesApi } from '@/lib/rolesApi'
+import { userOptionLabel } from '@/lib/userLabel'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
 import type {
@@ -76,6 +77,10 @@ const filteredUsers = computed(() => {
   if (!query) return users.value
   return users.value.filter((u) => u.name.toLowerCase().includes(query))
 })
+
+const userOptions = computed(() =>
+  users.value.map((u) => ({ value: u.id, label: userOptionLabel(u) })),
+)
 
 const categories: CategoryName[] = ['GRAMS', 'PURITY', 'BOTH']
 
@@ -458,13 +463,10 @@ async function handleDelete(user: UserDetailListItem) {
             label="Role"
             required
             size="sm"
+            placeholder="Select a role…"
+            :options="roles.map((role) => ({ value: String(role.id), label: role.role }))"
             :error="fieldErrors.role_id"
-          >
-            <option value="" disabled>Select a role…</option>
-            <option v-for="role in roles" :key="role.id" :value="String(role.id)">
-              {{ role.role }}
-            </option>
-          </BaseSelect>
+          />
 
           <BaseSelect
             id="category_name"
@@ -519,13 +521,10 @@ async function handleDelete(user: UserDetailListItem) {
               v-model="mapping.item_id"
               label="Item"
               size="sm"
+              placeholder="Select…"
+              :options="items.map((item) => ({ value: item.item_id, label: item.item_name }))"
               :error="fieldErrors[`item_mappings.${index}`]"
-            >
-              <option :value="null" disabled>Select…</option>
-              <option v-for="item in items" :key="item.item_id" :value="item.item_id">
-                {{ item.item_name }}
-              </option>
-            </BaseSelect>
+            />
             <BaseInput
               v-model="mapping.item_grams_total"
               label="Grams total"
@@ -576,13 +575,10 @@ async function handleDelete(user: UserDetailListItem) {
               label="Head (user)"
               size="sm"
               class="flex-1"
+              placeholder="Select a user…"
+              :options="userOptions"
               :error="fieldErrors[`head_mappings.${index}`]"
-            >
-              <option :value="null" disabled>Select a user…</option>
-              <option v-for="u in users" :key="u.id" :value="u.id">
-                {{ u.name }} (#{{ u.id }})
-              </option>
-            </BaseSelect>
+            />
             <button
               type="button"
               class="mb-1 rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
@@ -615,13 +611,10 @@ async function handleDelete(user: UserDetailListItem) {
               label="Cash head (user)"
               size="sm"
               class="flex-1"
+              placeholder="Select a user…"
+              :options="userOptions"
               :error="fieldErrors[`cash_head_mappings.${index}`]"
-            >
-              <option :value="null" disabled>Select a user…</option>
-              <option v-for="u in users" :key="u.id" :value="u.id">
-                {{ u.name }} (#{{ u.id }})
-              </option>
-            </BaseSelect>
+            />
             <button
               type="button"
               class="mb-1 rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"

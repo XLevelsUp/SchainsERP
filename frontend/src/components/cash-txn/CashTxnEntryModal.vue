@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
+import BaseFileInput from '@/components/ui/BaseFileInput.vue'
 import PartyBalanceCards from './PartyBalanceCards.vue'
 import { cashTxnDetailsApi } from '@/lib/cashTxnDetailsApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
+import { cashCategoriesApi } from '@/lib/cashCategoriesApi'
 import { sourceTypeOptions } from '@/lib/cashTxnOptions'
 import { ApiError } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
-import type { BankDetail, CashTxnPostFormValues, CashTxnSourceType } from '@/types'
+import type { BankDetail, CashCategory, CashTxnPostFormValues, CashTxnSourceType } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
@@ -20,14 +22,6 @@ import type { BankDetail, CashTxnPostFormValues, CashTxnSourceType } from '@/typ
 |--------------------------------------------------------------------------
 | OUT: head pays the user (sender=head, recipient=user).
 | IN: the user pays the head (sender=user, recipient=head).
-|
-| Two things from the legacy dialog this is based on are left out because
-| the backend genuinely doesn't support them here: Category is a bare
-| optional integer (no categories table/endpoint exists to pick from), and
-| Photos aren't attached — StoreCashTxnDetailRequest's `images` field only
-| accepts pre-uploaded string paths, and the endpoint that would produce
-| those (addImages) is part of the still-broken legacy CRUD (writes
-| txn_id/image_url, columns that don't exist on the current schema).
 |--------------------------------------------------------------------------
 */
 
@@ -80,6 +74,26 @@ async function loadBalances() {
 
 onMounted(loadBalances)
 
+// Categories aren't filtered by direction (category_type isn't validated
+// against the transaction direction server-side) — showing every active
+// category avoids hiding one the user legitimately wants.
+const categories = ref<CashCategory[]>([])
+async function loadCategories() {
+  try {
+    categories.value = (await cashCategoriesApi.list()).filter((c) => c.is_active)
+  } catch {
+    // Non-fatal — the form still works with category left unset.
+  }
+}
+onMounted(loadCategories)
+
+const categoryOptions = computed(() =>
+  categories.value.map((c) => ({
+    value: c.category_id,
+    label: c.category_type ? `${c.category_name} (${c.category_type})` : c.category_name,
+  })),
+)
+
 const form = reactive<CashTxnPostFormValues>({
   sender_id: senderId,
   recipient_id: recipientId,
@@ -89,6 +103,23 @@ const form = reactive<CashTxnPostFormValues>({
   bank_account_id: null,
   remarks: '',
   images: [],
+})
+
+// CB (closing balance) preview — mirrors CashTxnDetailService::storeIncome/
+// storeExpense exactly: CASH_ON_HAND moves the Hand Cash column only, BANK
+// moves the RTGS Cash column only; sender always loses what recipient
+// gains. Null (shown as "—") until there's an amount to compute from.
+const senderCb = computed(() => {
+  if (form.amount === null || Number.isNaN(form.amount)) return null
+  return form.payment_method === 'CASH_ON_HAND'
+    ? { cash: senderBalance.cash - form.amount, rtgs: senderBalance.rtgs }
+    : { cash: senderBalance.cash, rtgs: senderBalance.rtgs - form.amount }
+})
+const recipientCb = computed(() => {
+  if (form.amount === null || Number.isNaN(form.amount)) return null
+  return form.payment_method === 'CASH_ON_HAND'
+    ? { cash: recipientBalance.cash + form.amount, rtgs: recipientBalance.rtgs }
+    : { cash: recipientBalance.cash, rtgs: recipientBalance.rtgs + form.amount }
 })
 
 const fieldErrors = reactive<Record<string, string>>({})
@@ -108,6 +139,11 @@ function validate(): boolean {
   }
   if (form.payment_method === 'BANK' && form.bank_account_id === null) {
     fieldErrors.bank_account_id = 'Select a bank account.'
+  }
+
+  const oversized = form.images.find((f) => f.size > 5 * 1024 * 1024)
+  if (oversized) {
+    fieldErrors.images = `${oversized.name} is over 5 MB — remove it or use a smaller image.`
   }
 
   const firstError = Object.values(fieldErrors)[0]
@@ -159,8 +195,6 @@ async function handleSubmit() {
 <template>
   <BaseModal
     :title="direction === 'out' ? 'Add Expense (Out)' : 'Add Income (In)'"
-    :badge="`${senderName} to ${recipientName}`"
-    :badge-class="direction === 'out' ? 'bg-red-600' : 'bg-emerald-600'"
     @close="emit('close')"
   >
     <p
@@ -170,26 +204,36 @@ async function handleSubmit() {
       {{ formError }}
     </p>
 
+    <p class="text-center text-sm text-slate-600">
+      <span class="font-semibold text-slate-800">{{ senderName }}</span>
+      to
+      <span class="font-semibold text-slate-800">{{ recipientName }}</span> :
+    </p>
+
     <PartyBalanceCards
       :left-label="senderName"
-      :left-cash="senderBalance.cash"
-      :left-rtgs="senderBalance.rtgs"
+      :left-ob-cash="senderBalance.cash"
+      :left-ob-rtgs="senderBalance.rtgs"
+      :left-cb-cash="senderCb?.cash ?? null"
+      :left-cb-rtgs="senderCb?.rtgs ?? null"
       :right-label="recipientName"
-      :right-cash="recipientBalance.cash"
-      :right-rtgs="recipientBalance.rtgs"
+      :right-ob-cash="recipientBalance.cash"
+      :right-ob-rtgs="recipientBalance.rtgs"
+      :right-cb-cash="recipientCb?.cash ?? null"
+      :right-cb-rtgs="recipientCb?.rtgs ?? null"
       :is-loading="isLoadingBalances"
     />
 
     <form class="flex flex-col gap-4" @submit.prevent="handleSubmit">
       <div class="grid gap-3 sm:grid-cols-2">
-        <BaseInput
+        <BaseSelect
           id="category_id"
-          :model-value="form.category_id === null ? '' : String(form.category_id)"
-          label="Category ID (optional)"
-          type="number"
+          :model-value="form.category_id"
+          label="Category (optional)"
           size="sm"
-          placeholder="No category lookup yet"
-          @update:model-value="(v) => (form.category_id = v === '' ? null : Number(v))"
+          placeholder="No category"
+          :options="categoryOptions"
+          @update:model-value="(v) => (form.category_id = v as number | null)"
         />
         <BaseInput
           id="amount"
@@ -230,10 +274,15 @@ async function handleSubmit() {
 
       <BaseTextarea id="remarks" v-model="form.remarks" label="Remarks" size="sm" :rows="2" />
 
-      <p class="text-xs text-slate-500">
-        Receipt photos aren't supported on Cash In/Out yet — the backend has no working upload
-        path for this endpoint (only Cash To Gold, Gold To Cash, Sale Gold, and Purchase Gold do).
-      </p>
+      <div>
+        <BaseFileInput
+          id="images"
+          v-model="form.images"
+          label="Receipt images (optional)"
+          hint="JPG, PNG, or WEBP, up to 5 MB each."
+        />
+        <p v-if="fieldErrors.images" class="mt-2 text-sm text-red-600">{{ fieldErrors.images }}</p>
+      </div>
 
       <div class="flex items-center gap-3 border-t border-slate-200 pt-4">
         <BaseButton type="submit" :disabled="isSaving">

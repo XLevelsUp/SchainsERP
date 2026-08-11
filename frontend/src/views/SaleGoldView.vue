@@ -14,6 +14,7 @@ import { itemsApi } from '@/lib/itemsApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
 import { sourceTypeOptions } from '@/lib/cashTxnOptions'
+import { userOptionLabel } from '@/lib/userLabel'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
 import type {
@@ -54,16 +55,13 @@ const banks = ref<BankDetail[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 
-// GET /user-details no longer returns user_name in the list shape (PR #15)
-// — id + name is the only reliable disambiguator now.
-function userLabel(user: UserDetailListItem) {
-  return `${user.name} (#${user.id})`
-}
 function bankLabel(bank: BankDetail) {
   return bank.account_name || `#${bank.bank_id}`
 }
 
-const userOptions = computed(() => users.value.map((u) => ({ value: u.id, label: userLabel(u) })))
+const userOptions = computed(() =>
+  users.value.map((u) => ({ value: u.id, label: userOptionLabel(u) })),
+)
 const itemOptions = computed(() => items.value.map((i) => ({ value: i.item_id, label: i.item_name })))
 const bankOptions = computed(() => banks.value.map((b) => ({ value: b.bank_id, label: bankLabel(b) })))
 

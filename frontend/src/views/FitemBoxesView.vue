@@ -192,12 +192,14 @@ async function handleDelete(box: FitemBox) {
           :error="formError"
         />
 
-        <BaseSelect id="item_id" v-model="form.item_id" label="Item" required>
-          <option :value="null" disabled>Select an item…</option>
-          <option v-for="item in items" :key="item.item_id" :value="item.item_id">
-            {{ item.item_name }}
-          </option>
-        </BaseSelect>
+        <BaseSelect
+          id="item_id"
+          v-model="form.item_id"
+          label="Item"
+          required
+          placeholder="Select an item…"
+          :options="items.map((item) => ({ value: item.item_id, label: item.item_name }))"
+        />
 
         <BaseCheckbox v-model="form.is_active" label="Active" class="sm:col-span-2" />
 

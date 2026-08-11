@@ -213,12 +213,15 @@ async function handleDelete(client: Client) {
         <BaseInput id="signature" v-model="form.signature" label="Signature" required size="sm" />
         <BaseInput id="code" v-model="form.code" label="Code" required size="sm" />
         <BaseInput id="proff" v-model="form.proff" label="Profession" required size="sm" />
-        <BaseSelect id="role_id" v-model="form.role_id" label="Role" required size="sm">
-          <option value="" disabled>Select a role…</option>
-          <option v-for="role in roles" :key="role.id" :value="String(role.id)">
-            {{ role.role }}
-          </option>
-        </BaseSelect>
+        <BaseSelect
+          id="role_id"
+          v-model="form.role_id"
+          label="Role"
+          required
+          size="sm"
+          placeholder="Select a role…"
+          :options="roles.map((role) => ({ value: String(role.id), label: role.role }))"
+        />
         <BaseInput id="system_id" v-model="form.system_id" label="System ID" required size="sm" />
 
         <BaseSelect

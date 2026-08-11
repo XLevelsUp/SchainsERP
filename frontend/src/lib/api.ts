@@ -56,5 +56,6 @@ export const api = {
   put: <T>(path: string, data: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(data) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
-  postForm: <T>(path: string, data: FormData) => request<T>(path, { method: 'POST', body: data }),
+  postForm: <T>(path: string, data: FormData, headers?: Record<string, string>) =>
+    request<T>(path, { method: 'POST', body: data, headers }),
 }

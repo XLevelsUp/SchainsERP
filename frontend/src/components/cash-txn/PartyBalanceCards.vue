@@ -1,18 +1,26 @@
 <script setup lang="ts">
-// Shows each party's current cash/RTGS balance before the transaction is
-// submitted. The legacy dialog this is based on also showed a projected
-// closing balance (CB) row, but that number depended on backend balance
-// math this frontend doesn't replicate — showing a guessed CB risked being
-// wrong, so this only shows what's actually known: the current balance.
+// OB (opening balance, fetched live) / CB (closing balance, calculated
+// client-side from the form's amount + payment method) for both parties —
+// matches the legacy "Add Expense" dialog's balance tables. CB is null
+// until there's enough on the form to compute it (no amount entered yet);
+// shown as "—" rather than the legacy dialog's broken "NaN".
 defineProps<{
   leftLabel: string
-  leftCash: number
-  leftRtgs: number
+  leftObCash: number
+  leftObRtgs: number
+  leftCbCash: number | null
+  leftCbRtgs: number | null
   rightLabel: string
-  rightCash: number
-  rightRtgs: number
+  rightObCash: number
+  rightObRtgs: number
+  rightCbCash: number | null
+  rightCbRtgs: number | null
   isLoading?: boolean
 }>()
+
+function fmt(value: number | null) {
+  return value === null ? '—' : value.toLocaleString()
+}
 </script>
 
 <template>
@@ -22,17 +30,25 @@ defineProps<{
       <thead>
         <tr class="bg-slate-50 text-left text-xs font-semibold text-slate-600">
           <th class="px-3 py-2">{{ leftLabel }}</th>
-          <th class="px-3 py-2">Cash</th>
-          <th class="px-3 py-2">RTGS</th>
+          <th class="px-3 py-2">Hand Cash</th>
+          <th class="px-3 py-2">RTGS Cash</th>
           <th class="px-3 py-2">Total</th>
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td class="px-3 py-2 font-medium text-slate-700">Balance</td>
-          <td class="px-3 py-2">{{ leftCash.toLocaleString() }}</td>
-          <td class="px-3 py-2">{{ leftRtgs.toLocaleString() }}</td>
-          <td class="px-3 py-2">{{ (leftCash + leftRtgs).toLocaleString() }}</td>
+        <tr class="bg-emerald-50/60">
+          <td class="px-3 py-2 font-medium text-slate-700">OB</td>
+          <td class="px-3 py-2">{{ leftObCash.toLocaleString() }}</td>
+          <td class="px-3 py-2">{{ leftObRtgs.toLocaleString() }}</td>
+          <td class="px-3 py-2">{{ (leftObCash + leftObRtgs).toLocaleString() }}</td>
+        </tr>
+        <tr class="bg-rose-50/60">
+          <td class="px-3 py-2 font-medium text-slate-700">CB</td>
+          <td class="px-3 py-2">{{ fmt(leftCbCash) }}</td>
+          <td class="px-3 py-2">{{ fmt(leftCbRtgs) }}</td>
+          <td class="px-3 py-2">
+            {{ leftCbCash === null || leftCbRtgs === null ? '—' : (leftCbCash + leftCbRtgs).toLocaleString() }}
+          </td>
         </tr>
       </tbody>
     </table>
@@ -41,17 +57,25 @@ defineProps<{
       <thead>
         <tr class="bg-slate-50 text-left text-xs font-semibold text-slate-600">
           <th class="px-3 py-2">{{ rightLabel }}</th>
-          <th class="px-3 py-2">Cash</th>
-          <th class="px-3 py-2">RTGS</th>
+          <th class="px-3 py-2">Hand Cash</th>
+          <th class="px-3 py-2">RTGS Cash</th>
           <th class="px-3 py-2">Total</th>
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td class="px-3 py-2 font-medium text-slate-700">Balance</td>
-          <td class="px-3 py-2">{{ rightCash.toLocaleString() }}</td>
-          <td class="px-3 py-2">{{ rightRtgs.toLocaleString() }}</td>
-          <td class="px-3 py-2">{{ (rightCash + rightRtgs).toLocaleString() }}</td>
+        <tr class="bg-emerald-50/60">
+          <td class="px-3 py-2 font-medium text-slate-700">OB</td>
+          <td class="px-3 py-2">{{ rightObCash.toLocaleString() }}</td>
+          <td class="px-3 py-2">{{ rightObRtgs.toLocaleString() }}</td>
+          <td class="px-3 py-2">{{ (rightObCash + rightObRtgs).toLocaleString() }}</td>
+        </tr>
+        <tr class="bg-rose-50/60">
+          <td class="px-3 py-2 font-medium text-slate-700">CB</td>
+          <td class="px-3 py-2">{{ fmt(rightCbCash) }}</td>
+          <td class="px-3 py-2">{{ fmt(rightCbRtgs) }}</td>
+          <td class="px-3 py-2">
+            {{ rightCbCash === null || rightCbRtgs === null ? '—' : (rightCbCash + rightCbRtgs).toLocaleString() }}
+          </td>
         </tr>
       </tbody>
     </table>

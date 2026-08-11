@@ -10,6 +10,7 @@ import DataTable from '@/components/ui/DataTable.vue'
 import { stockApi } from '@/lib/stockApi'
 import { itemsApi } from '@/lib/itemsApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
+import { userOptionLabel } from '@/lib/userLabel'
 import { ApiError } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
@@ -31,12 +32,9 @@ const users = ref<UserDetailListItem[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 
-// GET /user-details no longer returns user_name in the list shape (PR #15)
-// — id + name is the only reliable disambiguator now.
-function userLabel(user: UserDetailListItem) {
-  return `${user.name} (#${user.id})`
-}
-const userOptions = computed(() => users.value.map((u) => ({ value: u.id, label: userLabel(u) })))
+const userOptions = computed(() =>
+  users.value.map((u) => ({ value: u.id, label: userOptionLabel(u) })),
+)
 const itemOptions = computed(() => items.value.map((i) => ({ value: i.item_id, label: i.item_name })))
 
 function itemName(id: number) {
