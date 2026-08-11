@@ -21,9 +21,52 @@ use App\Http\Requests\AutoEntryRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Models\StockDetails;
 
 class StockDetailsController extends Controller
 {
+    /**
+     * ============================================================
+     * GET STOCK HISTORY (For Cash Dashboard Bottom Table)
+     * ============================================================
+     */
+    public function getHistory(Request $request): JsonResponse
+    {
+        try {
+            $headId = $request->query('head_id');
+            $cashUserId = $request->query('cash_user_id');
+            $remarks = $request->query('remarks');
+            $perPage = $request->query('per_page', 50);
+
+            $query = StockDetails::with(['item', 'givenByUser', 'givenToUser', 'addedByUser'])
+                ->where('is_completed', 0)
+                ->where('is_freezed', 0);
+
+            if ($remarks && $cashUserId && $headId) {
+                // Specific filter for the Cash Dashboard (e.g. PURCHASE_GOLD)
+                $query->where('given_to', $headId)
+                      ->where('given_by', $cashUserId)
+                      ->where('remarks', $remarks);
+            }
+
+            $stockDetails = $query->orderBy('stock_id', 'desc')->paginate($perPage);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Stock history retrieved successfully',
+                'data' => $stockDetails
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('getHistory failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve stock history',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     protected StockOutService $stockOutService;
     protected StockInService $stockInService;
     protected AutoEntryService $autoEntryService;

@@ -72,6 +72,11 @@ class CashTxnDetail extends Model
         return $this->belongsTo(BankDetail::class, 'bank_account_id', 'bank_id');
     }
 
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(CashCategory::class, 'category_id', 'category_id');
+    }
+
     public function images(): HasMany
     {
         return $this->hasMany(CashTxnImage::class, 'cash_txn_id', 'txn_id');

@@ -21,6 +21,156 @@ use Illuminate\Support\Facades\Log;
 
 class CashTxnDetailController extends Controller
 {
+    /**
+     * ============================================================
+     * GET CASH OUT HISTORY
+     * ============================================================
+     */
+    public function getOutHistory(Request $request): JsonResponse
+    {
+        try {
+            $headId = $request->query('head_id');
+            $cashUserId = $request->query('cash_user_id');
+            $fromDate = $request->query('from_date');
+            $toDate = $request->query('to_date');
+            $perPage = $request->query('per_page', 15);
+
+            $query = CashTxnDetail::with(['givenByUser', 'givenToUser', 'category', 'bank'])
+                ->whereIn('type', ['EXPENSE', 'PURCHASE_GOLD', 'SALE_GOLD', 'INTERNAL_TRANSFER']);
+
+            if ($headId) {
+                // Usually OUT means given_by = head_id and given_to = cash_user_id
+                $query->where('sender_id', $headId);
+            }
+            if ($cashUserId) {
+                $query->where('recipient_id', $cashUserId);
+            }
+
+            if ($fromDate && $toDate) {
+                $query->whereBetween('created_at', [
+                    date('Y-m-d 00:00:00', strtotime($fromDate)), 
+                    date('Y-m-d 23:59:59', strtotime($toDate))
+                ]);
+            }
+
+            $transactions = $query->orderBy('txn_id', 'desc')->paginate($perPage);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cash OUT history retrieved successfully',
+                'data' => $transactions
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('getOutHistory failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve OUT history',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * ============================================================
+     * GET CASH IN HISTORY
+     * ============================================================
+     */
+    public function getInHistory(Request $request): JsonResponse
+    {
+        try {
+            $headId = $request->query('head_id');
+            $cashUserId = $request->query('cash_user_id');
+            $fromDate = $request->query('from_date');
+            $toDate = $request->query('to_date');
+            $perPage = $request->query('per_page', 15);
+
+            $query = CashTxnDetail::with(['givenByUser', 'givenToUser', 'category', 'bank'])
+                ->whereIn('type', ['INCOME', 'AUTO_ENTRY', 'CASH_TO_GOLD']);
+
+            if ($headId) {
+                // IN means given_to = head_id and given_by = cash_user_id
+                $query->where('recipient_id', $headId);
+            }
+            if ($cashUserId) {
+                $query->where('sender_id', $cashUserId);
+            }
+
+            if ($fromDate && $toDate) {
+                $query->whereBetween('created_at', [
+                    date('Y-m-d 00:00:00', strtotime($fromDate)), 
+                    date('Y-m-d 23:59:59', strtotime($toDate))
+                ]);
+            }
+
+            $transactions = $query->orderBy('txn_id', 'desc')->paginate($perPage);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cash IN history retrieved successfully',
+                'data' => $transactions
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('getInHistory failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve IN history',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * ============================================================
+     * GET CASH PRINT REPORT
+     * ============================================================
+     */
+    public function getPrintReport(Request $request): JsonResponse
+    {
+        try {
+            $headId = $request->query('head_id');
+            $cashUserId = $request->query('cash_user_id');
+            $fromDate = $request->query('from_date');
+            $toDate = $request->query('to_date');
+
+            $query = CashTxnDetail::with(['givenByUser', 'givenToUser', 'category']);
+
+            if ($headId && $cashUserId) {
+                $query->where(function($q) use ($headId, $cashUserId) {
+                    $q->where(function($sub1) use ($headId, $cashUserId) {
+                        $sub1->where('sender_id', $headId)->where('recipient_id', $cashUserId);
+                    })->orWhere(function($sub2) use ($headId, $cashUserId) {
+                        $sub2->where('sender_id', $cashUserId)->where('recipient_id', $headId);
+                    });
+                });
+            }
+
+            if ($fromDate && $toDate) {
+                $query->whereBetween('created_at', [
+                    date('Y-m-d 00:00:00', strtotime($fromDate)), 
+                    date('Y-m-d 23:59:59', strtotime($toDate))
+                ]);
+            }
+
+            $transactions = $query->orderBy('txn_id', 'asc')->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Print report retrieved successfully',
+                'data' => $transactions
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('getPrintReport failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve print report',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     protected CashTxnDetailService $service;
 
     public function __construct(CashTxnDetailService $service)
