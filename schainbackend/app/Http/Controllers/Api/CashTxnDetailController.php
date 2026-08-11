@@ -2214,4 +2214,30 @@ class CashTxnDetailController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * ============================================================
+     * CREATE AUTO ENTRY (Multiple Rows)
+     * ============================================================
+     */
+    public function autoEntry(
+        \App\Http\Requests\StoreCashAutoEntryRequest $request,
+        \App\Services\CashAutoEntryService $service
+    ): \Illuminate\Http\JsonResponse {
+        try {
+            $transactions = $service->store($request->validated());
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cash auto entry transactions created successfully.',
+                'data' => $transactions
+            ], 201);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create cash auto entry transactions',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

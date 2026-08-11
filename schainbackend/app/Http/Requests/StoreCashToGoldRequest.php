@@ -32,7 +32,7 @@ class StoreCashToGoldRequest extends FormRequest
 
             // Top-level receipt images (all-in-one upload)
             'images'                         => 'nullable|array',
-            'images.*'                       => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'images.*'                       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
 
             // Multiple amount sources (CASH_ON_HAND and/or BANK rows)
             'amount_sources'                 => 'required_if:amnt_transfer_to_head,true|array|min:1',
