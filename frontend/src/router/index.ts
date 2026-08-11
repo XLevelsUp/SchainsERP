@@ -37,9 +37,9 @@ const router = createRouter({
           component: () => import('@/views/BankDetailsView.vue'),
         },
         {
-          path: 'cash-transactions',
-          name: 'cash-transactions',
-          component: () => import('@/views/CashInOutView.vue'),
+          path: 'cash-management',
+          name: 'cash-management',
+          component: () => import('@/views/CashManagementView.vue'),
         },
         {
           path: 'sale-gold',

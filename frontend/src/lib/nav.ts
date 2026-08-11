@@ -48,7 +48,7 @@ export const navItems: NavItem[] = [
     label: 'Others',
     icon: MoreHorizontal,
     children: [
-      { type: 'link', label: 'Cash Transactions', to: '/cash-transactions', icon: ArrowLeftRight },
+      { type: 'link', label: 'Cash Management', to: '/cash-management', icon: ArrowLeftRight },
       { type: 'link', label: 'Sale Gold', to: '/sale-gold', icon: Coins },
       { type: 'link', label: 'Purchase Gold', to: '/purchase-gold', icon: Wallet },
       { type: 'link', label: 'Cash To Gold', to: '/cash-to-gold', icon: Banknote },
