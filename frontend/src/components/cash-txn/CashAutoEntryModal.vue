@@ -7,8 +7,10 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
+import PartyBalanceCards from './PartyBalanceCards.vue'
 import { cashAutoEntryApi } from '@/lib/cashAutoEntryApi'
 import { cashCategoriesApi } from '@/lib/cashCategoriesApi'
+import { userDetailsApi } from '@/lib/userDetailsApi'
 import { ApiError } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
@@ -42,6 +44,26 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 
 const auth = useAuthStore()
 const toastStore = useToastStore()
+
+// Only the head's balance moves here (see the direction note above), so
+// the balance preview is a single party, not the two-party comparison the
+// Pay/Receive modal shows.
+const isLoadingBalance = ref(true)
+const headBalance = reactive({ cash: 0, rtgs: 0 })
+
+async function loadHeadBalance() {
+  isLoadingBalance.value = true
+  try {
+    const { user } = await userDetailsApi.get(props.headId)
+    headBalance.cash = user.rak_cash_balance
+    headBalance.rtgs = user.rak_rtgs_balance
+  } catch {
+    // Non-fatal — the form still works without the balance preview.
+  } finally {
+    isLoadingBalance.value = false
+  }
+}
+onMounted(loadHeadBalance)
 
 const categories = ref<CashCategory[]>([])
 async function loadCategories() {
@@ -81,6 +103,11 @@ function clearFieldErrors() {
 }
 
 const total = computed(() => rows.reduce((sum, r) => sum + (r.amount ?? 0), 0))
+
+// CB preview — every row is a cash expense against the head, so the running
+// total comes straight off Hand Cash; RTGS is never touched by this
+// endpoint. Null (shown as "—") until at least one row has an amount.
+const headCbCash = computed(() => (total.value > 0 ? headBalance.cash - total.value : null))
 
 function validate(): boolean {
   clearFieldErrors()
@@ -157,10 +184,24 @@ async function handleSubmit() {
       {{ formError }}
     </p>
 
+    <div>
+      <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
+      <PartyBalanceCards
+        :left-label="headName"
+        :left-ob-cash="headBalance.cash"
+        :left-ob-rtgs="headBalance.rtgs"
+        :left-cb-cash="headCbCash"
+        :left-cb-rtgs="headBalance.rtgs"
+        :is-loading="isLoadingBalance"
+        active-column="cash"
+      />
+    </div>
+
     <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-      Only {{ headName }}'s balance changes here — {{ cashUserName }}'s balance is not credited.
-      That's how this endpoint is built (it replicates the legacy "money leaving the system"
-      behavior for auto entries), not a display bug.
+      Only {{ headName }}'s balance changes here — {{ cashUserName }}'s balance is not credited, and
+      every row moves Hand Cash only (there's no bank/RTGS option for auto entries). That's how this
+      endpoint is built (it replicates the legacy "money leaving the system" behavior for auto
+      entries), not a display bug.
     </p>
 
     <form class="flex flex-col gap-4" @submit.prevent="handleSubmit">
@@ -203,13 +244,16 @@ async function handleSubmit() {
             :options="categoryOptions"
             @update:model-value="(v) => (row.category_id = v as number | null)"
           />
-          <BaseInput
-            :id="`added_at_${index}`"
-            v-model="row.added_at"
-            label="Date (optional)"
-            type="date"
-            size="sm"
-          />
+          <div class="flex flex-col gap-1">
+            <BaseInput
+              :id="`added_at_${index}`"
+              v-model="row.added_at"
+              label="Date (optional)"
+              type="date"
+              size="sm"
+            />
+            <p class="text-xs text-amber-700">Not saved — the backend accepts this field but doesn't store it yet.</p>
+          </div>
         </div>
 
         <BaseTextarea

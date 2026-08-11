@@ -7,6 +7,7 @@ import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
 import PartyBalanceCards from './PartyBalanceCards.vue'
+import { AlertCircle, ArrowRight } from 'lucide-vue-next'
 import { cashTxnDetailsApi } from '@/lib/cashTxnDetailsApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { cashCategoriesApi } from '@/lib/cashCategoriesApi'
@@ -122,6 +123,14 @@ const recipientCb = computed(() => {
     : { cash: recipientBalance.cash, rtgs: recipientBalance.rtgs + form.amount }
 })
 
+// Which balance column the pending amount will move — drives the
+// highlight in PartyBalanceCards so the operator can see the affected
+// column before submitting.
+const activeBalanceColumn = computed(() => (form.payment_method === 'CASH_ON_HAND' ? 'cash' : 'rtgs'))
+
+const directionBadgeClass = props.direction === 'out' ? 'bg-red-600' : 'bg-emerald-600'
+const directionBadgeText = props.direction === 'out' ? 'PAY' : 'RECEIVE'
+
 const fieldErrors = reactive<Record<string, string>>({})
 const formError = ref('')
 const isSaving = ref(false)
@@ -194,37 +203,46 @@ async function handleSubmit() {
 
 <template>
   <BaseModal
-    :title="direction === 'out' ? 'Add Expense (Out)' : 'Add Income (In)'"
+    :title="direction === 'out' ? 'Add Expense (Pay)' : 'Add Income (Receive)'"
+    :badge="directionBadgeText"
+    :badge-class="directionBadgeClass"
     @close="emit('close')"
   >
     <p
       v-if="formError"
-      class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+      class="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
     >
-      {{ formError }}
+      <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{{ formError }}</span>
     </p>
 
-    <p class="text-center text-sm text-slate-600">
-      <span class="font-semibold text-slate-800">{{ senderName }}</span>
-      to
-      <span class="font-semibold text-slate-800">{{ recipientName }}</span> :
-    </p>
+    <div class="flex items-center justify-center gap-2 text-sm">
+      <span class="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">{{ senderName }}</span>
+      <ArrowRight class="h-4 w-4 shrink-0 text-slate-400" />
+      <span class="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">{{ recipientName }}</span>
+    </div>
 
-    <PartyBalanceCards
-      :left-label="senderName"
-      :left-ob-cash="senderBalance.cash"
-      :left-ob-rtgs="senderBalance.rtgs"
-      :left-cb-cash="senderCb?.cash ?? null"
-      :left-cb-rtgs="senderCb?.rtgs ?? null"
-      :right-label="recipientName"
-      :right-ob-cash="recipientBalance.cash"
-      :right-ob-rtgs="recipientBalance.rtgs"
-      :right-cb-cash="recipientCb?.cash ?? null"
-      :right-cb-rtgs="recipientCb?.rtgs ?? null"
-      :is-loading="isLoadingBalances"
-    />
+    <div>
+      <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
+      <PartyBalanceCards
+        :left-label="senderName"
+        :left-ob-cash="senderBalance.cash"
+        :left-ob-rtgs="senderBalance.rtgs"
+        :left-cb-cash="senderCb?.cash ?? null"
+        :left-cb-rtgs="senderCb?.rtgs ?? null"
+        :right-label="recipientName"
+        :right-ob-cash="recipientBalance.cash"
+        :right-ob-rtgs="recipientBalance.rtgs"
+        :right-cb-cash="recipientCb?.cash ?? null"
+        :right-cb-rtgs="recipientCb?.rtgs ?? null"
+        :is-loading="isLoadingBalances"
+        :active-column="activeBalanceColumn"
+      />
+    </div>
 
     <form class="flex flex-col gap-4" @submit.prevent="handleSubmit">
+      <p class="text-xs font-semibold tracking-wide text-slate-500 uppercase">Transaction Details</p>
+
       <div class="grid gap-3 sm:grid-cols-2">
         <BaseSelect
           id="category_id"
@@ -243,10 +261,15 @@ async function handleSubmit() {
           step="0.01"
           required
           size="sm"
+          class="font-semibold tabular-nums"
           :error="fieldErrors.amount"
           @update:model-value="(v) => (form.amount = v === '' ? null : Number(v))"
         />
       </div>
+      <p class="-mt-2 text-xs text-slate-500">
+        Every active category is listed regardless of type — the backend doesn't check that a
+        category matches Pay vs. Receive, so a mismatched pick won't be caught here.
+      </p>
 
       <div class="grid gap-3 sm:grid-cols-2">
         <BaseSelect

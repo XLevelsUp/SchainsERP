@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Plus, Trash } from 'lucide-vue-next'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -8,7 +8,9 @@ import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
+import PartyBalanceCards from './PartyBalanceCards.vue'
 import { purchaseGoldApi } from '@/lib/purchaseGoldApi'
+import { userDetailsApi } from '@/lib/userDetailsApi'
 import { sourceTypeOptions } from '@/lib/cashTxnOptions'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
@@ -59,7 +61,7 @@ function makeEmptySource(): PurchaseGoldAmountSourceInput {
 const form = reactive({
   type: 'HEAD' as PurchaseGoldType,
   item_id: null as number | null,
-  total_grams: null as number | null,
+  total_cash: null as number | null,
   touch: null as number | null,
   per_gram_cash: null as number | null,
   amnt_transfer_to_head: true,
@@ -72,14 +74,77 @@ const fieldErrors = reactive<Record<string, string>>({})
 const formError = ref('')
 const isSaving = ref(false)
 
+// Total cash and per-gram cash are what the operator actually types —
+// purity and total grams are derived from them, the reverse of the old
+// "type the weight, cash is calculated" flow. Same underlying relationship
+// (purity = grams * touch / 100), just solved for a different variable.
 const purity = computed(() => {
-  if (form.total_grams === null || form.touch === null) return null
-  return Number(((form.total_grams * form.touch) / 100).toFixed(4))
+  if (form.total_cash === null || form.per_gram_cash === null || form.per_gram_cash === 0) return null
+  return Number((form.total_cash / form.per_gram_cash).toFixed(4))
 })
-const totalCash = computed(() => {
-  if (purity.value === null || form.per_gram_cash === null) return null
-  return Number((purity.value * form.per_gram_cash).toFixed(2))
+const totalGrams = computed(() => {
+  if (purity.value === null || form.touch === null || form.touch === 0) return null
+  return Number(((purity.value * 100) / form.touch).toFixed(4))
 })
+
+// Taken * — partial-delivery tracking. Each auto-fills to match the full
+// calculated/entered amount whenever it changes, but stays independently
+// editable once the operator touches it (so entering a smaller "taken"
+// value for a partial delivery doesn't keep getting overwritten).
+const takenTotalCash = ref<number | null>(null)
+const takenTotalCashTouched = ref(false)
+watch(
+  () => form.total_cash,
+  (v) => {
+    if (!takenTotalCashTouched.value) takenTotalCash.value = v
+  },
+)
+
+const takenPurity = ref<number | null>(null)
+const takenPurityTouched = ref(false)
+watch(purity, (v) => {
+  if (!takenPurityTouched.value) takenPurity.value = v
+})
+
+const takenTotalGrams = ref<number | null>(null)
+const takenTotalGramsTouched = ref(false)
+watch(totalGrams, (v) => {
+  if (!takenTotalGramsTouched.value) takenTotalGrams.value = v
+})
+
+// Balance preview — OB is fetched regardless of Type (it's just each
+// party's current standing). CB is only projected for the standard HEAD
+// flow (head buys gold, pays cash): gold moves grams/purity 1:1 with the
+// calculated total_grams/purity, split across Hand Cash/RTGS by each
+// payment source's type, same as PurchaseGoldService. OUT_CASH_CONVERTER's
+// accounting direction isn't documented on the frontend, so no CB preview
+// is shown for it rather than guessing — OB alone still displays.
+const isLoadingBalance = ref(true)
+const headBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+const customerBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+
+async function loadBalances() {
+  isLoadingBalance.value = true
+  try {
+    const [headRes, customerRes] = await Promise.all([
+      userDetailsApi.get(props.headId),
+      userDetailsApi.get(props.customerId),
+    ])
+    headBalance.cash = headRes.user.rak_cash_balance
+    headBalance.rtgs = headRes.user.rak_rtgs_balance
+    headBalance.grams = headRes.user.grams_grand_total
+    headBalance.purity = headRes.user.purity_grand_total
+    customerBalance.cash = customerRes.user.rak_cash_balance
+    customerBalance.rtgs = customerRes.user.rak_rtgs_balance
+    customerBalance.grams = customerRes.user.grams_grand_total
+    customerBalance.purity = customerRes.user.purity_grand_total
+  } catch {
+    // Non-fatal — the form still works without the balance preview.
+  } finally {
+    isLoadingBalance.value = false
+  }
+}
+onMounted(loadBalances)
 
 function clearFieldErrors() {
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
@@ -94,7 +159,41 @@ function removeSource(index: number) {
 
 const sourceTotal = computed(() => form.amount_sources.reduce((sum, s) => sum + (s.amount ?? 0), 0))
 const sourceTotalMatches = computed(
-  () => Math.round(sourceTotal.value * 100) === Math.round((totalCash.value ?? 0) * 100),
+  () => Math.round(sourceTotal.value * 100) === Math.round((form.total_cash ?? 0) * 100),
+)
+
+const sourcesCashTotal = computed(() =>
+  form.amount_sources
+    .filter((s) => s.source === 'CASH_ON_HAND')
+    .reduce((sum, s) => sum + (s.amount ?? 0), 0),
+)
+const sourcesBankTotal = computed(() =>
+  form.amount_sources.filter((s) => s.source === 'BANK').reduce((sum, s) => sum + (s.amount ?? 0), 0),
+)
+const cashMoving = computed(
+  () => form.type === 'HEAD' && form.amnt_transfer_to_head && sourceTotal.value > 0,
+)
+
+const headCbCash = computed(() => (cashMoving.value ? headBalance.cash - sourcesCashTotal.value : null))
+const headCbRtgs = computed(() => (cashMoving.value ? headBalance.rtgs - sourcesBankTotal.value : null))
+const headCbGrams = computed(() =>
+  form.type === 'HEAD' && totalGrams.value !== null ? headBalance.grams + totalGrams.value : null,
+)
+const headCbPurity = computed(() =>
+  form.type === 'HEAD' && purity.value !== null ? headBalance.purity + purity.value : null,
+)
+
+const customerCbCash = computed(() =>
+  cashMoving.value ? customerBalance.cash + sourcesCashTotal.value : null,
+)
+const customerCbRtgs = computed(() =>
+  cashMoving.value ? customerBalance.rtgs + sourcesBankTotal.value : null,
+)
+const customerCbGrams = computed(() =>
+  form.type === 'HEAD' && totalGrams.value !== null ? customerBalance.grams - totalGrams.value : null,
+)
+const customerCbPurity = computed(() =>
+  form.type === 'HEAD' && purity.value !== null ? customerBalance.purity - purity.value : null,
 )
 
 function validate(): boolean {
@@ -102,8 +201,8 @@ function validate(): boolean {
   formError.value = ''
 
   if (form.item_id === null) fieldErrors.item_id = 'Item is required.'
-  if (form.total_grams === null || form.total_grams < 0) {
-    fieldErrors.total_grams = 'Total grams is required.'
+  if (form.total_cash === null || form.total_cash < 0) {
+    fieldErrors.total_cash = 'Total cash is required.'
   }
   if (form.touch === null || form.touch < 0 || form.touch > 100) {
     fieldErrors.touch = 'Touch is required (0–100).'
@@ -112,10 +211,10 @@ function validate(): boolean {
     fieldErrors.per_gram_cash = 'Per-gram cash is required.'
   }
   if (purity.value === null) {
-    fieldErrors.purity = 'Purity could not be calculated — check total grams and touch.'
+    fieldErrors.purity = 'Purity could not be calculated — check total cash and per-gram cash.'
   }
-  if (totalCash.value === null) {
-    fieldErrors.total_cash = 'Total cash could not be calculated — check purity and per-gram cash.'
+  if (totalGrams.value === null) {
+    fieldErrors.total_grams = 'Total grams could not be calculated — check purity and touch.'
   }
 
   const oversized = images.value.find((f) => f.size > 5 * 1024 * 1024)
@@ -134,7 +233,7 @@ function validate(): boolean {
     })
     if (!sourceTotalMatches.value) {
       fieldErrors.amount_sources_total =
-        `Payment sources total (${sourceTotal.value.toFixed(2)}) must equal total cash (${(totalCash.value ?? 0).toFixed(2)}).`
+        `Payment sources total (${sourceTotal.value.toFixed(2)}) must equal total cash (${(form.total_cash ?? 0).toFixed(2)}).`
     }
   }
 
@@ -158,11 +257,14 @@ async function handleSubmit() {
         head_id: props.headId,
         customer_id: props.customerId,
         item_id: form.item_id,
-        total_grams: form.total_grams,
+        total_grams: totalGrams.value,
         touch: form.touch,
         per_gram_cash: form.per_gram_cash,
         purity: purity.value,
-        total_cash: totalCash.value,
+        total_cash: form.total_cash,
+        taken_total_cash: takenTotalCash.value,
+        taken_total_grams: takenTotalGrams.value,
+        taken_purity: takenPurity.value,
         amnt_transfer_to_head: form.amnt_transfer_to_head,
         remarks: form.remarks,
         retailer_id: form.retailer_id,
@@ -207,6 +309,38 @@ async function handleSubmit() {
       {{ formError }}
     </p>
 
+    <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+      Type changes real accounting behavior, not just the label — "Purchase Gold" is the standard
+      head-buys-from-customer flow (stock IN), while "Out Cash Converter" is an unrelated stock OUT
+      that reuses this same form, not an actual purchase. Delivery is always recorded as full, too —
+      there's no partial-delivery tracking here.
+    </p>
+
+    <div>
+      <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
+      <PartyBalanceCards
+        :left-label="headName"
+        :left-ob-cash="headBalance.cash"
+        :left-ob-rtgs="headBalance.rtgs"
+        :left-cb-cash="headCbCash"
+        :left-cb-rtgs="headCbRtgs"
+        :left-ob-grams="headBalance.grams"
+        :left-ob-purity="headBalance.purity"
+        :left-cb-grams="headCbGrams"
+        :left-cb-purity="headCbPurity"
+        :right-label="customerName"
+        :right-ob-cash="customerBalance.cash"
+        :right-ob-rtgs="customerBalance.rtgs"
+        :right-cb-cash="customerCbCash"
+        :right-cb-rtgs="customerCbRtgs"
+        :right-ob-grams="customerBalance.grams"
+        :right-ob-purity="customerBalance.purity"
+        :right-cb-grams="customerCbGrams"
+        :right-cb-purity="customerCbPurity"
+        :is-loading="isLoadingBalance"
+      />
+    </div>
+
     <form class="flex flex-col gap-5" @submit.prevent="handleSubmit">
       <div class="grid gap-3 sm:grid-cols-3">
         <BaseSelect
@@ -236,18 +370,6 @@ async function handleSubmit() {
           "
         />
         <BaseInput
-          id="total_grams"
-          :model-value="form.total_grams === null ? '' : String(form.total_grams)"
-          label="Total grams"
-          type="number"
-          step="0.001"
-          required
-          size="sm"
-          :error="fieldErrors.total_grams"
-          @update:model-value="(v) => (form.total_grams = v === '' ? null : Number(v))"
-        />
-
-        <BaseInput
           id="touch"
           :model-value="form.touch === null ? '' : String(form.touch)"
           label="Touch"
@@ -258,14 +380,17 @@ async function handleSubmit() {
           :error="fieldErrors.touch"
           @update:model-value="(v) => (form.touch = v === '' ? null : Number(v))"
         />
+
         <BaseInput
-          id="purity"
-          :model-value="purity === null ? '' : String(purity)"
-          label="Purity (calculated)"
+          id="total_cash"
+          :model-value="form.total_cash === null ? '' : String(form.total_cash)"
+          label="Total cash"
           type="number"
-          readonly
+          step="0.01"
+          required
           size="sm"
-          :error="fieldErrors.purity"
+          :error="fieldErrors.total_cash"
+          @update:model-value="(v) => (form.total_cash = v === '' ? null : Number(v))"
         />
         <BaseInput
           id="per_gram_cash"
@@ -278,15 +403,24 @@ async function handleSubmit() {
           :error="fieldErrors.per_gram_cash"
           @update:model-value="(v) => (form.per_gram_cash = v === '' ? null : Number(v))"
         />
-
         <BaseInput
-          id="total_cash"
-          :model-value="totalCash === null ? '' : String(totalCash)"
-          label="Total cash (calculated)"
+          id="purity"
+          :model-value="purity === null ? '' : String(purity)"
+          label="Purity (calculated)"
           type="number"
           readonly
           size="sm"
-          :error="fieldErrors.total_cash"
+          :error="fieldErrors.purity"
+        />
+
+        <BaseInput
+          id="total_grams"
+          :model-value="totalGrams === null ? '' : String(totalGrams)"
+          label="Total grams (calculated)"
+          type="number"
+          readonly
+          size="sm"
+          :error="fieldErrors.total_grams"
         />
         <BaseCheckbox
           v-model="form.amnt_transfer_to_head"
@@ -301,6 +435,58 @@ async function handleSubmit() {
           size="sm"
           @update:model-value="(v) => (form.retailer_id = v === '' ? null : Number(v))"
         />
+      </div>
+
+      <div class="rounded-lg border border-slate-200 p-3">
+        <h3 class="text-sm font-semibold text-slate-900">Taken (partial delivery)</h3>
+        <p class="mt-1 mb-3 text-xs text-slate-500">
+          Defaults to the full amount above — lower these only if the customer took less than the
+          full total cash, purity, or grams in this delivery.
+        </p>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <BaseInput
+            id="taken_total_cash"
+            :model-value="takenTotalCash === null ? '' : String(takenTotalCash)"
+            label="Taken total cash"
+            type="number"
+            step="0.01"
+            size="sm"
+            @update:model-value="
+              (v) => {
+                takenTotalCashTouched = true
+                takenTotalCash = v === '' ? null : Number(v)
+              }
+            "
+          />
+          <BaseInput
+            id="taken_purity"
+            :model-value="takenPurity === null ? '' : String(takenPurity)"
+            label="Taken purity"
+            type="number"
+            step="0.0001"
+            size="sm"
+            @update:model-value="
+              (v) => {
+                takenPurityTouched = true
+                takenPurity = v === '' ? null : Number(v)
+              }
+            "
+          />
+          <BaseInput
+            id="taken_total_grams"
+            :model-value="takenTotalGrams === null ? '' : String(takenTotalGrams)"
+            label="Taken total grams"
+            type="number"
+            step="0.0001"
+            size="sm"
+            @update:model-value="
+              (v) => {
+                takenTotalGramsTouched = true
+                takenTotalGrams = v === '' ? null : Number(v)
+              }
+            "
+          />
+        </div>
       </div>
 
       <BaseTextarea id="remarks" v-model="form.remarks" label="Remarks" size="sm" :rows="2" />
@@ -374,7 +560,7 @@ async function handleSubmit() {
           :class="sourceTotalMatches ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"
         >
           <span>Sources total: {{ sourceTotal.toFixed(2) }}</span>
-          <span>Total cash: {{ (totalCash ?? 0).toFixed(2) }}</span>
+          <span>Total cash: {{ (form.total_cash ?? 0).toFixed(2) }}</span>
         </div>
       </section>
 

@@ -256,16 +256,19 @@ async function handleSaved() {
     </div>
 
     <template v-else>
+      <p v-if="canQuickCreate" class="mb-3 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+        Manual Entries
+      </p>
       <div v-if="canQuickCreate" class="grid gap-6 sm:grid-cols-2">
         <div>
-          <p class="mb-2 text-xs font-semibold tracking-wide text-red-700 uppercase">Out</p>
+          <p class="mb-2 text-xs font-semibold tracking-wide text-red-700 uppercase">Pay</p>
           <div class="flex flex-wrap gap-2">
             <button
               type="button"
               class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
               @click="openModal('out')"
             >
-              OUT
+              PAY
             </button>
             <button
               type="button"
@@ -293,14 +296,14 @@ async function handleSaved() {
         </div>
 
         <div>
-          <p class="mb-2 text-xs font-semibold tracking-wide text-emerald-700 uppercase">In</p>
+          <p class="mb-2 text-xs font-semibold tracking-wide text-emerald-700 uppercase">Receive</p>
           <div class="flex flex-wrap gap-2">
             <button
               type="button"
               class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
               @click="openModal('in')"
             >
-              IN
+              RECEIVE
             </button>
             <button
               type="button"
@@ -321,7 +324,7 @@ async function handleSaved() {
               class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
               @click="openModal('auto-entry')"
             >
-              AUTO_ENTRY
+              Auto Entry
             </button>
           </div>
         </div>
@@ -335,10 +338,11 @@ async function handleSaved() {
       </p>
       <p v-else class="text-sm text-slate-500">Select a Head above to get started.</p>
 
-      <p class="mt-6 text-xs text-slate-500">
-        No transaction ledger here — the backend has no working list endpoint for cash
-        transactions (only posting new ones). Use these buttons to record entries; there's
-        nothing to browse afterward yet.
+      <p class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        No history of past entries is shown here — Pay/Receive, gold conversions, and Sale/Purchase
+        Gold can only be recorded, not listed, viewed, or edited afterward. INTERNAL is disabled for
+        the same reason: no backend endpoint accepts that type yet. These are known backend gaps,
+        not missing screens.
       </p>
     </template>
 

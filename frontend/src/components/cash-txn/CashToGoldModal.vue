@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { Plus, Trash } from 'lucide-vue-next'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -8,7 +8,9 @@ import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
+import PartyBalanceCards from './PartyBalanceCards.vue'
 import { cashToGoldApi } from '@/lib/cashToGoldApi'
+import { userDetailsApi } from '@/lib/userDetailsApi'
 import { sourceTypeOptions } from '@/lib/cashTxnOptions'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
@@ -48,7 +50,7 @@ function makeEmptySource(): CashToGoldAmountSourceInput {
 
 const form = reactive({
   item_id: null as number | null,
-  total_grams: null as number | null,
+  total_cash: null as number | null,
   touch: null as number | null,
   per_gram_cash: null as number | null,
   amnt_transfer_to_head: true,
@@ -61,14 +63,49 @@ const fieldErrors = reactive<Record<string, string>>({})
 const formError = ref('')
 const isSaving = ref(false)
 
+// Total cash and per-gram cash are what the operator types — purity and
+// total grams are derived from them, same relationship as Purchase Gold
+// (purity = grams * touch / 100), just solved for a different variable.
 const purity = computed(() => {
-  if (form.total_grams === null || form.touch === null) return null
-  return Number(((form.total_grams * form.touch) / 100).toFixed(4))
+  if (form.total_cash === null || form.per_gram_cash === null || form.per_gram_cash === 0) return null
+  return Number((form.total_cash / form.per_gram_cash).toFixed(4))
 })
-const totalCash = computed(() => {
-  if (purity.value === null || form.per_gram_cash === null) return null
-  return Number((purity.value * form.per_gram_cash).toFixed(2))
+const totalGrams = computed(() => {
+  if (purity.value === null || form.touch === null || form.touch === 0) return null
+  return Number(((purity.value * 100) / form.touch).toFixed(4))
 })
+
+// Balance preview — customer gives cash, head gives gold (see header
+// comment): opposite direction from Purchase Gold/Gold To Cash. Gold moves
+// grams/purity 1:1 with totalGrams/purity, cash splits across Hand
+// Cash/RTGS by each payment source's type, only when the head is the one
+// receiving it (amnt_transfer_to_head).
+const isLoadingBalance = ref(true)
+const headBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+const customerBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+
+async function loadBalances() {
+  isLoadingBalance.value = true
+  try {
+    const [headRes, customerRes] = await Promise.all([
+      userDetailsApi.get(props.headId),
+      userDetailsApi.get(props.customerId),
+    ])
+    headBalance.cash = headRes.user.rak_cash_balance
+    headBalance.rtgs = headRes.user.rak_rtgs_balance
+    headBalance.grams = headRes.user.grams_grand_total
+    headBalance.purity = headRes.user.purity_grand_total
+    customerBalance.cash = customerRes.user.rak_cash_balance
+    customerBalance.rtgs = customerRes.user.rak_rtgs_balance
+    customerBalance.grams = customerRes.user.grams_grand_total
+    customerBalance.purity = customerRes.user.purity_grand_total
+  } catch {
+    // Non-fatal — the form still works without the balance preview.
+  } finally {
+    isLoadingBalance.value = false
+  }
+}
+onMounted(loadBalances)
 
 function clearFieldErrors() {
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
@@ -83,7 +120,39 @@ function removeSource(index: number) {
 
 const sourceTotal = computed(() => form.amount_sources.reduce((sum, s) => sum + (s.amount ?? 0), 0))
 const sourceTotalMatches = computed(
-  () => Math.round(sourceTotal.value * 100) === Math.round((totalCash.value ?? 0) * 100),
+  () => Math.round(sourceTotal.value * 100) === Math.round((form.total_cash ?? 0) * 100),
+)
+
+const sourcesCashTotal = computed(() =>
+  form.amount_sources
+    .filter((s) => s.source === 'CASH_ON_HAND')
+    .reduce((sum, s) => sum + (s.amount ?? 0), 0),
+)
+const sourcesBankTotal = computed(() =>
+  form.amount_sources.filter((s) => s.source === 'BANK').reduce((sum, s) => sum + (s.amount ?? 0), 0),
+)
+const cashMoving = computed(() => form.amnt_transfer_to_head && sourceTotal.value > 0)
+
+const headCbCash = computed(() => (cashMoving.value ? headBalance.cash + sourcesCashTotal.value : null))
+const headCbRtgs = computed(() => (cashMoving.value ? headBalance.rtgs + sourcesBankTotal.value : null))
+const headCbGrams = computed(() =>
+  totalGrams.value !== null ? headBalance.grams - totalGrams.value : null,
+)
+const headCbPurity = computed(() =>
+  purity.value !== null ? headBalance.purity - purity.value : null,
+)
+
+const customerCbCash = computed(() =>
+  cashMoving.value ? customerBalance.cash - sourcesCashTotal.value : null,
+)
+const customerCbRtgs = computed(() =>
+  cashMoving.value ? customerBalance.rtgs - sourcesBankTotal.value : null,
+)
+const customerCbGrams = computed(() =>
+  totalGrams.value !== null ? customerBalance.grams + totalGrams.value : null,
+)
+const customerCbPurity = computed(() =>
+  purity.value !== null ? customerBalance.purity + purity.value : null,
 )
 
 function validate(): boolean {
@@ -91,8 +160,8 @@ function validate(): boolean {
   formError.value = ''
 
   if (form.item_id === null) fieldErrors.item_id = 'Item is required.'
-  if (form.total_grams === null || form.total_grams < 0.001) {
-    fieldErrors.total_grams = 'Total grams is required (min 0.001).'
+  if (form.total_cash === null || form.total_cash < 0.01) {
+    fieldErrors.total_cash = 'Total cash is required (min 0.01).'
   }
   if (form.touch === null || form.touch < 0 || form.touch > 100) {
     fieldErrors.touch = 'Touch is required (0–100).'
@@ -101,10 +170,10 @@ function validate(): boolean {
     fieldErrors.per_gram_cash = 'Per-gram cash is required (min 0.01).'
   }
   if (purity.value === null || purity.value < 0.001) {
-    fieldErrors.purity = 'Purity works out to 0 — check total grams and touch.'
+    fieldErrors.purity = 'Purity works out to 0 — check total cash and per-gram cash.'
   }
-  if (totalCash.value === null || totalCash.value < 0.01) {
-    fieldErrors.total_cash = 'Total cash works out to 0 — check purity and per-gram cash.'
+  if (totalGrams.value === null || totalGrams.value < 0.001) {
+    fieldErrors.total_grams = 'Total grams works out to 0 — check purity and touch.'
   }
 
   const oversized = images.value.find((f) => f.size > 5 * 1024 * 1024)
@@ -123,7 +192,7 @@ function validate(): boolean {
     })
     if (!sourceTotalMatches.value) {
       fieldErrors.amount_sources_total =
-        `Payment sources total (${sourceTotal.value.toFixed(2)}) must equal total cash (${(totalCash.value ?? 0).toFixed(2)}).`
+        `Payment sources total (${sourceTotal.value.toFixed(2)}) must equal total cash (${(form.total_cash ?? 0).toFixed(2)}).`
     }
   }
 
@@ -146,11 +215,11 @@ async function handleSubmit() {
         head_id: props.headId,
         customer_id: props.customerId,
         item_id: form.item_id,
-        total_grams: form.total_grams,
+        total_grams: totalGrams.value,
         touch: form.touch,
         per_gram_cash: form.per_gram_cash,
         purity: purity.value,
-        total_cash: totalCash.value,
+        total_cash: form.total_cash,
         amnt_transfer_to_head: form.amnt_transfer_to_head,
         remarks: form.remarks,
         retailer_id: form.retailer_id,
@@ -195,6 +264,31 @@ async function handleSubmit() {
       {{ formError }}
     </p>
 
+    <div>
+      <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
+      <PartyBalanceCards
+        :left-label="customerName"
+        :left-ob-cash="customerBalance.cash"
+        :left-ob-rtgs="customerBalance.rtgs"
+        :left-cb-cash="customerCbCash"
+        :left-cb-rtgs="customerCbRtgs"
+        :left-ob-grams="customerBalance.grams"
+        :left-ob-purity="customerBalance.purity"
+        :left-cb-grams="customerCbGrams"
+        :left-cb-purity="customerCbPurity"
+        :right-label="headName"
+        :right-ob-cash="headBalance.cash"
+        :right-ob-rtgs="headBalance.rtgs"
+        :right-cb-cash="headCbCash"
+        :right-cb-rtgs="headCbRtgs"
+        :right-ob-grams="headBalance.grams"
+        :right-ob-purity="headBalance.purity"
+        :right-cb-grams="headCbGrams"
+        :right-cb-purity="headCbPurity"
+        :is-loading="isLoadingBalance"
+      />
+    </div>
+
     <form class="flex flex-col gap-5" @submit.prevent="handleSubmit">
       <div class="grid gap-3 sm:grid-cols-3">
         <BaseSelect
@@ -215,36 +309,15 @@ async function handleSubmit() {
           "
         />
         <BaseInput
-          id="total_grams"
-          :model-value="form.total_grams === null ? '' : String(form.total_grams)"
-          label="Total grams"
-          type="number"
-          step="0.001"
-          required
-          size="sm"
-          :error="fieldErrors.total_grams"
-          @update:model-value="(v) => (form.total_grams = v === '' ? null : Number(v))"
-        />
-        <BaseInput
-          id="touch"
-          :model-value="form.touch === null ? '' : String(form.touch)"
-          label="Touch"
+          id="total_cash"
+          :model-value="form.total_cash === null ? '' : String(form.total_cash)"
+          label="Total cash"
           type="number"
           step="0.01"
           required
           size="sm"
-          :error="fieldErrors.touch"
-          @update:model-value="(v) => (form.touch = v === '' ? null : Number(v))"
-        />
-
-        <BaseInput
-          id="purity"
-          :model-value="purity === null ? '' : String(purity)"
-          label="Purity (calculated)"
-          type="number"
-          readonly
-          size="sm"
-          :error="fieldErrors.purity"
+          :error="fieldErrors.total_cash"
+          @update:model-value="(v) => (form.total_cash = v === '' ? null : Number(v))"
         />
         <BaseInput
           id="per_gram_cash"
@@ -257,28 +330,20 @@ async function handleSubmit() {
           :error="fieldErrors.per_gram_cash"
           @update:model-value="(v) => (form.per_gram_cash = v === '' ? null : Number(v))"
         />
+
         <BaseInput
-          id="total_cash"
-          :model-value="totalCash === null ? '' : String(totalCash)"
-          label="Total cash (calculated)"
+          id="purity"
+          :model-value="purity === null ? '' : String(purity)"
+          label="Purity (calculated)"
           type="number"
           readonly
           size="sm"
-          :error="fieldErrors.total_cash"
+          :error="fieldErrors.purity"
         />
-
         <BaseCheckbox
           v-model="form.amnt_transfer_to_head"
           label="Transfer amount to head"
           class="self-end pb-2"
-        />
-        <BaseInput
-          id="retailer_id"
-          :model-value="form.retailer_id === null ? '' : String(form.retailer_id)"
-          label="Retailer ID (optional)"
-          type="number"
-          size="sm"
-          @update:model-value="(v) => (form.retailer_id = v === '' ? null : Number(v))"
         />
       </div>
 
@@ -353,7 +418,7 @@ async function handleSubmit() {
           :class="sourceTotalMatches ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"
         >
           <span>Sources total: {{ sourceTotal.toFixed(2) }}</span>
-          <span>Total cash: {{ (totalCash ?? 0).toFixed(2) }}</span>
+          <span>Total cash: {{ (form.total_cash ?? 0).toFixed(2) }}</span>
         </div>
       </section>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { Plus, Trash } from 'lucide-vue-next'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -8,7 +8,9 @@ import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
+import PartyBalanceCards from './PartyBalanceCards.vue'
 import { saleGoldApi } from '@/lib/saleGoldApi'
+import { userDetailsApi } from '@/lib/userDetailsApi'
 import { sourceTypeOptions } from '@/lib/cashTxnOptions'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
@@ -41,12 +43,6 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; saved: [] }>()
 
 const toastStore = useToastStore()
-
-const typeOptions: { value: SaleGoldType; label: string }[] = [
-  { value: 'SALE_GOLD', label: 'Sale Gold' },
-  { value: 'SALE_GOLD_CASH', label: 'Sale Gold Cash' },
-  { value: 'IN_CASH_CONVERTER', label: 'In Cash Converter' },
-]
 
 const itemOptions = computed(() => props.items.map((i) => ({ value: i.item_id, label: i.item_name })))
 const bankOptions = computed(() =>
@@ -83,6 +79,38 @@ const totalCash = computed(() => {
   return Number((purity.value * form.per_gram_cash).toFixed(2))
 })
 
+// Balance preview — head sells gold to the customer for cash (see header
+// comment): opposite direction from Purchase Gold/Gold To Cash, same
+// direction as Cash To Gold. Gold moves grams/purity 1:1 with total_grams/
+// purity; cash splits across Hand Cash/RTGS by each payment source's type,
+// only when the head is the one receiving it (amnt_transfer_to_head).
+const isLoadingBalance = ref(true)
+const headBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+const customerBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+
+async function loadBalances() {
+  isLoadingBalance.value = true
+  try {
+    const [headRes, customerRes] = await Promise.all([
+      userDetailsApi.get(props.headId),
+      userDetailsApi.get(props.customerId),
+    ])
+    headBalance.cash = headRes.user.rak_cash_balance
+    headBalance.rtgs = headRes.user.rak_rtgs_balance
+    headBalance.grams = headRes.user.grams_grand_total
+    headBalance.purity = headRes.user.purity_grand_total
+    customerBalance.cash = customerRes.user.rak_cash_balance
+    customerBalance.rtgs = customerRes.user.rak_rtgs_balance
+    customerBalance.grams = customerRes.user.grams_grand_total
+    customerBalance.purity = customerRes.user.purity_grand_total
+  } catch {
+    // Non-fatal — the form still works without the balance preview.
+  } finally {
+    isLoadingBalance.value = false
+  }
+}
+onMounted(loadBalances)
+
 function clearFieldErrors() {
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
 }
@@ -97,6 +125,38 @@ function removeSource(index: number) {
 const sourceTotal = computed(() => form.amount_sources.reduce((sum, s) => sum + (s.amount ?? 0), 0))
 const sourceTotalMatches = computed(
   () => Math.round(sourceTotal.value * 100) === Math.round((totalCash.value ?? 0) * 100),
+)
+
+const sourcesCashTotal = computed(() =>
+  form.amount_sources
+    .filter((s) => s.source === 'CASH_ON_HAND')
+    .reduce((sum, s) => sum + (s.amount ?? 0), 0),
+)
+const sourcesBankTotal = computed(() =>
+  form.amount_sources.filter((s) => s.source === 'BANK').reduce((sum, s) => sum + (s.amount ?? 0), 0),
+)
+const cashMoving = computed(() => form.amnt_transfer_to_head && sourceTotal.value > 0)
+
+const headCbCash = computed(() => (cashMoving.value ? headBalance.cash + sourcesCashTotal.value : null))
+const headCbRtgs = computed(() => (cashMoving.value ? headBalance.rtgs + sourcesBankTotal.value : null))
+const headCbGrams = computed(() =>
+  form.total_grams !== null ? headBalance.grams - form.total_grams : null,
+)
+const headCbPurity = computed(() =>
+  purity.value !== null ? headBalance.purity - purity.value : null,
+)
+
+const customerCbCash = computed(() =>
+  cashMoving.value ? customerBalance.cash - sourcesCashTotal.value : null,
+)
+const customerCbRtgs = computed(() =>
+  cashMoving.value ? customerBalance.rtgs - sourcesBankTotal.value : null,
+)
+const customerCbGrams = computed(() =>
+  form.total_grams !== null ? customerBalance.grams + form.total_grams : null,
+)
+const customerCbPurity = computed(() =>
+  purity.value !== null ? customerBalance.purity + purity.value : null,
 )
 
 function validate(): boolean {
@@ -210,17 +270,39 @@ async function handleSubmit() {
       {{ formError }}
     </p>
 
+    <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+      This form always records a standard Sale Gold transaction — the Sale Gold Cash and In Cash
+      Converter variants aren't available here. Delivery is always recorded as full, too — there's
+      no partial-delivery tracking here.
+    </p>
+
+    <div>
+      <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
+      <PartyBalanceCards
+        :left-label="headName"
+        :left-ob-cash="headBalance.cash"
+        :left-ob-rtgs="headBalance.rtgs"
+        :left-cb-cash="headCbCash"
+        :left-cb-rtgs="headCbRtgs"
+        :left-ob-grams="headBalance.grams"
+        :left-ob-purity="headBalance.purity"
+        :left-cb-grams="headCbGrams"
+        :left-cb-purity="headCbPurity"
+        :right-label="customerName"
+        :right-ob-cash="customerBalance.cash"
+        :right-ob-rtgs="customerBalance.rtgs"
+        :right-cb-cash="customerCbCash"
+        :right-cb-rtgs="customerCbRtgs"
+        :right-ob-grams="customerBalance.grams"
+        :right-ob-purity="customerBalance.purity"
+        :right-cb-grams="customerCbGrams"
+        :right-cb-purity="customerCbPurity"
+        :is-loading="isLoadingBalance"
+      />
+    </div>
+
     <form class="flex flex-col gap-5" @submit.prevent="handleSubmit">
       <div class="grid gap-3 sm:grid-cols-3">
-        <BaseSelect
-          id="type"
-          :model-value="form.type"
-          label="Type"
-          required
-          size="sm"
-          :options="typeOptions"
-          @update:model-value="(v) => (form.type = v as SaleGoldType)"
-        />
         <BaseSelect
           id="item_id"
           :model-value="form.item_id"
@@ -295,14 +377,6 @@ async function handleSubmit() {
           v-model="form.amnt_transfer_to_head"
           label="Transfer amount to head"
           class="self-end pb-2"
-        />
-        <BaseInput
-          id="retailer_id"
-          :model-value="form.retailer_id === null ? '' : String(form.retailer_id)"
-          label="Retailer ID (optional)"
-          type="number"
-          size="sm"
-          @update:model-value="(v) => (form.retailer_id = v === '' ? null : Number(v))"
         />
       </div>
 

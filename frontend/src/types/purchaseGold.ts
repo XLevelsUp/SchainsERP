@@ -54,8 +54,12 @@ export interface PurchaseGoldAmountSourceInput {
 
 // The full payload POST /purchase-gold accepts (StorePurchaseGoldRequest).
 // taken_total_cash/taken_total_grams/taken_purity (partial-delivery
-// tracking) are left out for the same reason as Sale Gold — the service
-// defaults them to the full totals when omitted.
+// tracking) default to the full totals on the backend when omitted —
+// optional here so callers that don't drive a "Taken" UI (the standalone
+// PurchaseGoldView page) can still omit them and get that default.
+// PurchaseGoldModal.vue sends them explicitly, auto-filled to match the
+// full amount and staying editable, mirroring the legacy dialog's Taken
+// fields.
 export interface PurchaseGoldFormValues {
   type: PurchaseGoldType
   head_id: number | null
@@ -65,6 +69,9 @@ export interface PurchaseGoldFormValues {
   total_grams: number | null
   touch: number | null
   purity: number | null
+  taken_total_cash?: number | null
+  taken_total_grams?: number | null
+  taken_purity?: number | null
   item_id: number | null
   amnt_transfer_to_head: boolean
   remarks: string

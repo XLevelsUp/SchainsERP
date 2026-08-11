@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { Plus, Trash } from 'lucide-vue-next'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -7,7 +7,9 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
+import PartyBalanceCards from './PartyBalanceCards.vue'
 import { goldToCashApi } from '@/lib/goldToCashApi'
+import { userDetailsApi } from '@/lib/userDetailsApi'
 import { sourceTypeOptions } from '@/lib/cashTxnOptions'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
@@ -65,6 +67,38 @@ const totalCash = computed(() => {
   return Number((form.total_gold * form.per_gram_cash).toFixed(2))
 })
 
+// Balance preview — customer gives gold, head gives cash (see header
+// comment), always in that direction; unlike Purchase Gold there's no
+// alternate Type here to guess around. Gold moves grams/purity 1:1 with
+// totalGrams/total_gold; cash always moves (payment sources are required,
+// no toggle), split across Hand Cash/RTGS by each source's type.
+const isLoadingBalance = ref(true)
+const headBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+const customerBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+
+async function loadBalances() {
+  isLoadingBalance.value = true
+  try {
+    const [headRes, customerRes] = await Promise.all([
+      userDetailsApi.get(props.headId),
+      userDetailsApi.get(props.customerId),
+    ])
+    headBalance.cash = headRes.user.rak_cash_balance
+    headBalance.rtgs = headRes.user.rak_rtgs_balance
+    headBalance.grams = headRes.user.grams_grand_total
+    headBalance.purity = headRes.user.purity_grand_total
+    customerBalance.cash = customerRes.user.rak_cash_balance
+    customerBalance.rtgs = customerRes.user.rak_rtgs_balance
+    customerBalance.grams = customerRes.user.grams_grand_total
+    customerBalance.purity = customerRes.user.purity_grand_total
+  } catch {
+    // Non-fatal — the form still works without the balance preview.
+  } finally {
+    isLoadingBalance.value = false
+  }
+}
+onMounted(loadBalances)
+
 function clearFieldErrors() {
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
 }
@@ -79,6 +113,38 @@ function removeSource(index: number) {
 const sourceTotal = computed(() => form.amount_sources.reduce((sum, s) => sum + (s.amount ?? 0), 0))
 const sourceTotalMatches = computed(
   () => Math.round(sourceTotal.value * 100) === Math.round((totalCash.value ?? 0) * 100),
+)
+
+const sourcesCashTotal = computed(() =>
+  form.amount_sources
+    .filter((s) => s.source === 'CASH_ON_HAND')
+    .reduce((sum, s) => sum + (s.amount ?? 0), 0),
+)
+const sourcesBankTotal = computed(() =>
+  form.amount_sources.filter((s) => s.source === 'BANK').reduce((sum, s) => sum + (s.amount ?? 0), 0),
+)
+const cashMoving = computed(() => sourceTotal.value > 0)
+
+const headCbCash = computed(() => (cashMoving.value ? headBalance.cash - sourcesCashTotal.value : null))
+const headCbRtgs = computed(() => (cashMoving.value ? headBalance.rtgs - sourcesBankTotal.value : null))
+const headCbGrams = computed(() =>
+  totalGrams.value !== null ? headBalance.grams + totalGrams.value : null,
+)
+const headCbPurity = computed(() =>
+  form.total_gold !== null ? headBalance.purity + form.total_gold : null,
+)
+
+const customerCbCash = computed(() =>
+  cashMoving.value ? customerBalance.cash + sourcesCashTotal.value : null,
+)
+const customerCbRtgs = computed(() =>
+  cashMoving.value ? customerBalance.rtgs + sourcesBankTotal.value : null,
+)
+const customerCbGrams = computed(() =>
+  totalGrams.value !== null ? customerBalance.grams - totalGrams.value : null,
+)
+const customerCbPurity = computed(() =>
+  form.total_gold !== null ? customerBalance.purity - form.total_gold : null,
 )
 
 function validate(): boolean {
@@ -184,6 +250,37 @@ async function handleSubmit() {
     >
       {{ formError }}
     </p>
+
+    <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+      There's no "Transfer amount to head" toggle here, unlike Sale/Purchase Gold — the backend
+      hardcodes the head as always paying out for Gold → Cash conversions, so payment sources are
+      always required below.
+    </p>
+
+    <div>
+      <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
+      <PartyBalanceCards
+        :left-label="headName"
+        :left-ob-cash="headBalance.cash"
+        :left-ob-rtgs="headBalance.rtgs"
+        :left-cb-cash="headCbCash"
+        :left-cb-rtgs="headCbRtgs"
+        :left-ob-grams="headBalance.grams"
+        :left-ob-purity="headBalance.purity"
+        :left-cb-grams="headCbGrams"
+        :left-cb-purity="headCbPurity"
+        :right-label="customerName"
+        :right-ob-cash="customerBalance.cash"
+        :right-ob-rtgs="customerBalance.rtgs"
+        :right-cb-cash="customerCbCash"
+        :right-cb-rtgs="customerCbRtgs"
+        :right-ob-grams="customerBalance.grams"
+        :right-ob-purity="customerBalance.purity"
+        :right-cb-grams="customerCbGrams"
+        :right-cb-purity="customerCbPurity"
+        :is-loading="isLoadingBalance"
+      />
+    </div>
 
     <form class="flex flex-col gap-5" @submit.prevent="handleSubmit">
       <div class="grid gap-3 sm:grid-cols-3">
