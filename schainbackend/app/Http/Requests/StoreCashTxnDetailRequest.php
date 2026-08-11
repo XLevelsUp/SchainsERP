@@ -19,9 +19,26 @@ class StoreCashTxnDetailRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        $senderId = $this->input('sender_id') ?? $this->input('given_by');
+        $recipientId = $this->input('recipient_id') ?? $this->input('given_to');
+        
+        $transferToHead = filter_var($this->input('amnt_transfer_to_head'), FILTER_VALIDATE_BOOLEAN);
+        $headId = $this->input('head_id');
+        
+        if ($transferToHead && $headId) {
+            // If it's an Expense (OUT), the Head pays (Sender)
+            if ($this->is('*out')) {
+                $senderId = $headId;
+            } 
+            // If it's an Income (IN), the Head receives (Recipient)
+            else if ($this->is('*in')) {
+                $recipientId = $headId;
+            }
+        }
+
         $this->merge([
-            'sender_id' => $this->input('sender_id') ?? $this->input('given_by'),
-            'recipient_id' => $this->input('recipient_id') ?? $this->input('given_to'),
+            'sender_id' => $senderId,
+            'recipient_id' => $recipientId,
             'payment_method' => $this->input('payment_method') ?? $this->input('souce_type'),
             'bank_account_id' => $this->input('bank_account_id') ?? $this->input('bank_id'),
         ]);
@@ -47,6 +64,10 @@ class StoreCashTxnDetailRequest extends FormRequest
             'remarks' => 'nullable|string|max:5000',
             'images' => 'nullable|array',
             'images.*' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            
+            // Legacy Yii2 Yes/No Toggle Support
+            'amnt_transfer_to_head' => 'nullable|boolean',
+            'head_id' => 'nullable|integer|exists:user_details,user_id',
         ];
     }
 
