@@ -52,21 +52,34 @@ class UserDetailController extends Controller
 
             $users = $query->get();
 
-            $formattedUsers = $users->map(function ($user) {
-                return [
+            $module = $request->query('module', 'stock'); // Default to stock
+
+            $formattedUsers = $users->map(function ($user) use ($module) {
+                $data = [
                     'id' => $user->user_id,
                     'full_name' => $user->name,
                     'type' => $user->role ? $user->role->role : null,
                     'category_name' => $user->category_name,
                     'retailer_user_name' => 'Normal user',
-                    'gm' => sprintf('%0.3f', $user->grams_grand_total ?? 0),
-                    'purity' => sprintf('%0.3f', $user->purity_grand_total ?? 0),
                     'phone_number' => $user->phone_no,
-                    'profile_image' => '',
-                    'name' => $user->name,
-                    'profile_img' => $user->profile_image ? asset('storage/' . $user->profile_image) : null,
-                    'is_active' => $user->is_active,
                 ];
+
+                if (strtolower($module) === 'cash') {
+                    $data['hand_cash'] = sprintf('%0.2f', $user->rak_cash_balance ?? 0);
+                    $data['rtgs_cash'] = sprintf('%0.2f', $user->rak_rtgs_balance ?? 0);
+                    $data['last_cash_txn_date'] = $user->last_cash_txn_date ? date('Y-m-d H:i:s', strtotime($user->last_cash_txn_date)) : null;
+                } else {
+                    $data['gm'] = sprintf('%0.3f', $user->grams_grand_total ?? 0);
+                    $data['purity'] = sprintf('%0.3f', $user->purity_grand_total ?? 0);
+                    $data['last_txn_date'] = $user->last_txn_date ? date('Y-m-d H:i:s', strtotime($user->last_txn_date)) : null;
+                }
+
+                $data['profile_image'] = '';
+                $data['name'] = $user->name;
+                $data['profile_img'] = $user->profile_image ? asset('storage/' . $user->profile_image) : null;
+                $data['is_active'] = $user->is_active;
+
+                return $data;
             });
 
             return response()->json([

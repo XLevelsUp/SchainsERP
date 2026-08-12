@@ -32,6 +32,12 @@ Route::apiResource( 'users-items-mappings',UsersItemsMappingController::class);
 Route::apiResource('head-employee-mappings', HeadEmployeeMappingController::class);
 Route::apiResource('cash-head-employee-mappings',CashHeadEmployeeMappingController::class);
 Route::post('/login', [AuthController::class, 'login']);
+
+// Cash Dashboard APIs (Must be above apiResource to prevent {id} interception)
+Route::get('cash-txn-details/out-history', [CashTxnDetailController::class, 'getOutHistory']);
+Route::get('cash-txn-details/in-history',  [CashTxnDetailController::class, 'getInHistory']);
+
+
 Route::apiResource('cash-txn-details',CashTxnDetailController::class);
 Route::apiResource('cash-categories', CashCategoryController::class);
 Route::post( 'cash-txn-details/{id}/images',[CashTxnDetailController::class, 'addImages']);
