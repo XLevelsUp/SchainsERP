@@ -21,6 +21,8 @@ use App\Http\Requests\AutoEntryRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+use App\Http\Resources\StockCashHistoryResource;
 use App\Models\StockDetails;
 
 class StockDetailsController extends Controller
@@ -30,42 +32,48 @@ class StockDetailsController extends Controller
      * GET STOCK HISTORY (For Cash Dashboard Bottom Table)
      * ============================================================
      */
-    public function getHistory(Request $request): JsonResponse
-    {
-        try {
-            $headId = $request->query('head_id');
-            $cashUserId = $request->query('cash_user_id');
-            $remarks = $request->query('remarks');
-            $perPage = $request->query('per_page', 50);
+    // public function getHistory(Request $request): JsonResponse
+    // {
+    //     try {
+    //         $headId = $request->query('head_id');
+    //         $cashUserId = $request->query('cash_user_id');
+    //         $remarks = $request->query('remarks');
+    //         $perPage = $request->query('per_page', 50);
 
-            $query = StockDetails::with(['item', 'givenByUser', 'givenToUser', 'addedByUser'])
-                ->where('is_completed', 0)
-                ->where('is_freezed', 0);
+    //         // $query = StockDetails::with(['item', 'givenBy', 'givenTo', 'addedBy'])
+    //         $query = StockDetails::with([
+    //             'item:item_id,item_name', 
+    //             'givenBy:user_id,name,user_name', 
+    //             'givenTo:user_id,name,user_name', 
+    //             'addedBy:user_id,name,user_name'
+    //         ])
+    //             ->where('is_completed', 0)
+    //             ->where('is_freezed', 0);
 
-            if ($remarks && $cashUserId && $headId) {
-                // Specific filter for the Cash Dashboard (e.g. PURCHASE_GOLD)
-                $query->where('given_to', $headId)
-                      ->where('given_by', $cashUserId)
-                      ->where('remarks', $remarks);
-            }
+    //         if ($remarks && $cashUserId && $headId) {
+    //             // Specific filter for the Cash Dashboard (e.g. PURCHASE_GOLD)
+    //             $query->where('given_to', $headId)
+    //                   ->where('given_by', $cashUserId)
+    //                   ->where('remarks', $remarks);
+    //         }
 
-            $stockDetails = $query->orderBy('stock_id', 'desc')->paginate($perPage);
+    //         $stockDetails = $query->orderBy('stock_id', 'desc')->paginate($perPage);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Stock history retrieved successfully',
-                'data' => $stockDetails
-            ], 200);
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Stock history retrieved successfully',
+    //             'data' => $stockDetails
+    //         ], 200);
 
-        } catch (\Exception $e) {
-            Log::error('getHistory failed: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to retrieve stock history',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
+    //     } catch (\Exception $e) {
+    //         Log::error('getHistory failed: ' . $e->getMessage());
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Failed to retrieve stock history',
+    //             'error' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
 
     protected StockOutService $stockOutService;
     protected StockInService $stockInService;
@@ -374,6 +382,59 @@ class StockDetailsController extends Controller
                 'success' => false,
                 'message' => 'Failed to compile Items OB & CB report.',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getCashTransactionHistory(Request $request)
+    {
+        try {
+            $headId = $request->query('head_id');
+            $cashUserId = $request->query('cash_user_id');
+            $perPage = $request->query('per_page', 50);
+
+            $page = $request->query('page', 1);
+
+            $cacheTag = "cash_history_{$headId}_{$cashUserId}";
+            $cacheKey = "stock_cash_history_{$headId}_{$cashUserId}_page_{$page}_perPage_{$perPage}";
+
+            $stockDetailsData = Cache::tags([$cacheTag])->remember($cacheKey, 86400, function () use ($headId, $cashUserId, $perPage) {
+                $query = StockDetails::with([
+                    'item:item_id,item_name', 
+                    'givenBy:user_id,name', 
+                    'givenTo:user_id,name'
+                ])
+                    ->where('is_completed', 0)
+                    ->where('is_freezed', 0)
+                    ->whereIn('remarks', ['IN', 'OUT', 'PURCHASE_GOLD', 'SALE_GOLD', 'GOLD_TO_CASH', 'CASH_TO_GOLD', 'AUTO_ENTRY', 'INTERNAL_TRANSFER']);
+
+                if ($cashUserId && $headId) {
+                    // Get transactions where these two users are involved (either direction)
+                    $query->where(function ($q) use ($headId, $cashUserId) {
+                        $q->where(function ($q1) use ($headId, $cashUserId) {
+                            $q1->where('given_to', $headId)->where('given_by', $cashUserId);
+                        })->orWhere(function ($q2) use ($headId, $cashUserId) {
+                            $q2->where('given_by', $headId)->where('given_to', $cashUserId);
+                        });
+                    });
+                }
+
+                $stockDetails = $query->orderBy('stock_id', 'desc')->paginate($perPage);
+                return StockCashHistoryResource::collection($stockDetails)->response()->getData(true);
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cash stock history retrieved successfully',
+                'data' => $stockDetailsData
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('getCashTransactionHistory failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve cash stock history',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

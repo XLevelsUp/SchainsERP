@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CashTxnDetail extends Model
@@ -35,6 +36,9 @@ class CashTxnDetail extends Model
         'remarks',
         'added_by',
         'cash_to_gold_id',
+        'remainder',
+        'remainder_at',
+        'is_hide',
     ];
 
     protected $casts = [
@@ -70,6 +74,20 @@ class CashTxnDetail extends Model
     public function bank(): BelongsTo
     {
         return $this->belongsTo(BankDetail::class, 'bank_account_id', 'bank_id');
+    }
+
+    protected static function booted()
+    {
+        $flushCache = function ($txn) {
+            if ($txn->sender_id && $txn->recipient_id) {
+                Cache::tags(["cash_history_{$txn->sender_id}_{$txn->recipient_id}"])->flush();
+                Cache::tags(["cash_history_{$txn->recipient_id}_{$txn->sender_id}"])->flush();
+            }
+        };
+
+        static::created($flushCache);
+        static::updated($flushCache);
+        static::deleted($flushCache);
     }
 
     public function category(): BelongsTo

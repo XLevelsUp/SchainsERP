@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Cache;
 
 class StockDetails extends Model
 {
@@ -19,6 +20,7 @@ class StockDetails extends Model
         'entry_type',
         'stock_type',
         'grams',
+        'no_of_pcs',
         'touch',
         'purity',
         'remarks',
@@ -159,5 +161,19 @@ class StockDetails extends Model
     public function numericWastages(): HasMany
     {
         return $this->hasMany(NumericWastage::class, 'stock_id', 'stock_id');
+    }
+
+    protected static function booted()
+    {
+        $flushCache = function ($stock) {
+            if ($stock->given_by && $stock->given_to) {
+                Cache::tags(["cash_history_{$stock->given_by}_{$stock->given_to}"])->flush();
+                Cache::tags(["cash_history_{$stock->given_to}_{$stock->given_by}"])->flush();
+            }
+        };
+
+        static::created($flushCache);
+        static::updated($flushCache);
+        static::deleted($flushCache);
     }
 }
