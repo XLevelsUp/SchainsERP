@@ -41,7 +41,7 @@ class CashTxnDetailController extends Controller
             $cacheTag = "cash_history_{$headId}_{$cashUserId}";
             $cacheKey = "out_history_{$headId}_{$cashUserId}_{$fromDate}_{$toDate}_page_{$page}_perPage_{$perPage}";
 
-            $outHistoryData = Cache::tags([$cacheTag])->remember($cacheKey, 86400, function () use ($headId, $cashUserId, $fromDate, $toDate, $perPage) {
+            $rememberClosure = function () use ($headId, $cashUserId, $fromDate, $toDate, $perPage) {
                 $query = CashTxnDetail::with([
                     'givenByUser:user_id,name,user_name', 
                     'givenToUser:user_id,name,user_name', 
@@ -65,7 +65,13 @@ class CashTxnDetailController extends Controller
 
                 $outHistory = $query->orderBy('txn_id', 'desc')->paginate($perPage);
                 return CashTxnHistoryResource::collection($outHistory)->response()->getData(true);
-            });
+            };
+
+            if (\Illuminate\Support\Facades\Cache::supportsTags()) {
+                $outHistoryData = Cache::tags([$cacheTag])->remember($cacheKey, 86400, $rememberClosure);
+            } else {
+                $outHistoryData = $rememberClosure();
+            }
 
             return response()->json([
                 'success' => true,
@@ -102,7 +108,7 @@ class CashTxnDetailController extends Controller
             $cacheTag = "cash_history_{$headId}_{$cashUserId}";
             $cacheKey = "in_history_{$headId}_{$cashUserId}_{$fromDate}_{$toDate}_page_{$page}_perPage_{$perPage}";
 
-            $inHistoryData = Cache::tags([$cacheTag])->remember($cacheKey, 86400, function () use ($headId, $cashUserId, $fromDate, $toDate, $perPage) {
+            $rememberClosure = function () use ($headId, $cashUserId, $fromDate, $toDate, $perPage) {
                 $query = CashTxnDetail::with([
                     'givenByUser:user_id,name,user_name', 
                     'givenToUser:user_id,name,user_name', 
@@ -126,7 +132,13 @@ class CashTxnDetailController extends Controller
 
                 $inHistory = $query->orderBy('txn_id', 'desc')->paginate($perPage);
                 return CashTxnHistoryResource::collection($inHistory)->response()->getData(true);
-            });
+            };
+
+            if (\Illuminate\Support\Facades\Cache::supportsTags()) {
+                $inHistoryData = Cache::tags([$cacheTag])->remember($cacheKey, 86400, $rememberClosure);
+            } else {
+                $inHistoryData = $rememberClosure();
+            }
 
             return response()->json([
                 'success' => true,

@@ -167,8 +167,10 @@ class StockDetails extends Model
     {
         $flushCache = function ($stock) {
             if ($stock->given_by && $stock->given_to) {
-                Cache::tags(["cash_history_{$stock->given_by}_{$stock->given_to}"])->flush();
-                Cache::tags(["cash_history_{$stock->given_to}_{$stock->given_by}"])->flush();
+                if (Cache::supportsTags()) {
+                    Cache::tags(["cash_history_{$stock->given_by}_{$stock->given_to}"])->flush();
+                    Cache::tags(["cash_history_{$stock->given_to}_{$stock->given_by}"])->flush();
+                }
             }
         };
 

@@ -80,8 +80,10 @@ class CashTxnDetail extends Model
     {
         $flushCache = function ($txn) {
             if ($txn->sender_id && $txn->recipient_id) {
-                Cache::tags(["cash_history_{$txn->sender_id}_{$txn->recipient_id}"])->flush();
-                Cache::tags(["cash_history_{$txn->recipient_id}_{$txn->sender_id}"])->flush();
+                if (Cache::supportsTags()) {
+                    Cache::tags(["cash_history_{$txn->sender_id}_{$txn->recipient_id}"])->flush();
+                    Cache::tags(["cash_history_{$txn->recipient_id}_{$txn->sender_id}"])->flush();
+                }
             }
         };
 

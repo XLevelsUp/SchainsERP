@@ -398,7 +398,7 @@ class StockDetailsController extends Controller
             $cacheTag = "cash_history_{$headId}_{$cashUserId}";
             $cacheKey = "stock_cash_history_{$headId}_{$cashUserId}_page_{$page}_perPage_{$perPage}";
 
-            $stockDetailsData = Cache::tags([$cacheTag])->remember($cacheKey, 86400, function () use ($headId, $cashUserId, $perPage) {
+            $rememberClosure = function () use ($headId, $cashUserId, $perPage) {
                 $query = StockDetails::with([
                     'item:item_id,item_name', 
                     'givenBy:user_id,name', 
@@ -421,7 +421,13 @@ class StockDetailsController extends Controller
 
                 $stockDetails = $query->orderBy('stock_id', 'desc')->paginate($perPage);
                 return StockCashHistoryResource::collection($stockDetails)->response()->getData(true);
-            });
+            };
+
+            if (\Illuminate\Support\Facades\Cache::supportsTags()) {
+                $stockDetailsData = Cache::tags([$cacheTag])->remember($cacheKey, 86400, $rememberClosure);
+            } else {
+                $stockDetailsData = $rememberClosure();
+            }
 
             return response()->json([
                 'success' => true,
