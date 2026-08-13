@@ -406,7 +406,7 @@ class StockDetailsController extends Controller
                 ])
                     ->where('is_completed', 0)
                     ->where('is_freezed', 0)
-                    ->whereIn('remarks', ['IN', 'OUT', 'PURCHASE_GOLD', 'SALE_GOLD', 'GOLD_TO_CASH', 'CASH_TO_GOLD', 'AUTO_ENTRY', 'INTERNAL_TRANSFER']);
+                    ->whereIn('remarks', ['PURCHASE_GOLD', 'SALE_GOLD', 'GOLD_TO_CASH', 'CASH_TO_GOLD']);
 
                 if ($cashUserId && $headId) {
                     // Get transactions where these two users are involved (either direction)
