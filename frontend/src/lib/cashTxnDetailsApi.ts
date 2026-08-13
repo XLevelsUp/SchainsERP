@@ -1,6 +1,11 @@
 import { api, type ApiResponse } from './api'
 import { buildMultipartForm } from './multipartForm'
-import type { CashTxnPostFormValues, CashTxnPostResult } from '@/types'
+import type {
+  CashTxnHistoryPage,
+  CashTxnHistoryQuery,
+  CashTxnPostFormValues,
+  CashTxnPostResult,
+} from '@/types'
 
 const RESOURCE = '/cash-txn-details'
 
@@ -10,10 +15,24 @@ const RESOURCE = '/cash-txn-details'
 // cash-txn write endpoints — the old full CRUD (index/store/update/destroy,
 // plus per-transaction image upload/delete) was dropped from the backend
 // in PR #13 when cash_txn_details/cash_txn_images were reshaped to
-// sender_id/recipient_id/payment_method/cash_txn_id/image_path. There is
-// no replacement list/get endpoint, so a ledger view isn't possible against
-// the current API — only posting new in/out entries.
+// sender_id/recipient_id/payment_method/cash_txn_id/image_path.
+//
+// PR #17 added a read side back — GET .../in-history and .../out-history
+// (below) — but there's still no show/update/destroy for a single row, so
+// history is browsable but not editable.
 // ============================================================================
+
+function buildHistoryQuery(params: CashTxnHistoryQuery): string {
+  const qs = new URLSearchParams()
+  if (params.head_id !== undefined) qs.set('head_id', String(params.head_id))
+  if (params.cash_user_id !== undefined) qs.set('cash_user_id', String(params.cash_user_id))
+  if (params.from_date) qs.set('from_date', params.from_date)
+  if (params.to_date) qs.set('to_date', params.to_date)
+  if (params.per_page !== undefined) qs.set('per_page', String(params.per_page))
+  if (params.page !== undefined) qs.set('page', String(params.page))
+  const s = qs.toString()
+  return s ? `?${s}` : ''
+}
 
 function toPayload(form: CashTxnPostFormValues) {
   const payload: Record<string, unknown> = {
@@ -52,5 +71,17 @@ export const cashTxnDetailsApi = {
       .postForm<ApiResponse<CashTxnPostResult>>(`${RESOURCE}/out`, buildMultipartForm(toPayload(form)), {
         'X-User-ID': String(actingUserId),
       })
+      .then((r) => r.data),
+
+  // type IN (INCOME, AUTO_ENTRY, CASH_TO_GOLD, SALE_GOLD) — see CashTxnHistoryType.
+  getInHistory: (params: CashTxnHistoryQuery) =>
+    api
+      .get<ApiResponse<CashTxnHistoryPage>>(`${RESOURCE}/in-history${buildHistoryQuery(params)}`)
+      .then((r) => r.data),
+
+  // type IN (EXPENSE, PURCHASE_GOLD, INTERNAL_TRANSFER, GOLD_TO_CASH).
+  getOutHistory: (params: CashTxnHistoryQuery) =>
+    api
+      .get<ApiResponse<CashTxnHistoryPage>>(`${RESOURCE}/out-history${buildHistoryQuery(params)}`)
       .then((r) => r.data),
 }

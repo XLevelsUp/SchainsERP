@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
+import { computed } from 'vue'
 
 defineOptions({ inheritAttrs: false })
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     modelValue?: string
     id?: string
@@ -15,6 +16,10 @@ withDefaults(
     autocomplete?: string
     icon?: Component
     size?: 'md' | 'sm'
+    // Every number field project-wide defaults to 3-decimal precision
+    // unless a caller opts into something else (e.g. step="1" for a
+    // genuinely integer field like an ID or a piece count).
+    step?: string
   }>(),
   {
     modelValue: '',
@@ -27,8 +32,11 @@ withDefaults(
     autocomplete: undefined,
     icon: undefined,
     size: 'md',
+    step: undefined,
   },
 )
+
+const effectiveStep = computed(() => props.step ?? (props.type === 'number' ? '0.001' : undefined))
 
 defineEmits<{ 'update:modelValue': [value: string] }>()
 </script>
@@ -53,6 +61,7 @@ defineEmits<{ 'update:modelValue': [value: string] }>()
         :placeholder="placeholder"
         :required="required"
         :autocomplete="autocomplete"
+        :step="effectiveStep"
         v-bind="$attrs"
         class="w-full rounded-lg border border-slate-300 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
         :class="[

@@ -313,7 +313,7 @@ async function handleSubmit() {
           :model-value="form.total_cash === null ? '' : String(form.total_cash)"
           label="Total cash"
           type="number"
-          step="0.01"
+          step="0.001"
           required
           size="sm"
           :error="fieldErrors.total_cash"
@@ -324,7 +324,7 @@ async function handleSubmit() {
           :model-value="form.per_gram_cash === null ? '' : String(form.per_gram_cash)"
           label="Per-gram cash"
           type="number"
-          step="0.01"
+          step="0.001"
           required
           size="sm"
           :error="fieldErrors.per_gram_cash"
@@ -385,7 +385,7 @@ async function handleSubmit() {
             :model-value="source.amount === null ? '' : String(source.amount)"
             label="Amount"
             type="number"
-            step="0.01"
+            step="0.001"
             size="sm"
             :error="fieldErrors[`amount_sources.${index}.amount`]"
             @update:model-value="(v) => (source.amount = v === '' ? null : Number(v))"

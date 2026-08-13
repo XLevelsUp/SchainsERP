@@ -48,7 +48,10 @@ async function loadData() {
   isLoading.value = true
   loadError.value = ''
   try {
-    const [itemsData, usersData] = await Promise.all([itemsApi.list(), userDetailsApi.list()])
+    const [itemsData, usersData] = await Promise.all([
+      itemsApi.list(),
+      userDetailsApi.list(undefined, 'stock'),
+    ])
     items.value = itemsData
     users.value = usersData
   } catch (err) {
@@ -326,7 +329,7 @@ async function handleSubmit() {
                 :model-value="row.touch === null ? '' : String(row.touch)"
                 label="Touch"
                 type="number"
-                step="0.01"
+                step="0.001"
                 size="sm"
                 :error="fieldErrors[`items.${index}.touch`]"
                 @update:model-value="(v) => (row.touch = v === '' ? null : Number(v))"

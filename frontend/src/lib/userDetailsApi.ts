@@ -60,10 +60,17 @@ interface UserDetailEnvelope {
 export const userDetailsApi = {
   // Flattened summary shape (PR #15) — fine for pickers/tables, not for
   // editing. Pass ?type= to filter by role (HEAD/EMPLOYEE/CUSTOMER/...).
-  list: (type?: string) =>
-    api
-      .get<ApiResponse<UserDetailListItem[]>>(type ? `${RESOURCE}?type=${type}` : RESOURCE)
-      .then((r) => r.data),
+  // Pass ?module= to pick which extra fields come back: 'stock' adds
+  // gm/purity, 'cash' adds hand_cash/rtgs_cash — see UserDetailListItem.
+  list: (type?: string, module?: 'stock' | 'cash') => {
+    const params = new URLSearchParams()
+    if (type) params.set('type', type)
+    if (module) params.set('module', module)
+    const qs = params.toString()
+    return api
+      .get<ApiResponse<UserDetailListItem[]>>(qs ? `${RESOURCE}?${qs}` : RESOURCE)
+      .then((r) => r.data)
+  },
 
   get: (id: number) =>
     api.get<ApiResponse<UserDetailEnvelope>>(`${RESOURCE}/${id}`).then((r) => r.data),

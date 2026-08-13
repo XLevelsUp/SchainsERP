@@ -229,7 +229,7 @@ async function handleSubmit() {
             :model-value="row.amount === null ? '' : String(row.amount)"
             label="Amount"
             type="number"
-            step="0.01"
+            step="0.001"
             required
             size="sm"
             :error="fieldErrors[`transactions.${index}.amount`]"

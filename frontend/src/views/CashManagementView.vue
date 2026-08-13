@@ -9,6 +9,7 @@ import GoldToCashModal from '@/components/cash-txn/GoldToCashModal.vue'
 import SaleGoldModal from '@/components/cash-txn/SaleGoldModal.vue'
 import PurchaseGoldModal from '@/components/cash-txn/PurchaseGoldModal.vue'
 import CashAutoEntryModal from '@/components/cash-txn/CashAutoEntryModal.vue'
+import CashTxnHistoryTable from '@/components/cash-txn/CashTxnHistoryTable.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { rolesApi } from '@/lib/rolesApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
@@ -25,17 +26,22 @@ import type { BankDetail, Item, Role, UserDetailListItem } from '@/types'
 | optionally narrow the User picker by Role, pick a User, then quick-action
 | buttons appear and open an in-context modal.
 |
-| Two things from the legacy screen are still NOT rebuildable against the
-| current backend and are left out rather than faked:
-|  - The Out/In ledger tables — cash_txn_details has no working GET/list
-|    endpoint (index/show/update/destroy still reference sender_id-era
-|    columns that don't exist; only postIncome/postExpense/auto-entry
-|    work). From Date/To Date/Print are dropped for the same reason —
-|    nothing to filter or print.
-|  - INTERNAL — no current endpoint accepts it as a transaction type.
-|    Shown disabled with an explanation instead of silently vanishing.
+| History tables (below the quick actions) use PR #17's GET .../in-history
+| and .../out-history — scoped to this head/user pair via head_id +
+| cash_user_id. Coverage: out-history = EXPENSE, PURCHASE_GOLD,
+| GOLD_TO_CASH; in-history = INCOME, AUTO_ENTRY, CASH_TO_GOLD, SALE_GOLD.
+| Two things still don't show up there, both backend-side gaps rather than
+| a frontend limitation:
+|  - INTERNAL — no current endpoint accepts it as a transaction type, and
+|    no service ever writes an INTERNAL_TRANSFER row for the history
+|    filter to find. Shown disabled with an explanation instead of
+|    silently vanishing.
+|  - Purchase Gold's "Out Cash Converter" and Sale Gold's "In Cash
+|    Converter" sub-types are written with those literal type values, but
+|    neither history filter includes them — those transactions are
+|    recorded successfully but won't appear in the history below.
 |
-| AUTO_ENTRY is now wired up (PR #16 added the endpoint) — see
+| AUTO_ENTRY is wired up (PR #16 added the endpoint) — see
 | CashAutoEntryModal.vue for the balance-direction caveat (only the head's
 | side moves).
 |
@@ -67,7 +73,7 @@ async function loadBaseData() {
   loadError.value = ''
   try {
     const [usersData, rolesData, banksData, itemsData] = await Promise.all([
-      userDetailsApi.list(),
+      userDetailsApi.list(undefined, 'cash'),
       rolesApi.list(),
       bankDetailsApi.list(),
       itemsApi.list(),
@@ -90,7 +96,7 @@ async function onRoleFilterChange(role: string) {
   roleFilter.value = role
   userId.value = null
   try {
-    filteredUsers.value = await userDetailsApi.list(role || undefined)
+    filteredUsers.value = await userDetailsApi.list(role || undefined, 'cash')
   } catch {
     // Keep the previous list rather than blanking the picker on a transient failure.
   }
@@ -181,8 +187,14 @@ function openModal(modal: ActiveModal) {
 function closeModal() {
   activeModal.value = null
 }
+
+// Bumped so CashTxnHistoryTable re-fetches page 1 and picks up whatever
+// was just recorded, without needing a full page reload.
+const historyRefreshKey = ref(0)
+
 async function handleSaved() {
   activeModal.value = null
+  historyRefreshKey.value += 1
   await Promise.all([refreshHeadBalance(), refreshUserBalance()])
 }
 </script>
@@ -338,11 +350,32 @@ async function handleSaved() {
       </p>
       <p v-else class="text-sm text-slate-500">Select a Head above to get started.</p>
 
+      <div v-if="canQuickCreate" class="mt-8 grid gap-6 sm:grid-cols-2">
+        <div>
+          <p class="mb-2 text-xs font-semibold tracking-wide text-red-700 uppercase">Out History</p>
+          <CashTxnHistoryTable
+            direction="out"
+            :head-id="headId!"
+            :user-id="userId!"
+            :refresh-key="historyRefreshKey"
+          />
+        </div>
+        <div>
+          <p class="mb-2 text-xs font-semibold tracking-wide text-emerald-700 uppercase">In History</p>
+          <CashTxnHistoryTable
+            direction="in"
+            :head-id="headId!"
+            :user-id="userId!"
+            :refresh-key="historyRefreshKey"
+          />
+        </div>
+      </div>
+
       <p class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        No history of past entries is shown here — Pay/Receive, gold conversions, and Sale/Purchase
-        Gold can only be recorded, not listed, viewed, or edited afterward. INTERNAL is disabled for
-        the same reason: no backend endpoint accepts that type yet. These are known backend gaps,
-        not missing screens.
+        INTERNAL is disabled — no backend endpoint accepts that transaction type yet. Purchase Gold's
+        "Out Cash Converter" and Sale Gold's "In Cash Converter" are recorded successfully but don't
+        appear in the history above — the backend's history filters don't include those two
+        sub-types. Both are known backend gaps, not missing screens.
       </p>
     </template>
 

@@ -258,7 +258,7 @@ async function handleSubmit() {
           :model-value="form.amount === null ? '' : String(form.amount)"
           label="Amount"
           type="number"
-          step="0.01"
+          step="0.001"
           required
           size="sm"
           class="font-semibold tabular-nums"

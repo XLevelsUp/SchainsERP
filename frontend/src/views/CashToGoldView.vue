@@ -60,7 +60,7 @@ async function loadData() {
   loadError.value = ''
   try {
     const [usersData, itemsData, banksData] = await Promise.all([
-      userDetailsApi.list(),
+      userDetailsApi.list(undefined, 'cash'),
       itemsApi.list(),
       bankDetailsApi.list(),
     ])
@@ -343,7 +343,7 @@ async function handleSubmit() {
             :model-value="form.touch === null ? '' : String(form.touch)"
             label="Touch"
             type="number"
-            step="0.01"
+            step="0.001"
             required
             size="sm"
             :error="fieldErrors.touch"
@@ -364,7 +364,7 @@ async function handleSubmit() {
             :model-value="form.per_gram_cash === null ? '' : String(form.per_gram_cash)"
             label="Per-gram cash"
             type="number"
-            step="0.01"
+            step="0.001"
             required
             size="sm"
             :error="fieldErrors.per_gram_cash"
@@ -390,6 +390,7 @@ async function handleSubmit() {
             :model-value="form.retailer_id === null ? '' : String(form.retailer_id)"
             label="Retailer ID (optional)"
             type="number"
+            step="1"
             size="sm"
             @update:model-value="(v) => (form.retailer_id = v === '' ? null : Number(v))"
           />
@@ -446,7 +447,7 @@ async function handleSubmit() {
               :model-value="source.amount === null ? '' : String(source.amount)"
               label="Amount"
               type="number"
-              step="0.01"
+              step="0.001"
               size="sm"
               :error="fieldErrors[`amount_sources.${index}.amount`]"
               @update:model-value="(v) => (source.amount = v === '' ? null : Number(v))"

@@ -157,7 +157,7 @@ async function handleDelete(bank: BankDetail) {
           :model-value="form.ledger_balance === null ? '' : String(form.ledger_balance)"
           label="Ledger balance"
           type="number"
-          step="0.01"
+          step="0.001"
           @update:model-value="(v) => (form.ledger_balance = v === '' ? null : Number(v))"
         />
 
