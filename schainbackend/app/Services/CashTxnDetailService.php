@@ -117,6 +117,10 @@ class CashTxnDetailService
             if ($bankId) {
                 Cache::forget("bank:{$bankId}:balance");
             }
+            if (Cache::supportsTags()) {
+                Cache::tags(["cash_history_{$sender->user_id}_{$recipient->user_id}"])->flush();
+                Cache::tags(["cash_history_{$recipient->user_id}_{$sender->user_id}"])->flush();
+            }
 
             return $txn;
         });
@@ -197,6 +201,10 @@ class CashTxnDetailService
             Cache::forget("user:{$recipient->user_id}:balances");
             if ($bankId) {
                 Cache::forget("bank:{$bankId}:balance");
+            }
+            if (Cache::supportsTags()) {
+                Cache::tags(["cash_history_{$sender->user_id}_{$recipient->user_id}"])->flush();
+                Cache::tags(["cash_history_{$recipient->user_id}_{$sender->user_id}"])->flush();
             }
 
             return $txn;

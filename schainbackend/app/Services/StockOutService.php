@@ -55,6 +55,7 @@ class StockOutService extends BaseStockService
                 $itemId = $itemData['item_id'];
                 $grams = $itemData['grams'];
                 $touch = $itemData['touch'];
+                $noOfPcs = $itemData['no_of_pcs'] ?? null;
                 $remarks = $itemData['remarks'] ?? null;
                 $itemRemarks = $itemData['item_remarks'] ?? null;
                 $wasteId = $itemData['waste_id'] ?? null;
@@ -97,6 +98,7 @@ class StockOutService extends BaseStockService
                     'entry_type' => 'NORMAL',
                     'stock_type' => 'OUT',
                     'grams' => $grams,
+                    'no_of_pcs' => $noOfPcs,
                     'touch' => $touch,
                     'purity' => $purity,
                     'remarks' => $remarks,
@@ -288,9 +290,9 @@ class StockOutService extends BaseStockService
 
                 $inStock->obcb_details = $snapshot;
                 $inStock->given_by_item_grams_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_grams'] ?? 0;
-                $inStock->given_to_item_grams_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_grams'] ?? 0;
+                $inStock->given_to_item_grams_cb = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_grams'] ?? 0;
                 $inStock->given_by_item_purity_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_purity'] ?? 0;
-                $inStock->given_to_item_purity_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_purity'] ?? 0;
+                $inStock->given_to_item_purity_cb = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_purity'] ?? 0;
                 $inStock->saveQuietly();
 
                 // Record Item Change History
@@ -543,6 +545,7 @@ class StockOutService extends BaseStockService
                 $hallMark = $itemData['hall_mark'];
                 $mtouch = $itemData['mtouch'] ?? 0;
                 $mtouchWastage = $itemData['mtouch_wastage'] ?? 0;
+                $noOfPcs = $itemData['no_of_pcs'] ?? null;
                 $remarks = $itemData['remarks'] ?? null;
                 $itemRemarks = $itemData['item_remarks'] ?? null;
                 $itemAddedAt = isset($itemData['added_at']) ? \Illuminate\Support\Carbon::parse($itemData['added_at']) : $addedAt;
@@ -573,6 +576,7 @@ class StockOutService extends BaseStockService
                     'entry_type' => 'NORMAL',
                     'stock_type' => 'OUT',
                     'grams' => $grams,
+                    'no_of_pcs' => $noOfPcs,
                     'touch' => $hallMark,
                     'purity' => $purity,
                     'remarks' => $remarks,
@@ -702,6 +706,7 @@ class StockOutService extends BaseStockService
                     'entry_type' => 'NORMAL',
                     'stock_type' => 'OUT',
                     'grams' => $grams,
+                    'no_of_pcs' => $noOfPcs,
                     'touch' => $touch,
                     'purity' => $purity,
                     'remarks' => $remarks,

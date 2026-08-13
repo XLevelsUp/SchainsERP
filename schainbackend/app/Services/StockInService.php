@@ -52,6 +52,7 @@ class StockInService extends BaseStockService
                 $itemId = $itemData['item_id'];
                 $grams = $itemData['grams'];
                 $touch = $itemData['touch'];
+                $noOfPcs = $itemData['no_of_pcs'] ?? null;
                 $remarks = $itemData['remarks'] ?? null;
                 $itemRemarks = $itemData['item_remarks'] ?? null;
                 $wasteId = $itemData['waste_id'] ?? null;
@@ -94,6 +95,7 @@ class StockInService extends BaseStockService
                     'entry_type' => 'NORMAL',
                     'stock_type' => 'IN',
                     'grams' => $grams,
+                    'no_of_pcs' => $noOfPcs,
                     'touch' => $touch,
                     'purity' => $purity,
                     'remarks' => $remarks,
@@ -175,9 +177,10 @@ class StockInService extends BaseStockService
                 $stone = $itemData['stone'] ?? 0;
                 $thread = $itemData['thread'] ?? 0;
                 $wastage = $itemData['wastage'] ?? 0;
-                $hallMark = $itemData['hall_mark'];
+                $hallMark = $itemData['hall_mark'] ?? 0;
                 $mtouch = $itemData['mtouch'] ?? 0;
                 $mtouchWastage = $itemData['mtouch_wastage'] ?? 0;
+                $noOfPcs = $itemData['no_of_pcs'] ?? null;
                 $remarks = $itemData['remarks'] ?? null;
                 $itemRemarks = $itemData['item_remarks'] ?? null;
                 $itemAddedAt = isset($itemData['added_at']) ? \Illuminate\Support\Carbon::parse($itemData['added_at']) : $addedAt;
@@ -208,6 +211,7 @@ class StockInService extends BaseStockService
                     'entry_type' => 'NORMAL',
                     'stock_type' => 'IN',
                     'grams' => $grams,
+                    'no_of_pcs' => $noOfPcs,
                     'touch' => $hallMark,
                     'purity' => $purity,
                     'remarks' => $remarks,
@@ -336,6 +340,7 @@ class StockInService extends BaseStockService
                     'entry_type' => 'NORMAL',
                     'stock_type' => 'IN',
                     'grams' => $grams,
+                    'no_of_pcs' => $noOfPcs,
                     'touch' => $touch,
                     'purity' => $purity,
                     'remarks' => $remarks,

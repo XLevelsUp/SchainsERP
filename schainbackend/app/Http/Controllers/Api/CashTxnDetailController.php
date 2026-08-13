@@ -11,13 +11,14 @@ use App\Models\BankDetail;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+use App\Http\Resources\CashTxnHistoryResource;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Requests\StoreCashTxnDetailRequest;
 use App\Services\CashTxnDetailService;
-use Illuminate\Support\Facades\Log;
 
 class CashTxnDetailController extends Controller
 {
@@ -35,30 +36,47 @@ class CashTxnDetailController extends Controller
             $toDate = $request->query('to_date');
             $perPage = $request->query('per_page', 15);
 
-            $query = CashTxnDetail::with(['givenByUser', 'givenToUser', 'category', 'bank'])
-                ->whereIn('type', ['EXPENSE', 'PURCHASE_GOLD', 'INTERNAL_TRANSFER', 'GOLD_TO_CASH']);
+            $page = $request->query('page', 1);
+            
+            $cacheTag = "cash_history_{$headId}_{$cashUserId}";
+            $cacheKey = "out_history_{$headId}_{$cashUserId}_{$fromDate}_{$toDate}_page_{$page}_perPage_{$perPage}";
 
-            if ($headId) {
-                // Usually OUT means given_by = head_id and given_to = cash_user_id
-                $query->where('sender_id', $headId);
-            }
-            if ($cashUserId) {
-                $query->where('recipient_id', $cashUserId);
-            }
+            $rememberClosure = function () use ($headId, $cashUserId, $fromDate, $toDate, $perPage) {
+                $query = CashTxnDetail::with([
+                    'givenByUser:user_id,name,user_name', 
+                    'givenToUser:user_id,name,user_name', 
+                    'category:category_id,category_name', 
+                    'bank:bank_id,account_name'
+                ])
+                    ->whereIn('type', ['EXPENSE', 'PURCHASE_GOLD', 'GOLD_TO_CASH']);
 
-            if ($fromDate && $toDate) {
-                $query->whereBetween('created_at', [
-                    date('Y-m-d 00:00:00', strtotime($fromDate)), 
-                    date('Y-m-d 23:59:59', strtotime($toDate))
-                ]);
-            }
+                if ($headId) {
+                    $query->where(function($q) use ($headId, $cashUserId) {
+                        $q->where('sender_id', $headId)->where('recipient_id', $cashUserId);
+                    });
+                }
 
-            $transactions = $query->orderBy('txn_id', 'desc')->paginate($perPage);
+                if ($fromDate && $toDate) {
+                    $query->whereBetween('created_at', [
+                        date('Y-m-d 00:00:00', strtotime($fromDate)), 
+                        date('Y-m-d 23:59:59', strtotime($toDate))
+                    ]);
+                }
+
+                $outHistory = $query->orderBy('txn_id', 'desc')->paginate($perPage);
+                return CashTxnHistoryResource::collection($outHistory)->response()->getData(true);
+            };
+
+            if (\Illuminate\Support\Facades\Cache::supportsTags()) {
+                $outHistoryData = Cache::tags([$cacheTag])->remember($cacheKey, 86400, $rememberClosure);
+            } else {
+                $outHistoryData = $rememberClosure();
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Cash OUT history retrieved successfully',
-                'data' => $transactions
+                'data' => $outHistoryData
             ], 200);
 
         } catch (\Exception $e) {
@@ -85,30 +103,47 @@ class CashTxnDetailController extends Controller
             $toDate = $request->query('to_date');
             $perPage = $request->query('per_page', 15);
 
-            $query = CashTxnDetail::with(['givenByUser', 'givenToUser', 'category', 'bank'])
-                ->whereIn('type', ['INCOME', 'AUTO_ENTRY', 'CASH_TO_GOLD', 'SALE_GOLD']);
+            $page = $request->query('page', 1);
 
-            if ($headId) {
-                // IN means given_to = head_id and given_by = cash_user_id
-                $query->where('recipient_id', $headId);
-            }
-            if ($cashUserId) {
-                $query->where('sender_id', $cashUserId);
-            }
+            $cacheTag = "cash_history_{$headId}_{$cashUserId}";
+            $cacheKey = "in_history_{$headId}_{$cashUserId}_{$fromDate}_{$toDate}_page_{$page}_perPage_{$perPage}";
 
-            if ($fromDate && $toDate) {
-                $query->whereBetween('created_at', [
-                    date('Y-m-d 00:00:00', strtotime($fromDate)), 
-                    date('Y-m-d 23:59:59', strtotime($toDate))
-                ]);
-            }
+            $rememberClosure = function () use ($headId, $cashUserId, $fromDate, $toDate, $perPage) {
+                $query = CashTxnDetail::with([
+                    'givenByUser:user_id,name,user_name', 
+                    'givenToUser:user_id,name,user_name', 
+                    'category:category_id,category_name', 
+                    'bank:bank_id,account_name'
+                ])
+                    ->whereIn('type', ['INCOME', 'SALE_GOLD', 'CASH_TO_GOLD', 'AUTO_ENTRY']);
 
-            $transactions = $query->orderBy('txn_id', 'desc')->paginate($perPage);
+                if ($headId) {
+                    $query->where(function($q) use ($headId, $cashUserId) {
+                        $q->where('recipient_id', $headId)->where('sender_id', $cashUserId);
+                    });
+                }
+
+                if ($fromDate && $toDate) {
+                    $query->whereBetween('created_at', [
+                        date('Y-m-d 00:00:00', strtotime($fromDate)), 
+                        date('Y-m-d 23:59:59', strtotime($toDate))
+                    ]);
+                }
+
+                $inHistory = $query->orderBy('txn_id', 'desc')->paginate($perPage);
+                return CashTxnHistoryResource::collection($inHistory)->response()->getData(true);
+            };
+
+            if (\Illuminate\Support\Facades\Cache::supportsTags()) {
+                $inHistoryData = Cache::tags([$cacheTag])->remember($cacheKey, 86400, $rememberClosure);
+            } else {
+                $inHistoryData = $rememberClosure();
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Cash IN history retrieved successfully',
-                'data' => $transactions
+                'data' => $inHistoryData
             ], 200);
 
         } catch (\Exception $e) {
@@ -134,6 +169,40 @@ class CashTxnDetailController extends Controller
             $fromDate = $request->query('from_date');
             $toDate = $request->query('to_date');
 
+            $txnId = $request->query('id');
+
+            // Handle Single Transaction Thermal Print
+            if ($txnId) {
+                $transaction = CashTxnDetail::with(['givenByUser', 'givenToUser'])->find($txnId);
+                
+                if (!$transaction) {
+                    return response()->json(['success' => false, 'message' => 'Transaction not found'], 404);
+                }
+
+                $heading = $transaction->type === 'INCOME' ? 'CASH IN' : ($transaction->type === 'EXPENSE' ? 'CASH OUT' : $transaction->type);
+                $givenByName = $transaction->givenByUser->name ?? 'Unknown';
+                $givenToName = $transaction->givenToUser->name ?? 'Unknown';
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Thermal print data retrieved successfully',
+                    'data' => [
+                        'heading' => $heading,
+                        'given_by_name' => $givenByName,
+                        'given_to_name' => $givenToName,
+                        'date' => $transaction->created_at ? $transaction->created_at->format('d-M-Y H:i:s') : '',
+                        'ob_label' => $givenByName . ' Bal OB',
+                        'ob_amount' => $transaction->sender_ob,
+                        'bill_no' => $transaction->txn_id,
+                        'amount' => $transaction->amount,
+                        'cb_label' => $givenByName . ' Ex. CB',
+                        'cb_amount' => $transaction->sender_cb,
+                        'remarks' => $transaction->remarks
+                    ]
+                ], 200);
+            }
+
+            // Otherwise, Handle Bulk Report
             $query = CashTxnDetail::with(['givenByUser', 'givenToUser', 'category']);
 
             if ($headId && $cashUserId) {
