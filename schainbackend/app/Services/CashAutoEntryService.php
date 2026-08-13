@@ -68,6 +68,8 @@ class CashAutoEntryService
                     $remarks = 'AUTO_ENTRY';
                 }
 
+                $txnDate = $txnData['date'] ?? $txnData['added_at'] ?? $data['date'] ?? now();
+
                 $txn = CashTxnDetail::create([
                     'type' => 'AUTO_ENTRY', // Legacy hardcoded it to AUTO_ENTRY
                     'sender_id' => $givenBy,
@@ -86,8 +88,18 @@ class CashAutoEntryService
                     'bank_account_id' => null,
                     'remarks' => $remarks,
                     'added_by' => $addedBy,
-                    'added_at' => $txnData['added_at'] ?? now(),
                 ]);
+
+                // Update the transaction dates
+                DB::table('cash_txn_details')
+                    ->where('txn_id', $txn->txn_id)
+                    ->update([
+                        'created_at' => $txnDate,
+                        'updated_at' => $txnDate,
+                    ]);
+                
+                $txn->created_at = $txnDate;
+                $txn->updated_at = $txnDate;
 
                 // Save attachment file paths if present for this specific row
                 if (!empty($txnData['images'])) {
