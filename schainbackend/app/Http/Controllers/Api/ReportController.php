@@ -16,7 +16,7 @@ class ReportController extends Controller
      * Get Cash Transactions for the Reports Page.
      * Legacy UI Replication.
      */
-    public function getCashTransactions(Request $request): JsonResponse
+    public function getCashTransactionsObcb(Request $request): JsonResponse
     {
         try {
             $query = CashTxnDetail::with([
