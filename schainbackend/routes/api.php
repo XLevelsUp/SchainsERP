@@ -41,6 +41,7 @@ Route::prefix('v1')->group(function () {
     Route::get('cash-txn-details/print-report', [CashTxnDetailController::class, 'getPrintReport']);
     // Route::get('stock-details/history',        [StockDetailsController::class, 'getHistory']);
     Route::get('stock-details/cash-transaction-history', [StockDetailsController::class, 'getCashTransactionHistory']);
+    Route::get('stock-details/available-metals', [StockDetailsController::class, 'getAvailableMetals']);
 
     Route::apiResource('cash-txn-details', CashTxnDetailController::class);
     Route::apiResource('cash-categories', CashCategoryController::class);
@@ -65,7 +66,7 @@ Route::prefix('v1/stock')->group(function () {
     Route::post('in', [StockDetailsController::class, 'postStockIn']);
     Route::post('item-change', [StockDetailsController::class, 'postItemChange']);
     Route::post('item-conversion', [StockDetailsController::class, 'postItemConversion']);
-    // Route::post('gms', [StockDetailsController::class, 'postGmsOut']);
+    // Route::post('gms-out', [StockDetailsController::class, 'postGmsOut']);
     // Route::post('gms-in', [StockDetailsController::class, 'postGmsIn']);
     // Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
     // Route::post('numeric-waste-in', [StockDetailsController::class, 'postNumericWasteIn']);
