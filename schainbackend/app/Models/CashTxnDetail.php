@@ -101,4 +101,9 @@ class CashTxnDetail extends Model
     {
         return $this->hasMany(CashTxnImage::class, 'cash_txn_id', 'txn_id');
     }
+
+    public function cashToGold(): BelongsTo
+    {
+        return $this->belongsTo(CashToGold::class, 'cash_to_gold_id', 'cash_to_gold_id');
+    }
 }
