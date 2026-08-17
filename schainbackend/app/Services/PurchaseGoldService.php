@@ -60,6 +60,7 @@ class PurchaseGoldService extends BaseStockService
                 'remarks' => $data['remarks'] ?? null,
                 'retailer_id' => $data['retailer_id'] ?? null,
                 'is_rate_avg' => $data['is_rate_avg'] ?? false,
+                'is_live' => $data['is_live'] ?? false,
                 'added_by' => $addedBy,
                 'added_at' => $data['added_at'] ?? now(),
             ]);
@@ -137,6 +138,7 @@ class PurchaseGoldService extends BaseStockService
                         'recipient_closing_cash' => (float) $customer->cash_balance,
                         'recipient_closing_rtgs' => (float) $customer->rtgs_balance,
                         'remarks' => $txnType . ' | ' . ($data['remarks'] ?? ''),
+                        'bank_entry_date' => $data['bank_entry_date'] ?? null,
                         'cash_to_gold_id' => $record->cash_to_gold_id,
                         'added_by' => $addedBy,
                     ]);
@@ -176,6 +178,7 @@ class PurchaseGoldService extends BaseStockService
                     'recipient_closing_cash' => (float) $customer->fresh()->cash_balance,
                     'recipient_closing_rtgs' => (float) $customer->fresh()->rtgs_balance,
                     'remarks' => 'PURCHASE_GOLD Journal | ' . ($data['remarks'] ?? ''),
+                    'bank_entry_date' => $data['bank_entry_date'] ?? null,
                     'cash_to_gold_id' => $record->cash_to_gold_id,
                     'added_by' => $addedBy,
                 ]);

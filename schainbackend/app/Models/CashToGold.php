@@ -44,6 +44,7 @@ class CashToGold extends Model
         'partial_amount',
         'balance_amount',
         'adjust_cash',
+        'is_live',
     ];
 
     protected $casts = [
@@ -62,6 +63,7 @@ class CashToGold extends Model
         'adjust_cash'           => 'double',
         'amnt_transfer_to_head' => 'boolean',
         'is_rate_avg'           => 'boolean',
+        'is_live'               => 'boolean',
         'added_at'              => 'datetime',
     ];
 

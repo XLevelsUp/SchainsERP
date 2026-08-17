@@ -39,6 +39,7 @@ class CashTxnDetail extends Model
         'remainder',
         'remainder_at',
         'is_hide',
+        'bank_entry_date',
     ];
 
     protected $casts = [
