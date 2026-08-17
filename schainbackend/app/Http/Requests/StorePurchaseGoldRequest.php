@@ -31,6 +31,7 @@ class StorePurchaseGoldRequest extends FormRequest
             'is_rate_avg'                    => 'nullable|boolean',
             'retailer_id'                    => 'nullable|integer|exists:user_details,user_id',
             'bank_entry_date'                => 'nullable|date',
+            'is_live'                        => 'nullable|boolean',
 
             // Top-level receipt images (all-in-one upload)
             'images'                         => 'nullable|array',

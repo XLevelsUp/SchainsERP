@@ -18,6 +18,7 @@ class CashCategory extends Model
         'category_type',
         'is_active',
         'added_by',
+        'cash_main_category_id',
     ];
 
     protected $casts = [
