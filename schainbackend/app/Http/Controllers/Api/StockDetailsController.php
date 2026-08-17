@@ -24,6 +24,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use App\Http\Resources\StockCashHistoryResource;
 use App\Models\StockDetails;
+use App\Models\Item;
+use App\Http\Resources\AvailableMetalResource;
 
 class StockDetailsController extends Controller
 {
@@ -440,6 +442,73 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve cash stock history',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get available metal stocks for the frontend pop-up selection.
+     */
+    public function getAvailableMetals(Request $request): JsonResponse
+    {
+        try {
+            $userId = $request->query('user_id');
+            $itemId = $request->query('item_id');
+
+            if (!$userId || !$itemId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'user_id and item_id are required'
+                ], 400);
+            }
+
+            // Validate that the requested item is actually a "metal"
+            $item = Item::find($itemId);
+            if (!$item || strtolower($item->item_name) !== 'metal') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Selected item is not valid for metal selection'
+                ], 400);
+            }
+
+            // Query available metal stocks replicating legacy logic exactly
+            $metals = StockDetails::with([
+                    'givenBy:user_id,name,user_name',
+                    'givenTo:user_id,name,user_name'
+                ])
+                ->where('given_to', $userId)
+                ->where('balance', '>', 0)
+                ->where('remarks', '!=', 'CASH_TO_GOLD')
+                ->whereIn('entry_type', ['NORMAL', 'EMPTOHEAD', 'HEADTOHEAD'])
+                ->where(function ($q) use ($itemId) {
+                    $q->where(function ($q1) use ($itemId) {
+                        $q1->where('entry_type', 'NORMAL')->where('item_id', $itemId);
+                    })->orWhere(function ($q2) use ($itemId) {
+                        $q2->where('entry_type', '!=', 'NORMAL')->where('to_item_id', $itemId);
+                    });
+                })
+                ->where(function ($q) {
+                    $q->where(function ($q1) {
+                        $q1->whereIn('type', ['ITEMCHANGE', 'ITEMCONVERSION'])->where('stock_type', '!=', 'OUT');
+                    })->orWhere(function ($q2) {
+                        $q2->whereNotIn('type', ['ITEMCHANGE', 'ITEMCONVERSION'])->whereIn('stock_type', ['IN', 'OUT']);
+                    });
+                })
+                ->where('is_hided', 0)
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Available metal stocks retrieved successfully',
+                'data' => AvailableMetalResource::collection($metals)
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('getAvailableMetals failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve metal stocks',
                 'error' => $e->getMessage()
             ], 500);
         }
