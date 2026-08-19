@@ -48,7 +48,7 @@ class CashTxnDetailController extends Controller
                     'category:category_id,category_name', 
                     'bank:bank_id,account_name'
                 ])
-                    ->whereIn('type', ['EXPENSE', 'PURCHASE_GOLD', 'GOLD_TO_CASH']);
+                    ->whereIn('type', ['EXPENSE', 'PURCHASE_GOLD', 'GOLD_TO_CASH', 'OUT_CASH_CONVERTER']);
 
                 if ($headId) {
                     $query->where(function($q) use ($headId, $cashUserId) {
@@ -115,7 +115,7 @@ class CashTxnDetailController extends Controller
                     'category:category_id,category_name', 
                     'bank:bank_id,account_name'
                 ])
-                    ->whereIn('type', ['INCOME', 'SALE_GOLD', 'CASH_TO_GOLD', 'AUTO_ENTRY']);
+                    ->whereIn('type', ['INCOME', 'SALE_GOLD', 'CASH_TO_GOLD', 'AUTO_ENTRY', 'IN_CASH_CONVERTER']);
 
                 if ($headId) {
                     $query->where(function($q) use ($headId, $cashUserId) {

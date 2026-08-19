@@ -40,7 +40,7 @@ class NumericWastageIn extends Model
         'cash_txn_id' => 'integer',
         'added_at' => 'datetime',
     ];
-
+  
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class, 'item_id', 'item_id');
@@ -53,6 +53,6 @@ class NumericWastageIn extends Model
 
     public function cashTxn(): BelongsTo
     {
-        return $this->belongsTo(CashTxn::class, 'cash_txn_id', 'txn_id');
+        return $this->belongsTo(MonetaryTransaction::class, 'cash_txn_id', 'id');
     }
 }
