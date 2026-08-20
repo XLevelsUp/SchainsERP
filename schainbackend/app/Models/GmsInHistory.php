@@ -27,7 +27,7 @@ class GmsInHistory extends Model
         'gms_stock_in_id',
         'added_at',
     ];
-
+      
     protected $casts = [
         'item_id' => 'integer',
         'grams' => 'decimal:4',
