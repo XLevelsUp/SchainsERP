@@ -173,6 +173,23 @@ class StockTestDataSeeder extends Seeder
             ]
         );
 
+        // Wastage details
+        WastageDetails::firstOrCreate(
+            ['waste_id' => 1],
+            [
+                'waste_name' => 'Wastage 1',
+                'waste_value' => '0.1',
+            ]
+        );
+
+        WastageDetails::firstOrCreate(
+            ['waste_id' => 2],
+            [
+                'waste_name' => 'Wastage 2',
+                'waste_value' => '0.2',
+            ]
+        );
+
         // Banks
         BankDetail::updateOrCreate(
             ['bank_id' => 1],
