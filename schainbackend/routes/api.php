@@ -69,5 +69,6 @@ Route::prefix('v1/stock')->group(function () {
     Route::post('gms-out', [StockDetailsController::class, 'postGmsOut']);
     Route::post('gms-in', [StockDetailsController::class, 'postGmsIn']);
     Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
+    Route::post('numeric-waste-in', [StockDetailsController::class, 'postNumericWasteIn']);
 
 });
