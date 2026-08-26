@@ -1,0 +1,1129 @@
+Stock Outward Module API Testing & Parameters Document
+
+
+This document provides the exact URL endpoints, request headers, and multi-item dynamic grid payload examples including frontend-calculated values (purity, waste_value / wValue) and custom timestamps (added_at) for testing all modules.
+
+Before testing, run the database seeder to initialize the test users and items in your database:
+
+bash
+
+php artisan db:seed --class=StockTestDataSeeder
+Head Admin (User ID 1): Has 1000.0000 grams gold balance, 920.0000 purity balance, and 50,000.0000 cash balance.
+Employee Worker (User ID 2): Has 0.0000 gold balance and 1,000.0000 cash balance.
+Gold Ring (Item ID 1) and Gold Chain (Item ID 2) are initialized with active mappings.
+
+
+
+1. New Out (Stock Outward Entry) - Submitting Multiple Items
+
+
+Registers multiple outward gold transfers to a worker or retailer in a single API request, including frontend-calculated wastage and purity override values.
+
+URL: POST /api/v1/stock/out
+
+Headers:
+
+Content-Type: application/json
+X-User-ID: 1
+Request Body (Multiple Rows with 10 fields):
+
+json
+
+{
+    "given_by": 1,
+    "given_to": 2,
+    "items": [
+        {
+            "item_id": 1,
+            "grams": 50.0000,
+            "touch": 92.0000,
+            "waste_id": 1,
+            "waste_total": 0.1800,
+            "waste_value": 0.0900,
+            "purity": 46.0900,
+            "remarks": "Order description 1",
+            "item_remarks": "First item remarks",
+            "added_at": "2026-08-03 23:26:41"
+        },
+        {
+            "item_id": 2,
+            "grams": 30.0000,
+            "touch": 92.0000,
+            "waste_id": null,
+            "waste_total": 0.0000,
+            "waste_value": 0.0000,
+            "purity": 27.6000,
+            "remarks": "Order description 2",
+            "item_remarks": "Second item remarks",
+            "added_at": "2026-08-03 23:26:41"
+        }
+    ]
+}
+
+
+
+
+
+Parameters Description:
+
+given_by (integer): ID of head administrator sending the gold.
+given_to (integer): ID of employee receiving the gold.
+items (array): List of items to outsource (each item can contain up to 10 fields):
+item_id (integer): Reference to the item master.
+grams (decimal): Gross weight of gold transferred.
+touch (decimal): Touch/purity percentage (e.g. 91.6000).
+waste_id (integer, optional): Wastage configuration row ID.
+waste_total (decimal, optional): Wastage rate percentage.
+waste_value or wValue (decimal, optional): Pre-calculated wastage grams from frontend.
+purity (decimal, optional): Pre-calculated purity grams from frontend.
+remarks (string, optional): Drop-down selection description.
+item_remarks (string, optional): Custom description text.
+added_at (string, optional): ISO/Y-m-d H:i:s custom timestamp.
+
+
+
+
+
+
+
+2. Item Change (Swap Submodule) - Submitting Multiple Items
+Performs category swapping of items under a specific user. Multiple swaps can be done in a single request.
+
+URL: POST /api/v1/stock/item-change
+Headers:
+Content-Type: application/json
+X-User-ID: 1
+
+
+
+Request Body (Multiple Rows):
+json
+
+{
+    "user_id": 2,
+    "items": [
+        {
+            "stock_in_id": 1,
+            "from_item_id": 1,
+            "to_item_id": 2,
+            "grams": 6.0000,
+            "from_touch": 92.0000,
+            "req_touch": 92.0000,
+            "purity": 5.5200,
+            "remarks": "Change description 1",
+            "item_remarks": "Custom notes 1",
+            "added_at": "2026-08-03 23:26:41"
+        },
+        {
+            "stock_in_id": 1,
+            "from_item_id": 1,
+            "to_item_id": 2,
+            "grams": 4.0000,
+            "from_touch": 92.0000,
+            "req_touch": 92.0000,
+            "purity": 3.6800,
+            "remarks": "Change description 2",
+            "item_remarks": "",
+            "added_at": "2026-08-03 23:26:41"
+        }
+    ]
+}
+
+3.Item Conversion (Conversion Submodule) - Submitting Multiple Items
+
+
+
+Converts gold items of different touch levels with target touch conversions, alloy details, and pre-calculated purity fields.
+
+URL: POST /api/v1/stock/item-conversion
+Headers:
+Content-Type: application/json
+X-User-ID: 1
+Request Body (Multiple Rows):
+json
+
+{
+    "user_id": 2,
+    "items": [
+        {
+            "stock_in_id": 1,
+            "source_item_id": 1,
+            "target_item_id": 2,
+            "source_grams": 10.0000,
+            "source_touch": 90.0000,
+            "target_touch": 75.0000,
+            "purity": 9.0000,
+            "remarks": "Touch conversion description 1",
+            "item_remarks": "Custom remarks 1",
+            "added_at": "2026-08-03 23:26:41",
+            "alloys": [
+                {
+                    "alloy_item_id": 2,
+                    "alloy_percentage": 100.0000,
+                    "alloy_grams": 2.0000
+                }
+            ]
+        },
+        {
+            "stock_in_id": 1,
+            "source_item_id": 1,
+            "target_item_id": 2,
+            "source_grams": 5.0000,
+            "source_touch": 90.0000,
+            "target_touch": 75.0000,
+            "purity": 4.5000,
+            "remarks": "Touch conversion description 2",
+            "item_remarks": "",
+            "added_at": "2026-08-03 23:26:41"
+        }
+    ]
+}
+
+
+
+4.New In (Stock Inward Entry) - Submitting Multiple Items
+
+
+
+Registers multiple return entries from a worker/retailer back to head inventory.
+
+URL: POST /api/v1/stock/in
+Headers:
+Content-Type: application/json
+X-User-ID: 1
+Request Body:
+json
+
+{
+    "given_by": 2,
+    "given_to": 1,
+    "items": [
+        {
+            "item_id": 1,
+            "grams": 50.0000,
+            "touch": 92.0000,
+            "waste_id": 1,
+            "waste_total": 0.1800,
+            "waste_value": 0.0900,
+            "purity": 46.0900,
+            "remarks": "Order description 1",
+            "item_remarks": "First item remarks",
+            "added_at": "2026-08-03 23:26:41"
+        }
+    ]
+}
+
+
+
+
+
+
+Cash & Gold Transaction Modules 
+Before testing the Cash and Gold Transaction modules below, ensure you have initialized the necessary users, items, bank details, and cash categories by running:
+
+bash
+
+php artisan db:seed --class=StockTestDataSeeder
+php artisan db:seed --class=CashCategorySeeder
+(The StockTestDataSeeder creates the Head Admin and Employee test users with initial cash/gold balances, and initializes a Bank Account for testing bank payments. The CashCategorySeeder creates the default Expense/Income/Auto Entry categories.)
+
+5. Cash Transaction IN (Income / Receipt)
+Creates a cash or bank receipt transaction, updates double-entry balances, and automatically manages Redis cache.
+
+URL: POST /api/v1/cash-txn-details/in
+Headers:
+Content-Type: application/json
+X-User-ID: 1
+Request Body Example (Cash Income):
+json
+
+{
+    "given_by": 2,
+    "given_to": 1,
+    "amount": 250.0000,
+    "souce_type": "CASH_ON_HAND",
+    "remarks": "Cash collection from employee"
+}
+Request Body Example (Bank Income):
+json
+
+{
+    "given_by": 2,
+    "given_to": 1,
+    "amount": 1000.0000,
+    "souce_type": "BANK",
+    "bank_id": 1,
+    "bank_name": "HDFC Bank Ltd",
+    "remarks": "RTGS received"
+}
+Parameters Description:
+given_by (integer): ID of sender.
+given_to (integer): ID of recipient.
+amount (decimal): Transaction amount.
+souce_type (string): CASH_ON_HAND or BANK.
+bank_id (integer, optional): Required if souce_type is BANK.
+remarks (string, optional): Description.
+images (array of files, optional): Receipt image uploads (must be JPG, JPEG, PNG, or WEBP formats up to 5MB each).
+
+
+
+6. Cash Transaction OUT (Expense / Payout)
+Creates a cash or bank payment transaction, checks for sufficient balance under pessimistic locking, updates ledger balances, and manages Redis cache.
+
+URL: POST /api/v1/cash-txn-details/out
+Headers:
+Content-Type: application/json
+X-User-ID: 1
+Request Body Example (Cash Expense):
+json
+
+{
+    "given_by": 1,
+    "given_to": 2,
+    "amount": 150.0000,
+    "souce_type": "CASH_ON_HAND",
+    "remarks": "Petty cash payout to employee"
+}
+Request Body Example (Bank Expense):
+json
+
+{
+    "given_by": 1,
+    "given_to": 2,
+    "amount": 500.0000,
+    "souce_type": "BANK",
+    "bank_id": 1,
+    "bank_name": "HDFC Bank Ltd",
+    "remarks": "Supplier payment via bank"
+}
+Parameters Description:
+given_by (integer): ID of sender.
+given_to (integer): ID of recipient.
+amount (decimal): Transaction amount.
+souce_type (string): CASH_ON_HAND or BANK.
+bank_id (integer, optional): Required if souce_type is BANK.
+remarks (string, optional): Description.
+images (array of files, optional): Receipt image uploads (must be JPG, JPEG, PNG, or WEBP formats up to 5MB each).
+
+
+7. Cash To Gold (CUSTOMER Cash receipt for Gold OUT)
+Submits a Cash To Gold transaction. Frontend is responsible for calculating standard fields (total_grams, purity). The backend atomically records the transaction, populates payment sources (supporting multiple dynamic rows of CASH or BANK), and records ledger details and stock updates.
+
+URL: POST /api/v1/cash-to-gold
+Headers:
+Content-Type: application/json
+Authorization: Bearer <token> (or fallback user ID)
+Request Body (Single Cash Source):
+json
+
+{
+    "head_id": 1,
+    "customer_id": 2,
+    "total_cash": 50000.00,
+    "per_gram_cash": 6500.00,
+    "total_grams": 7.6923,
+    "touch": 100.00,
+    "purity": 7.6923,
+    "item_id": 1,
+    "amnt_transfer_to_head": true,
+    "remarks": "Gold ring conversion test",
+    "amount_sources": [
+        {
+            "source": "CASH_ON_HAND",
+            "bank_id": null,
+            "amount": 50000.00
+        }
+    ]
+}
+Request Body (Multiple Mixed Sources):
+json
+
+{
+    "head_id": 1,
+    "customer_id": 2,
+    "total_cash": 100000.00,
+    "per_gram_cash": 6500.00,
+    "total_grams": 15.3846,
+    "touch": 100.00,
+    "purity": 15.3846,
+    "item_id": 1,
+    "amnt_transfer_to_head": true,
+    "remarks": "Split cash and bank sources",
+    "amount_sources": [
+        {
+            "source": "CASH_ON_HAND",
+            "bank_id": null,
+            "amount": 40000.00
+        },
+        {
+            "source": "BANK",
+            "bank_id": 1,
+            "amount": 60000.00
+        }
+    ]
+}
+Parameters Description:
+head_id (integer): ID of head user receiving payment.
+customer_id (integer): ID of customer making payment.
+total_cash (decimal): Total transaction value.
+per_gram_cash (decimal): Gold rate per gram.
+total_grams (decimal): Total gold grams weight.
+touch (decimal): Touch/purity percentage (defaults to 100).
+purity (decimal): Purity value.
+item_id (integer): Linked gold item ID.
+amnt_transfer_to_head (boolean): Master toggle for Cash/Bank processing (The "Yes/No" Button).
+If true (YES): The system processes the amount_sources array. It handles the physical cash movement directly from/to the Head Admin's live Cash/Bank balances and creates CashTxnDetail audit logs. The Customer's cash balance is untouched.
+If false (NO): The system completely bypasses the amount_sources array and the Head Admin's balances. Instead, the full cash value is deducted/added directly to the Customer's internal Cash Ledger balance as a Journal Entry.
+images (array of files, optional): Receipt image uploads (must be JPG, JPEG, PNG, or WEBP formats up to 5MB each).
+amount_sources (array): Breakdown of source rows:
+source (string): CASH_ON_HAND or BANK.
+bank_id (integer, required if source is BANK): Reference bank ID.
+amount (decimal): Split amount for the source row.
+8. Gold To Cash (Customer returns Gold for Cash payout)
+Submits a Gold To Cash transaction. Frontend calculations are passed directly to backend to insert values into the database atomically.
+
+URL: POST /api/v1/gold-to-cash
+Headers:
+Content-Type: application/json
+Authorization: Bearer <token>
+Request Body Example:
+json
+
+{
+    "head_id": 1,
+    "customer_id": 2,
+    "total_gold": 7.6923,
+    "touch": 100.00,
+    "total_grams": 7.6923,
+    "per_gram_cash": 6500.00,
+    "total_cash": 50000.00,
+    "remarks": "Return test",
+    "amount_sources": [
+        {
+            "source": "CASH_ON_HAND",
+            "bank_id": null,
+            "amount": 50000.00
+        }
+    ]
+}
+Parameters Description:
+head_id (integer): ID of head user paying out cash.
+customer_id (integer): ID of customer receiving cash and returning gold.
+total_gold (decimal): Pure weight of gold returned (stored in purity database column).
+touch (decimal): Touch percentage.
+total_grams (decimal): Adjusted gross weight of gold returned (stored in total_grams database column).
+per_gram_cash (decimal): Gold rate per gram.
+total_cash (decimal): Total payout amount paid by head.
+images (array of files, optional): Receipt image uploads (must be JPG, JPEG, PNG, or WEBP formats up to 5MB each).
+amount_sources (array): Breakdown of source rows:
+source (string): CASH_ON_HAND or BANK.
+bank_id (integer, required if source is BANK): Reference bank ID.
+amount (decimal): Payout split amount.
+
+
+9. Purchase Gold (Customer delivers Gold, Head pays Cash)
+Submits a Purchase Gold transaction. Frontend calculations are passed directly to backend to insert values into the database atomically.
+
+URL: POST /api/v1/purchase-gold
+Headers:
+Content-Type: application/json
+Authorization: Bearer <token>
+Request Body Example:
+json
+
+{
+    "type": "HEAD",
+    "head_id": 1,
+    "customer_id": 2,
+    "total_cash": 40000.00,
+    "per_gram_cash": 5000.00,
+    "total_grams": 8.0000,
+    "touch": 100.00,
+    "purity": 8.0000,
+    "item_id": 1,
+    "amnt_transfer_to_head": true,
+    "remarks": "Purchase gold live remarks",
+    "amount_sources": [
+        {
+            "source": "CASH_ON_HAND",
+            "bank_id": null,
+            "amount": 10000.00
+        },
+        {
+            "source": "BANK",
+            "bank_id": 1,
+            "amount": 30000.00
+        }
+    ]
+}
+Parameters Description:
+type (string): Transaction sub-type (HEAD or OUT_CASH_CONVERTER).
+head_id (integer): ID of head user receiving gold.
+customer_id (integer): ID of customer delivering gold.
+total_cash (decimal): Total cash payout value.
+per_gram_cash (decimal): Gold rate per gram.
+total_grams (decimal): Gross weight of gold purchased.
+touch (decimal): Touch/purity percentage.
+purity (decimal): Purity value.
+item_id (integer): Gold item ID.
+amnt_transfer_to_head (boolean): Master toggle for Cash/Bank processing (The "Yes/No" Button).
+If true (YES): The system processes the amount_sources array. It handles the physical cash movement directly from/to the Head Admin's live Cash/Bank balances and creates CashTxnDetail audit logs. The Customer's cash balance is untouched.
+If false (NO): The system completely bypasses the amount_sources array and the Head Admin's balances. Instead, the full cash value is deducted/added directly to the Customer's internal Cash Ledger balance as a Journal Entry.
+remarks (string, optional): Transaction description.
+images (array of files, optional): Receipt image uploads (must be JPG, JPEG, PNG, or WEBP formats up to 5MB each).
+amount_sources (array): Breakdown of cash/bank sources:
+source (string): CASH_ON_HAND or BANK.
+bank_id (integer, required if source is BANK): Reference bank ID.
+amount (decimal): Split amount.
+Response Example (201 Created):
+json
+
+{
+    "success": true,
+    "message": "Purchase gold transaction recorded successfully.",
+    "data": {
+        "cash_to_gold_id": 12,
+        "type": "HEAD",
+        "head_id": 1,
+        "customer_id": 2,
+        "total_cash": 40000.0,
+        "per_gram_cash": 5000.0,
+        "total_grams": 8.0,
+        "touch": 100.0,
+        "purity": 8.0,
+        "item_id": 1,
+        "stock_id": 45,
+        "amnt_transfer_to_head": true,
+        "taken_total_cash": 40000.0,
+        "taken_total_grams": 8.0,
+        "taken_purity": 8.0,
+        "ob_grams": 100.0,
+        "ob_purity": 100.0,
+        "remarks": "Purchase gold live remarks",
+        "retailer_id": null,
+        "is_rate_avg": false,
+        "added_at": "2026-08-08 21:05:00"
+    }
+}
+
+
+10. Sale Gold (Head delivers Gold, Customer pays Cash)
+Submits a Sale Gold transaction. Frontend calculations are passed directly to backend to insert values into the database atomically.
+
+URL: POST /api/v1/sale-gold
+Headers:
+Content-Type: application/json
+Authorization: Bearer <token>
+Request Body Example:
+json
+
+{
+    "type": "SALE_GOLD",
+    "head_id": 1,
+    "customer_id": 2,
+    "total_cash": 10000.00,
+    "per_gram_cash": 5000.00,
+    "total_grams": 2.0000,
+    "touch": 100.00,
+    "purity": 2.0000,
+    "item_id": 1,
+    "amnt_transfer_to_head": true,
+    "remarks": "Sale gold live remarks",
+    "amount_sources": [
+        {
+            "source": "CASH_ON_HAND",
+            "bank_id": null,
+            "amount": 10000.00
+        }
+    ]
+}
+Parameters Description:
+type (string): Transaction sub-type (SALE_GOLD, SALE_GOLD_CASH, or IN_CASH_CONVERTER).
+head_id (integer): ID of head user delivering gold.
+customer_id (integer): ID of customer receiving gold.
+total_cash (decimal): Total cash received value.
+per_gram_cash (decimal): Gold rate per gram.
+total_grams (decimal): Gross weight of gold sold.
+touch (decimal): Touch/purity percentage.
+purity (decimal): Purity value.
+item_id (integer): Gold item ID.
+amnt_transfer_to_head (boolean): Master toggle for Cash/Bank processing (The "Yes/No" Button).
+If true (YES): The system processes the amount_sources array. It handles the physical cash movement directly from/to the Head Admin's live Cash/Bank balances and creates CashTxnDetail audit logs. The Customer's cash balance is untouched.
+If false (NO): The system completely bypasses the amount_sources array and the Head Admin's balances. Instead, the full cash value is deducted/added directly to the Customer's internal Cash Ledger balance as a Journal Entry.
+remarks (string, optional): Transaction description.
+images (array of files, optional): Receipt image uploads (must be JPG, JPEG, PNG, or WEBP formats up to 5MB each).
+stock_in_id (integer, optional): Reference stock ID to match OUT against.
+amount_sources (array): Breakdown of cash/bank sources:
+source (string): CASH_ON_HAND or BANK.
+bank_id (integer, required if source is BANK): Reference bank ID.
+amount (decimal): Split amount.
+Response Example (201 Created):
+json
+
+{
+    "success": true,
+    "message": "Sale gold transaction recorded successfully.",
+    "data": {
+        "cash_to_gold_id": 13,
+        "type": "SALE_GOLD",
+        "head_id": 1,
+        "customer_id": 2,
+        "total_cash": 10000.0,
+        "per_gram_cash": 5000.0,
+        "total_grams": 2.0,
+        "touch": 100.0,
+        "purity": 2.0,
+        "item_id": 1,
+        "stock_id": 46,
+        "amnt_transfer_to_head": true,
+        "taken_total_cash": 10000.0,
+        "taken_total_grams": 2.0,
+        "taken_purity": 2.0,
+        "ob_grams": 100.0,
+        "ob_purity": 100.0,
+        "remarks": "Sale gold live remarks",
+        "retailer_id": null,
+        "is_rate_avg": false,
+        "added_at": "2026-08-08 21:06:00"
+    }
+}
+
+
+
+
+11. Cash Categories Master (CRUD)
+Manages the categories used for categorizing cash transactions (Income, Expense, Auto Entry). Supports pagination and soft deletes.
+
+GET /api/v1/cash-categories
+Fetches paginated cash categories.
+Query Params: limit (default 50).
+POST /api/v1/cash-categories
+Creates a new category.
+Body: {"category_name": "Food", "category_type": "EXPENSE", "is_active": true}
+PUT /api/v1/cash-categories/{id}
+Updates a category.
+Body: {"category_name": "Office Supplies"}
+DELETE /api/v1/cash-categories/{id}
+Soft deletes a category.
+
+
+12. Cash Auto Entry (Multiple Rows)
+Submits a dynamic number of cash expense/income transactions natively in one API call. Supports transaction-specific receipt uploads natively.
+
+URL: POST /api/v1/cash-txn-details/auto-entry
+Headers:
+Content-Type: multipart/form-data
+X-User-ID: 1
+Request Body Example (Multipart Form-Data):
+json
+
+type="AUTO_ENTRY"
+head_id=1
+cash_user_id=2
+transactions[0][amount]=150.00
+transactions[0][category_id]=1
+transactions[0][remarks]="Lunch expense"
+transactions[0][added_at]="2026-08-01 10:00:00"
+transactions[0][images][0]=<FILE 1>
+transactions[0][images][1]=<FILE 2>
+transactions[1][amount]=400.00
+transactions[1][category_id]=2
+transactions[1][remarks]="Taxi"
+transactions[1][images][0]=<FILE 3>
+Parameters Description:
+type (string): Usually AUTO_ENTRY (can also be EXPENSE or INCOME).
+head_id (integer): ID of head user.
+cash_user_id (integer): ID of cash user/employee.
+transactions (array of objects):
+amount (decimal): Cash amount.
+category_id (integer, optional): ID of the Cash Category.
+remarks (string, optional): Remarks. Defaults to AUTO_ENTRY.
+added_at (date, optional): Custom date-time.
+images (array of files, optional): Receipt image uploads for this specific row (must be JPG, JPEG, PNG, or WEBP formats up to 5MB each).
+
+
+
+
+Cash Dashboard - In/Out , Cash transaction history and Print api’s
+
+
+Backend Updates & Redis Setup (For Frontend Developer)
+Hey! We just implemented high-performance Redis Cache Tagging for the Cash Dashboard History APIs on the backend. When you pull the latest code, you need to do a couple of quick things to get your local environment working:
+
+1. Pull & Install Dependencies Because we added a new Redis package, make sure you run:
+
+bash
+git pull origin Backend
+composer install
+
+
+
+2. Handle the Redis Cache (Choose Option A or B) Because the backend now actively tries to connect to a Redis server on port 6379, your local API calls will crash with a "target machine actively refused it" error if you don't have Redis running.
+
+Option A: Bypass Redis (Fastest Setup) If you don't want to bother installing Redis on your local computer, you can just tell Laravel to fall back to standard file caching locally.
+
+Open your .env file.
+Change CACHE_STORE=redis to CACHE_STORE=file.
+Run php artisan config:clear in your terminal.
+Option B: Run Redis Locally (To accurately test caching) If you want to experience the actual cache speeds and invalidations:
+
+Download this lightweight Windows Redis zip: Redis-x64-5.0.14.1.zip
+Extract the folder anywhere on your PC.
+Double-click redis-server.exe to start the server in the background. As long as that black terminal window is open, the APIs will connect to it perfectly!
+
+
+
+
+Optimized API endpoints to retrieve IN and OUT cash transactions for the Cash Dashboard.
+
+Below i will attach the .env files for your reference
+
+
+.env
+
+
+APP_NAME=Laravel
+APP_ENV=local
+APP_KEY=base64:Sc5yHFFmt+8LjbRok2wM/hdX0ap1dXeSbZdYLaN0XMA=
+APP_DEBUG=true
+APP_URL=http://localhost
+
+APP_LOCALE=en
+APP_FALLBACK_LOCALE=en
+APP_FAKER_LOCALE=en_US
+
+APP_MAINTENANCE_DRIVER=file
+CACHE_DRIVER=redis
+# APP_MAINTENANCE_STORE=database
+
+# PHP_CLI_SERVER_WORKERS=4
+
+BCRYPT_ROUNDS=12
+
+LOG_CHANNEL=stack
+LOG_STACK=single
+LOG_DEPRECATIONS_CHANNEL=null
+LOG_LEVEL=debug
+
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=schains_erp
+
+DB_USERNAME=postgres
+DB_PASSWORD=root
+# DB_PASSWORD=admin
+
+CACHE_STORE=redis
+SESSION_DRIVER=file
+
+
+#DB_CONNECTION=sqlite
+# DB_HOST=127.0.0.1
+# DB_PORT=3306
+# DB_DATABASE=laravel
+# DB_USERNAME=root
+# DB_PASSWORD=
+
+SESSION_DRIVER=file
+SESSION_LIFETIME=120
+SESSION_ENCRYPT=false
+SESSION_PATH=/
+SESSION_DOMAIN=null
+
+BROADCAST_CONNECTION=log
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=database
+
+CACHE_STORE=redis
+# CACHE_PREFIX=
+
+MEMCACHED_HOST=127.0.0.1
+
+REDIS_CLIENT=predis
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+
+MAIL_MAILER=log
+MAIL_SCHEME=null
+MAIL_HOST=127.0.0.1
+MAIL_PORT=2525
+MAIL_USERNAME=null
+MAIL_PASSWORD=null
+MAIL_FROM_ADDRESS="hello@example.com"
+MAIL_FROM_NAME="${APP_NAME}"
+
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_DEFAULT_REGION=us-east-1
+AWS_BUCKET=
+AWS_USE_PATH_STYLE_ENDPOINT=false
+
+VITE_APP_NAME="${APP_NAME}"
+
+
+
+
+13. URL (In History): 
+GET /api/v1/cash-txn-details/in-history?head_id={id}&cash_user_id={id}
+
+
+
+14. URL (Out History): GET/api/v1/cash-txn-details/out-history?head_id={id}&cash_user_id={id}
+Headers: Content-Type: application/json
+Optional Query Parameters:
+from_date (Format: YYYY-MM-DD)
+to_date (Format: YYYY-MM-DD)
+page (integer for pagination)
+
+Expected JSON Payload (Example Row):
+json
+
+{
+    "txn_id": 5,
+    "type": "EXPENSE",
+    "amount": "500.00",
+    "remarks": "Tea Expense",
+    "payment_method": "CASH_ON_HAND",
+    "remainder": null,
+    "remainder_at": null,
+    "is_hide": false,
+    "added_at": "2026-08-12",
+    "given_by_user": { "user_id": 2, "name": "Employee Worker", "user_name": "employee_worker" },
+    "given_to_user": { "user_id": 1, "name": "Head Admin", "user_name": "head_admin" },
+    "category": { "category_id": 1, "category_name": "Office Supplies" },
+    "bank": null
+}
+
+
+
+
+
+
+15.Cash Dashboard - Unified Stock History
+Returns all stock movements related to the Cash Dashboard (IN, OUT, PURCHASE_GOLD, SALE_GOLD, GOLD_TO_CASH, CASH_TO_GOLD, AUTO_ENTRY).
+
+URL: GET /api/v1/stock-details/cash-transaction-history?head_id={id}&cash_user_id={id}
+Headers: Content-Type: application/json
+Expected JSON Payload (Example Row):
+json
+
+{
+    "id": 8,
+    "item": "Gold Ring",
+    "stock_type": "IN",
+    "grams": "25.5000",
+    "no_of_pcs": "2.0000",
+    "touch": "91.6000",
+    "wastage": "0.0000",
+    "purity": "23.3580",
+    "user": "Head Admin",
+    "remarks": "PURCHASE_GOLD"
+}
+
+
+16. Cash Dashboard - Single Thermal Print Receipt
+Returns exactly the minimal data needed to print a thermal receipt for a single transaction.
+
+URL: GET /api/v1/cash-txn-details/print-report?id={id}
+Headers: Content-Type: application/json
+Expected JSON Payload:
+json
+
+{
+    "success": true,
+    "message": "Thermal print data retrieved successfully",
+    "data": {
+        "heading": "CASH OUT",
+        "given_by_name": "abc(PR)",
+        "given_to_name": "xyz",
+        "date": "11-Aug-2026 21:08:17",
+        "ob_label": "abc(PR) Bal OB",
+        "ob_amount": "16977.00",
+        "bill_no": 397,
+        "amount": "17000.00",
+        "cb_label": "abc(PR) Ex. CB",
+        "cb_amount": "23.00",
+        "remarks": "JULY SAL"
+    }
+}
+
+
+
+
+
+
+17. Get All Employees (For Stock Modules)
+Endpoint: GET /api/v1/user-details?type=EMPLOYEE&module=stock 
+Headers: Accept: application/json
+
+json
+{
+    "success": true,
+    "message": "Users retrieved successfully",
+    "data": [
+        {
+            "id": 1,
+            "full_name": "John Doe",
+            "type": "EMPLOYEE",
+            "category_name": "Sales",
+            "retailer_user_name": "Normal user",
+            "phone_number": "1234567890",
+            
+            // --- STOCK FIELDS ---
+            "gm": "50.555",
+            "purity": "45.234",
+            "last_txn_date": "2026-08-01 14:30:00", // Dynamically added!
+            
+            "profile_image": "",
+            "name": "John Doe",
+            "profile_img": "http://yourdomain.com/storage/images/profile.jpg",
+            "is_active": 1
+        }
+    ]
+}
+
+
+18. Get All Employees (For Cash Modules)
+Endpoint: GET /api/v1/user-details?type=EMPLOYEE&module=cash 
+Headers: Accept: application/json
+
+json
+{
+    "success": true,
+    "message": "Users retrieved successfully",
+    "data": [
+        {
+            "id": 1,
+            "full_name": "John Doe",
+            "type": "EMPLOYEE",
+            "category_name": "Sales",
+            "retailer_user_name": "Normal user",
+            "phone_number": "1234567890",
+            
+            // --- CASH FIELDS ---
+            "hand_cash": "1500.50",
+            "rtgs_cash": "5400.00",
+            "last_cash_txn_date": "2026-08-10 09:15:00", // Dynamically added!
+            
+            "profile_image": "",
+            "name": "John Doe",
+            "profile_img": "http://yourdomain.com/storage/images/profile.jpg",
+            "is_active": 1
+        }
+    ]
+}
+
+
+
+
+
+
+19. Get All Heads (For Stock Modules)
+Endpoint: GET /api/v1/user-details?type=HEAD&module=stock
+ Headers: Accept: application/json
+
+json
+{
+    "success": true,
+    "message": "Users retrieved successfully",
+    "data": [
+        {
+            "id": 3,
+            "full_name": "abc",
+            "type": "HEAD",
+            "category_name": "Admin",
+            "retailer_user_name": "Normal user",
+            "phone_number": "00000000006",
+            
+            // --- STOCK FIELDS ---
+            "gm": "0.000",
+            "purity": "-53.725",
+            "last_txn_date": "2026-08-01 14:30:00",
+            
+            "profile_image": "",
+            "name": "abc",
+            "profile_img": "http://yourdomain.com/storage/images/head_profile.jpg",
+            "is_active": 1
+        }
+    ]
+}
+
+
+20. Get All Heads (For Cash Modules)
+Endpoint: GET /api/v1/user-details?type=HEAD&module=cash 
+Headers: Accept: application/json
+
+json
+{
+    "success": true,
+    "message": "Users retrieved successfully",
+    "data": [
+        {
+            "id": 3,
+            "full_name": "abc",
+            "type": "HEAD",
+            "category_name": "Admin",
+            "retailer_user_name": "Normal user",
+            "phone_number": "00000000006",
+            
+            // --- CASH FIELDS ---
+            "hand_cash": "150000.00",
+            "rtgs_cash": "200000.00",
+            "last_cash_txn_date": "2026-08-10 09:15:00",
+            
+            "profile_image": "",
+            "name": "abc",
+            "profile_img": "http://yourdomain.com/storage/images/head_profile.jpg",
+            "is_active": 1
+        }
+    ]
+}
+
+
+
+
+21.Report - Cash Transactions
+A unified reporting API to replicate the legacy Cash Transactions report. Supports comprehensive dynamic filtering.
+
+URL: GET /api/v1/report/cash-transactions-obcb
+
+Headers: Content-Type: application/json
+
+Query Parameters (All Optional):
+
+category_id (int)
+cash_main_category_id (array or comma-separated string)
+type (string or comma-separated array: 'EXPENSE', 'INCOME', 'SALE_GOLD', etc.)
+bank_id (array or comma-separated string)
+from_date (YYYY-MM-DD)
+to_date (YYYY-MM-DD)
+bank_entry_from_date (YYYY-MM-DD)
+bank_entry_to_date (YYYY-MM-DD)
+page_size (int, default 50)
+page (int)
+is_all (boolean/1/0, if true fetches up to 5000 records without pagination)
+Expected JSON Payload (Example):
+
+json
+
+{
+    "success": true,
+    "message": "Cash Transactions Report retrieved successfully",
+    "parameters": {
+        "count": 125,
+        "content": [
+            {
+                "id": 450,
+                "date": "12-Aug-2026 14:30 PM",
+                "bank_entry_date": "13-Aug-2026",
+                "name": "Head Admin => Employee(RetailerX)",
+                "category_name": "Office Rent",
+                "type_label": "EXPENSE",
+                "source_type": "BANK (HDFC Current)",
+                "opening_balance": 50000.00,
+                "amount": 5000.00,
+                "closing_balance": 45000.00,
+                "remarks": "(HIDE) Monthly rent",
+                "print_id": 450
+            }
+        ]
+    }
+}
+
+
+
+
+22. Metal Selection API (For Front-End Modals)
+A dedicated endpoint to fetch all available metal stocks for a given user, used to populate the "Metal" pop-up in various submodules (Stock Out, GMS, Item Change).
+
+URL: GET /api/v1/stock-details/available-metals?item_id=2&user_id=1
+Headers: Content-Type: application/json
+Query Parameters (Required):
+item_id (int) - The ID of the metal item. The API strictly validates that this item's name is actually "Metal", otherwise it throws a 400 Error.
+user_id (int) - The ID of the user whose metal stocks you want to retrieve.
+Expected JSON Payload (Example):
+json
+
+{
+    "success": true,
+    "message": "Available metal stocks retrieved successfully",
+    "data": [
+        {
+            "id": 142,
+            "grams": 500,
+            "touch": 91.6,
+            "purity": 458,
+            "party_name": "Demo Head User",
+            "balance_grams": 500
+        }
+    ]
+}
+
+
+
+23.GMS Out (Goldsmith Outsource Entry) - Submitting Multiple Items
+Outsources raw gold with thread, stone deductions, make-touch calculations, and pre-calculated wastage and purity parameters.
+
+URL: POST /api/v1/stock/gms-out
+Headers:
+Content-Type: application/json
+X-User-ID: 1
+Request Body (Multiple Rows):
+json
+
+{
+    "given_by": 1,
+    "given_to": 2,
+    "items": [
+        {
+            "item_id": 1,
+            "grams": 100.0000,
+            "stone": 5.0000,
+            "thread": 1.0000,
+            "wastage": 4.0000,
+            "waste_value": 3.7600,
+            "hall_mark": 91.6000,
+            "purity": 89.5482,
+            "mtouch": 20.0000,
+            "mtouch_wastage": 0.0500,
+            "remarks": "Gms 1",
+            "item_remarks": "Gms 1 remarks",
+            "added_at": "2026-08-03 23:26:41"
+        },
+        {
+            "item_id": 2,
+            "grams": 50.0000,
+            "stone": 2.0000,
+            "thread": 0.5000,
+            "wastage": 4.0000,
+            "waste_value": 1.9000,
+            "hall_mark": 91.6000,
+            "purity": 45.2504,
+            "mtouch": 20.0000,
+            "mtouch_wastage": 0.0200,
+            "remarks": "Gms 2",
+            "item_remarks": "",
+            "added_at": "2026-08-03 23:26:41"
+        }
+    ]
+}
+
+
+IMPORTANT
+
+Frontend Implementation Note (Pop-Up Calculations): The API intentionally does NOT return dynamic table fields like Taken, Wastage, or Total, nor does it calculate the footer sum totals.
+
+Why? Because the Metal/GMS Pop-Up is a Create/Data Entry form.
+
+Vue.js must map the initial data array into the table (ID, Grams, Touch, Purity, Party Name).
+Vue.js must provide empty input boxes (v-model) for dynamic fields like "Taken" or "Wastage".
+Vue.js must dynamically compute the row totals (e.g., (Row Grams) - (Row Taken)) and the global footer sum totals natively in the browser as the user types.
+When the user clicks "Save", Vue.js will send the fully computed array payload to the final submission endpoint (e.g., POST /api/v1/gms-out).
+
+
+
+
+
+
