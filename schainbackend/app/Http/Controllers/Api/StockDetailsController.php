@@ -321,15 +321,26 @@ class StockDetailsController extends Controller
      */
     public function postNumericWasteIn(NumericWastageInRequest $request): JsonResponse
     {
-        try {
+        try {     
             $addedBy = $this->getActingUserId($request);
             $result = $this->stockInService->createNumericWasteIn($request->validated(), $addedBy);
+          
+
+
+
+
+
+
 
             return response()->json([
                 'success' => true,
                 'message' => 'Numeric Wastage In Created Successfully',
                 'data' => $result,
             ], 201);
+
+
+
+            
         } catch (\Throwable $e) {
             Log::error('StockDetailsController::postNumericWasteIn failed', ['error' => $e->getMessage()]);
             return response()->json([
