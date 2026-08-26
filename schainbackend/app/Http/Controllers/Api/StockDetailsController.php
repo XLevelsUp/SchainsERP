@@ -34,48 +34,29 @@ class StockDetailsController extends Controller
      * GET STOCK HISTORY (For Cash Dashboard Bottom Table)
      * ============================================================
      */
-    // public function getHistory(Request $request): JsonResponse
-    // {
-    //     try {
-    //         $headId = $request->query('head_id');
-    //         $cashUserId = $request->query('cash_user_id');
-    //         $remarks = $request->query('remarks');
-    //         $perPage = $request->query('per_page', 50);
+    public function getHistory(Request $request): JsonResponse
+    {
+        try {
+            $headId = $request->query('head_id') ?? $this->getActingUserId($request);
+            $filters = $request->all();
+            
+            $result = $this->reportService->getStockHistory($filters, $headId);
 
-    //         // $query = StockDetails::with(['item', 'givenBy', 'givenTo', 'addedBy'])
-    //         $query = StockDetails::with([
-    //             'item:item_id,item_name', 
-    //             'givenBy:user_id,name,user_name', 
-    //             'givenTo:user_id,name,user_name', 
-    //             'addedBy:user_id,name,user_name'
-    //         ])
-    //             ->where('is_completed', 0)
-    //             ->where('is_freezed', 0);
+            return response()->json([
+                'success' => true,
+                'message' => 'Stock history retrieved successfully',
+                'data' => $result
+            ], 200);
 
-    //         if ($remarks && $cashUserId && $headId) {
-    //             // Specific filter for the Cash Dashboard (e.g. PURCHASE_GOLD)
-    //             $query->where('given_to', $headId)
-    //                   ->where('given_by', $cashUserId)
-    //                   ->where('remarks', $remarks);
-    //         }
-
-    //         $stockDetails = $query->orderBy('stock_id', 'desc')->paginate($perPage);
-
-    //         return response()->json([
-    //             'success' => true,
-    //             'message' => 'Stock history retrieved successfully',
-    //             'data' => $stockDetails
-    //         ], 200);
-
-    //     } catch (\Exception $e) {
-    //         Log::error('getHistory failed: ' . $e->getMessage());
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => 'Failed to retrieve stock history',
-    //             'error' => $e->getMessage()
-    //         ], 500);
-    //     }
-    // }
+        } catch (\Exception $e) {
+            Log::error('getHistory failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve stock history',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     protected StockOutService $stockOutService;
     protected StockInService $stockInService;
@@ -99,7 +80,7 @@ class StockDetailsController extends Controller
      */
     protected function getActingUserId(Request $request): int
     {
-        return $request->user()->user_id ?? (int)$request->header('X-User-ID', 8);
+        return $request->user()->user_id ?? (int)$request->header('X-User-ID', 1);
     }
 
     /**
@@ -520,6 +501,37 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve metal stocks',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * GET HEAD STOCKS
+     */
+    public function getHeadStocks(Request $request): JsonResponse
+    {
+        try {
+            $headId = $request->query('user_id') ?: $this->getActingUserId($request);
+            
+            $filters = $request->only([
+                'head_txn_from_date',
+                'head_txn_from_time',
+            ]);
+
+            $result = $this->reportService->getHeadStocks($filters, (int) $headId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Head stocks retrieved successfully',
+                'data' => $result
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('getHeadStocks failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve head stocks',
                 'error' => $e->getMessage()
             ], 500);
         }
