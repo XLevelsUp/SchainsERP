@@ -57,7 +57,7 @@ const form = reactive({
   type: 'SALE_GOLD' as SaleGoldType,
   item_id: null as number | null,
   total_grams: null as number | null,
-  touch: null as number | null,
+  touch: 100 as number | null,
   per_gram_cash: null as number | null,
   amnt_transfer_to_head: true,
   remarks: '',
@@ -159,11 +159,16 @@ const customerCbPurity = computed(() =>
   purity.value !== null ? customerBalance.purity + purity.value : null,
 )
 
+// item_id is still required server-side (StoreSaleGoldRequest still has
+// required|integer|exists:items,item_id) — this form no longer blocks on it
+// per request, same treatment as CashToGoldView. Submitting without an item
+// surfaces the backend's own validation error rather than being caught
+// here. Flagged to the backend team; not a frontend workaround of the
+// contract.
 function validate(): boolean {
   clearFieldErrors()
   formError.value = ''
 
-  if (form.item_id === null) fieldErrors.item_id = 'Item is required.'
   if (form.total_grams === null || form.total_grams < 0) {
     fieldErrors.total_grams = 'Total grams is required.'
   }
@@ -306,8 +311,7 @@ async function handleSubmit() {
         <BaseSelect
           id="item_id"
           :model-value="form.item_id"
-          label="Item"
-          required
+          label="Item (optional)"
           size="sm"
           placeholder="Select an item…"
           :options="itemOptions"

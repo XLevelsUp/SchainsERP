@@ -13,15 +13,17 @@ import {
   Banknote,
   CircleDollarSign,
   Wallet,
-  PackageMinus,
-  PackagePlus,
   FileText,
+  ChartBar,
+  FlaskConical,
   MoreHorizontal,
 } from 'lucide-vue-next'
 import type { NavItem } from '@/types/nav'
 
 export const navItems: NavItem[] = [
   { type: 'link', label: 'Dashboard', to: '/', icon: LayoutDashboard },
+  { type: 'link', label: 'Stock', to: '/stock', icon: Package },
+  { type: 'link', label: 'Cash Management', to: '/cash-management', icon: ArrowLeftRight },
   { type: 'link', label: 'Clients', to: '/clients', icon: Users },
   {
     type: 'group',
@@ -48,16 +50,20 @@ export const navItems: NavItem[] = [
     label: 'Others',
     icon: MoreHorizontal,
     children: [
-      { type: 'link', label: 'Cash Management', to: '/cash-management', icon: ArrowLeftRight },
       { type: 'link', label: 'Sale Gold', to: '/sale-gold', icon: Coins },
       { type: 'link', label: 'Purchase Gold', to: '/purchase-gold', icon: Wallet },
       { type: 'link', label: 'Cash To Gold', to: '/cash-to-gold', icon: Banknote },
       { type: 'link', label: 'Gold To Cash', to: '/gold-to-cash', icon: CircleDollarSign },
-      { type: 'link', label: 'Stock Out', to: '/stock-out', icon: PackageMinus },
-      { type: 'link', label: 'Stock In', to: '/stock-in', icon: PackagePlus },
-      { type: 'link', label: 'GMS In', to: '/gms-in', icon: PackagePlus },
-      { type: 'link', label: 'Numeric Wastage In', to: '/numeric-wastage-in', icon: PackagePlus },
+      { type: 'link', label: 'Cash Transactions Report', to: '/cash-transactions-report', icon: ChartBar },
       { type: 'link', label: 'Pages', to: '/pages', icon: FileText },
+    ],
+  },
+  {
+    type: 'group',
+    label: 'Test Features',
+    icon: FlaskConical,
+    children: [
+      { type: 'link', label: 'Metal Picker (Test)', to: '/metal-picker-test', icon: FlaskConical },
     ],
   },
 ]

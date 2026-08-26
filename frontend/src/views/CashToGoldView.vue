@@ -92,7 +92,7 @@ function makeEmptyForm(): Omit<CashToGoldFormValues, 'purity' | 'total_cash'> {
     customer_id: null,
     per_gram_cash: null,
     total_grams: null,
-    touch: null,
+    touch: 100,
     item_id: null,
     amnt_transfer_to_head: true,
     remarks: '',
@@ -150,8 +150,13 @@ const sourceTotalMatches = computed(
 
 /*
 |--------------------------------------------------------------------------
-| Validation — mirrors StoreCashToGoldRequest::rules() exactly
+| Validation — mirrors StoreCashToGoldRequest::rules(), except item_id
 |--------------------------------------------------------------------------
+| item_id is required server-side (StoreCashToGoldRequest still has
+| required|integer|exists:items,item_id) — this form no longer blocks on it
+| per request, so submitting without an item will surface the backend's
+| own validation error rather than being caught here. Flagged to the
+| backend team; not a frontend workaround of the contract.
 */
 
 function validate(): boolean {
@@ -160,7 +165,6 @@ function validate(): boolean {
 
   if (form.head_id === null) fieldErrors.head_id = 'Head is required.'
   if (form.customer_id === null) fieldErrors.customer_id = 'Customer is required.'
-  if (form.item_id === null) fieldErrors.item_id = 'Item is required.'
 
   if (form.total_grams === null || form.total_grams < 0.001) {
     fieldErrors.total_grams = 'Total grams is required (min 0.001).'
@@ -312,8 +316,7 @@ async function handleSubmit() {
           <BaseSelect
             id="item_id"
             :model-value="form.item_id"
-            label="Item"
-            required
+            label="Item (optional)"
             size="sm"
             placeholder="Select an item…"
             :options="itemOptions"

@@ -15,6 +15,12 @@ export function formatDateTime(value?: string | null): string {
   return `${dd}/${mm}/${yy} ${hh}:${min}`
 }
 
+/** Today's date as "YYYY-MM-DD", for pre-filling `<input type="date">` values. */
+export function todayDateInputValue(): string {
+  const date = new Date()
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 /** Formats a date-only value (e.g. "YYYY-MM-DD") as "dd/mm/yy". */
 export function formatDateOnly(value?: string | null): string {
   if (!value) return '—'

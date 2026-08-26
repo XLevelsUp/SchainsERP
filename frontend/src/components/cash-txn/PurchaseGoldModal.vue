@@ -44,11 +44,6 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 
 const toastStore = useToastStore()
 
-const typeOptions: { value: PurchaseGoldType; label: string }[] = [
-  { value: 'HEAD', label: 'Purchase Gold' },
-  { value: 'OUT_CASH_CONVERTER', label: 'Out Cash Converter' },
-]
-
 const itemOptions = computed(() => props.items.map((i) => ({ value: i.item_id, label: i.item_name })))
 const bankOptions = computed(() =>
   props.banks.map((b) => ({ value: b.bank_id, label: b.account_name || `#${b.bank_id}` })),
@@ -62,7 +57,7 @@ const form = reactive({
   type: 'HEAD' as PurchaseGoldType,
   item_id: null as number | null,
   total_cash: null as number | null,
-  touch: null as number | null,
+  touch: 100 as number | null,
   per_gram_cash: null as number | null,
   amnt_transfer_to_head: true,
   remarks: '',
@@ -309,13 +304,6 @@ async function handleSubmit() {
       {{ formError }}
     </p>
 
-    <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-      Type changes real accounting behavior, not just the label — "Purchase Gold" is the standard
-      head-buys-from-customer flow (stock IN), while "Out Cash Converter" is an unrelated stock OUT
-      that reuses this same form, not an actual purchase. Delivery is always recorded as full, too —
-      there's no partial-delivery tracking here.
-    </p>
-
     <div>
       <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
       <PartyBalanceCards
@@ -343,15 +331,6 @@ async function handleSubmit() {
 
     <form class="flex flex-col gap-5" @submit.prevent="handleSubmit">
       <div class="grid gap-3 sm:grid-cols-3">
-        <BaseSelect
-          id="type"
-          :model-value="form.type"
-          label="Type"
-          required
-          size="sm"
-          :options="typeOptions"
-          @update:model-value="(v) => (form.type = v as PurchaseGoldType)"
-        />
         <BaseSelect
           id="item_id"
           :model-value="form.item_id"
@@ -426,15 +405,6 @@ async function handleSubmit() {
           v-model="form.amnt_transfer_to_head"
           label="Transfer amount to head"
           class="self-end pb-2"
-        />
-        <BaseInput
-          id="retailer_id"
-          :model-value="form.retailer_id === null ? '' : String(form.retailer_id)"
-          label="Retailer ID (optional)"
-          type="number"
-          step="1"
-          size="sm"
-          @update:model-value="(v) => (form.retailer_id = v === '' ? null : Number(v))"
         />
       </div>
 

@@ -51,7 +51,12 @@ function makeEmptySource(): CashToGoldAmountSourceInput {
 const form = reactive({
   item_id: null as number | null,
   total_cash: null as number | null,
-  touch: null as number | null,
+  // No visible Touch field in this modal (matches the legacy Cash To Gold
+  // screen) — defaults to 100 (pure gold) since item_id is now optional too,
+  // and gets overwritten by the selected item's default_touch when one is
+  // picked. Backend still requires touch (required|numeric|between:0,100 on
+  // StoreCashToGoldRequest), so this can't just be dropped from the payload.
+  touch: 100 as number | null,
   per_gram_cash: null as number | null,
   amnt_transfer_to_head: true,
   remarks: '',
@@ -159,7 +164,6 @@ function validate(): boolean {
   clearFieldErrors()
   formError.value = ''
 
-  if (form.item_id === null) fieldErrors.item_id = 'Item is required.'
   if (form.total_cash === null || form.total_cash < 0.01) {
     fieldErrors.total_cash = 'Total cash is required (min 0.01).'
   }
@@ -294,8 +298,7 @@ async function handleSubmit() {
         <BaseSelect
           id="item_id"
           :model-value="form.item_id"
-          label="Item"
-          required
+          label="Item (optional)"
           size="sm"
           placeholder="Select an item…"
           :options="itemOptions"

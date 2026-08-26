@@ -5,7 +5,6 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
-import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
 import PartyBalanceCards from './PartyBalanceCards.vue'
 import { cashAutoEntryApi } from '@/lib/cashAutoEntryApi'
@@ -26,10 +25,14 @@ import type { CashAutoEntryTransactionInput, CashCategory } from '@/types'
 | (see CashAutoEntryService), which isn't what "Auto Entry" meant in the
 | legacy button grid.
 |
-| Only the head's balance moves — the cash user's side is never credited.
-| That's deliberate (CashAutoEntryService replicates legacy Expense
-| behavior: "money leaving the system"), not a bug, so it's called out
-| below rather than left to look broken.
+| Only the head's cash_balance is actually debited server-side — the chosen
+| cash user's row is never credited (CashAutoEntryService replicates legacy
+| Expense behavior: "money leaving the system"). That's a backend
+| characteristic, not something the frontend can change. What the frontend
+| controls is which party's balance the preview panel shows, and this entry
+| is conceptually "for" the chosen cash user (the employee/party these
+| expenses are being tracked against), not the head and not whoever's
+| logged in — so the preview shows their balance, not the head's.
 |--------------------------------------------------------------------------
 */
 
@@ -45,25 +48,24 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 const auth = useAuthStore()
 const toastStore = useToastStore()
 
-// Only the head's balance moves here (see the direction note above), so
-// the balance preview is a single party, not the two-party comparison the
-// Pay/Receive modal shows.
+// Preview is a single party — the chosen cash user (see the direction note
+// above), not the two-party comparison the Pay/Receive modal shows.
 const isLoadingBalance = ref(true)
-const headBalance = reactive({ cash: 0, rtgs: 0 })
+const cashUserBalance = reactive({ cash: 0, rtgs: 0 })
 
-async function loadHeadBalance() {
+async function loadCashUserBalance() {
   isLoadingBalance.value = true
   try {
-    const { user } = await userDetailsApi.get(props.headId)
-    headBalance.cash = user.rak_cash_balance
-    headBalance.rtgs = user.rak_rtgs_balance
+    const { user } = await userDetailsApi.get(props.cashUserId)
+    cashUserBalance.cash = user.rak_cash_balance
+    cashUserBalance.rtgs = user.rak_rtgs_balance
   } catch {
     // Non-fatal — the form still works without the balance preview.
   } finally {
     isLoadingBalance.value = false
   }
 }
-onMounted(loadHeadBalance)
+onMounted(loadCashUserBalance)
 
 const categories = ref<CashCategory[]>([])
 async function loadCategories() {
@@ -104,10 +106,12 @@ function clearFieldErrors() {
 
 const total = computed(() => rows.reduce((sum, r) => sum + (r.amount ?? 0), 0))
 
-// CB preview — every row is a cash expense against the head, so the running
-// total comes straight off Hand Cash; RTGS is never touched by this
-// endpoint. Null (shown as "—") until at least one row has an amount.
-const headCbCash = computed(() => (total.value > 0 ? headBalance.cash - total.value : null))
+// CB preview — every row is a cash expense, so the running total comes
+// straight off the chosen cash user's Hand Cash; RTGS is never touched by
+// this endpoint. Null (shown as "—") until at least one row has an amount.
+const cashUserCbCash = computed(() =>
+  total.value > 0 ? cashUserBalance.cash - total.value : null,
+)
 
 function validate(): boolean {
   clearFieldErrors()
@@ -176,7 +180,7 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <BaseModal title="Auto Entry" :badge="`${headName} → ${cashUserName}`" badge-class="bg-amber-500" max-width="max-w-3xl" @close="emit('close')">
+  <BaseModal title="Auto Entry" :badge="cashUserName" badge-class="bg-amber-500" max-width="max-w-7xl" @close="emit('close')">
     <p
       v-if="formError"
       class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
@@ -187,34 +191,31 @@ async function handleSubmit() {
     <div>
       <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
       <PartyBalanceCards
-        :left-label="headName"
-        :left-ob-cash="headBalance.cash"
-        :left-ob-rtgs="headBalance.rtgs"
-        :left-cb-cash="headCbCash"
-        :left-cb-rtgs="headBalance.rtgs"
+        :left-label="cashUserName"
+        :left-ob-cash="cashUserBalance.cash"
+        :left-ob-rtgs="cashUserBalance.rtgs"
+        :left-cb-cash="cashUserCbCash"
+        :left-cb-rtgs="cashUserBalance.rtgs"
         :is-loading="isLoadingBalance"
         active-column="cash"
       />
     </div>
 
     <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-      Only {{ headName }}'s balance changes here — {{ cashUserName }}'s balance is not credited, and
-      every row moves Hand Cash only (there's no bank/RTGS option for auto entries). That's how this
-      endpoint is built (it replicates the legacy "money leaving the system" behavior for auto
-      entries), not a display bug.
+      Every row moves Hand Cash only — there's no bank/RTGS option for auto entries.
     </p>
 
     <form class="flex flex-col gap-4" @submit.prevent="handleSubmit">
       <div
         v-for="(row, index) in rows"
         :key="index"
-        class="flex flex-col gap-3 rounded-lg border border-slate-200 p-3"
+        class="flex flex-col gap-2 rounded-lg border border-slate-200 p-2.5"
       >
         <div class="flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-slate-900">Row {{ index + 1 }}</h3>
+          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Row {{ index + 1 }}</h3>
           <button
             type="button"
-            class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
+            class="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
             aria-label="Remove row"
             :disabled="rows.length === 1"
             @click="removeRow(index)"
@@ -223,7 +224,7 @@ async function handleSubmit() {
           </button>
         </div>
 
-        <div class="grid gap-3 sm:grid-cols-3">
+        <div class="grid gap-2 sm:grid-cols-4">
           <BaseInput
             :id="`amount_${index}`"
             :model-value="row.amount === null ? '' : String(row.amount)"
@@ -238,31 +239,30 @@ async function handleSubmit() {
           <BaseSelect
             :id="`category_${index}`"
             :model-value="row.category_id"
-            label="Category (optional)"
+            label="Category"
             size="sm"
             placeholder="No category"
             :options="categoryOptions"
             @update:model-value="(v) => (row.category_id = v as number | null)"
           />
-          <div class="flex flex-col gap-1">
-            <BaseInput
-              :id="`added_at_${index}`"
-              v-model="row.added_at"
-              label="Date (optional)"
-              type="date"
-              size="sm"
-            />
-            <p class="text-xs text-amber-700">Not saved — the backend accepts this field but doesn't store it yet.</p>
-          </div>
+          <BaseInput
+            :id="`added_at_${index}`"
+            v-model="row.added_at"
+            label="Date"
+            type="date"
+            size="sm"
+          />
+          <BaseInput
+            :id="`remarks_${index}`"
+            v-model="row.remarks"
+            label="Remarks"
+            size="sm"
+          />
         </div>
 
-        <BaseTextarea
-          :id="`remarks_${index}`"
-          v-model="row.remarks"
-          label="Remarks"
-          size="sm"
-          :rows="2"
-        />
+        <p v-if="row.added_at" class="text-[11px] leading-none text-amber-700">
+          Date not saved — the backend accepts this field but doesn't store it yet.
+        </p>
 
         <div>
           <BaseFileInput
@@ -270,6 +270,7 @@ async function handleSubmit() {
             v-model="row.images"
             label="Receipt images (optional)"
             hint="JPG, PNG, or WEBP, up to 5 MB each."
+            compact
           />
           <p v-if="fieldErrors[`transactions.${index}.images`]" class="mt-2 text-sm text-red-600">
             {{ fieldErrors[`transactions.${index}.images`] }}

@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
 import CashTxnEntryModal from '@/components/cash-txn/CashTxnEntryModal.vue'
 import CashToGoldModal from '@/components/cash-txn/CashToGoldModal.vue'
 import GoldToCashModal from '@/components/cash-txn/GoldToCashModal.vue'
@@ -10,6 +11,7 @@ import SaleGoldModal from '@/components/cash-txn/SaleGoldModal.vue'
 import PurchaseGoldModal from '@/components/cash-txn/PurchaseGoldModal.vue'
 import CashAutoEntryModal from '@/components/cash-txn/CashAutoEntryModal.vue'
 import CashTxnHistoryTable from '@/components/cash-txn/CashTxnHistoryTable.vue'
+import StockCashHistoryTable from '@/components/cash-txn/StockCashHistoryTable.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { rolesApi } from '@/lib/rolesApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
@@ -34,8 +36,8 @@ import type { BankDetail, Item, Role, UserDetailListItem } from '@/types'
 | a frontend limitation:
 |  - INTERNAL — no current endpoint accepts it as a transaction type, and
 |    no service ever writes an INTERNAL_TRANSFER row for the history
-|    filter to find. Shown disabled with an explanation instead of
-|    silently vanishing.
+|    filter to find. The quick-action button for it is hidden entirely
+|    (user request) rather than shown disabled.
 |  - Purchase Gold's "Out Cash Converter" and Sale Gold's "In Cash
 |    Converter" sub-types are written with those literal type values, but
 |    neither history filter includes them — those transactions are
@@ -67,6 +69,14 @@ const items = ref<Item[]>([])
 const headId = ref<number | null>(null)
 const roleFilter = ref<string>('')
 const userId = ref<number | null>(null)
+
+// Date range filter for the history tables below — applies only once a
+// Head + User pair is selected. Both cash-txn-details history endpoints
+// (in-history/out-history) already accept from_date/to_date server-side;
+// stock-details/cash-transaction-history does not, so StockCashHistoryTable
+// stays unfiltered by date (backend gap, not a frontend omission).
+const historyFromDate = ref('')
+const historyToDate = ref('')
 
 async function loadBaseData() {
   isLoading.value = true
@@ -296,14 +306,6 @@ async function handleSaved() {
             >
               Gold To Cash
             </button>
-            <button
-              type="button"
-              disabled
-              title="No backend endpoint for INTERNAL transactions yet"
-              class="cursor-not-allowed rounded-lg bg-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
-            >
-              INTERNAL
-            </button>
           </div>
         </div>
 
@@ -350,33 +352,60 @@ async function handleSaved() {
       </p>
       <p v-else class="text-sm text-slate-500">Select a Head above to get started.</p>
 
-      <div v-if="canQuickCreate" class="mt-8 grid gap-6 sm:grid-cols-2">
-        <div>
-          <p class="mb-2 text-xs font-semibold tracking-wide text-red-700 uppercase">Out History</p>
-          <CashTxnHistoryTable
-            direction="out"
-            :head-id="headId!"
-            :user-id="userId!"
-            :refresh-key="historyRefreshKey"
+      <div v-if="canQuickCreate" class="mt-8">
+        <div class="mb-4 grid gap-3 sm:max-w-md sm:grid-cols-2">
+          <BaseInput
+            id="history-from-date"
+            v-model="historyFromDate"
+            label="From date"
+            type="date"
+            size="sm"
+          />
+          <BaseInput
+            id="history-to-date"
+            v-model="historyToDate"
+            label="To date"
+            type="date"
+            size="sm"
           />
         </div>
-        <div>
-          <p class="mb-2 text-xs font-semibold tracking-wide text-emerald-700 uppercase">In History</p>
-          <CashTxnHistoryTable
-            direction="in"
-            :head-id="headId!"
-            :user-id="userId!"
-            :refresh-key="historyRefreshKey"
-          />
+
+        <div class="grid gap-6 sm:grid-cols-2">
+          <div>
+            <p class="mb-2 text-xs font-semibold tracking-wide text-red-700 uppercase">Out History</p>
+            <CashTxnHistoryTable
+              direction="out"
+              :head-id="headId!"
+              :user-id="userId!"
+              :from-date="historyFromDate"
+              :to-date="historyToDate"
+              :refresh-key="historyRefreshKey"
+            />
+          </div>
+          <div>
+            <p class="mb-2 text-xs font-semibold tracking-wide text-emerald-700 uppercase">In History</p>
+            <CashTxnHistoryTable
+              direction="in"
+              :head-id="headId!"
+              :user-id="userId!"
+              :from-date="historyFromDate"
+              :to-date="historyToDate"
+              :refresh-key="historyRefreshKey"
+            />
+          </div>
         </div>
       </div>
 
       <p class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        INTERNAL is disabled — no backend endpoint accepts that transaction type yet. Purchase Gold's
-        "Out Cash Converter" and Sale Gold's "In Cash Converter" are recorded successfully but don't
-        appear in the history above — the backend's history filters don't include those two
-        sub-types. Both are known backend gaps, not missing screens.
+        Purchase Gold's "Out Cash Converter" and Sale Gold's "In Cash Converter" are recorded
+        successfully but don't appear in the history above — the backend's history filters don't
+        include those two sub-types. This is a known backend gap, not a missing screen.
       </p>
+
+      <div v-if="canQuickCreate" class="mt-8">
+        <p class="mb-2 text-xs font-semibold tracking-wide text-slate-400 uppercase">Stock History</p>
+        <StockCashHistoryTable :head-id="headId!" :user-id="userId!" :refresh-key="historyRefreshKey" />
+      </div>
     </template>
 
     <CashTxnEntryModal

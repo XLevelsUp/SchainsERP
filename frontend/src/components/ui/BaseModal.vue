@@ -11,7 +11,7 @@ withDefaults(
   {
     badge: undefined,
     badgeClass: 'bg-slate-600',
-    maxWidth: 'max-w-2xl',
+    maxWidth: 'max-w-6xl',
   },
 )
 

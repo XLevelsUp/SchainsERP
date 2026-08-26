@@ -1,10 +1,8 @@
-import type { BankDetail } from './bankDetail'
-import type { CashCategory } from './cashCategory'
-import type { UserDetail } from './userDetail'
-
-// GET /cash-txn-details/in-history and /out-history (PR #17). Each row is a
-// full cash_txn_details record with givenByUser/givenToUser/category/bank
-// eager-loaded — no images relation, so receipts don't show up here.
+// GET /cash-txn-details/in-history and /out-history (PR #17, reshaped in
+// PR #18 to go through CashTxnHistoryResource::collection()->response()).
+// Rows are now a constrained projection, not the full cash_txn_details
+// record — see CashTxnHistoryResource::toArray(). No images relation, so
+// receipts don't show up here.
 //
 // in-history filters type IN (INCOME, AUTO_ENTRY, CASH_TO_GOLD, SALE_GOLD).
 // out-history filters type IN (EXPENSE, PURCHASE_GOLD, INTERNAL_TRANSFER,
@@ -25,43 +23,64 @@ export type CashTxnHistoryType =
   | 'OUT_CASH_CONVERTER'
   | 'IN_CASH_CONVERTER'
 
+// Partial user projection returned by CashTxnHistoryResource — not the full
+// UserDetail record (no balances, roles, etc.).
+export interface CashTxnHistoryUserRef {
+  user_id: number
+  name: string
+  user_name: string
+}
+
+export interface CashTxnHistoryCategoryRef {
+  category_id: number
+  category_name: string
+}
+
+// Note the field is bank_name here (CashTxnHistoryResource maps it from
+// BankDetail.account_name), not account_name like the full BankDetail type.
+export interface CashTxnHistoryBankRef {
+  bank_id: number
+  bank_name: string
+}
+
 export interface CashTxnHistoryRow {
   txn_id: number
   type: CashTxnHistoryType
-  sender_id: number
-  recipient_id: number
-  category_id: number | null
   amount: string
-  payment_method: 'CASH_ON_HAND' | 'BANK'
-  bank_account_id: number | null
   remarks: string | null
-  added_by: number
-  cash_to_gold_id: number | null
-  balance_after_txn: string | null
-  sender_opening_cash: string
-  sender_opening_rtgs: string
-  recipient_opening_cash: string
-  recipient_opening_rtgs: string
-  sender_closing_cash: string
-  sender_closing_rtgs: string
-  recipient_closing_cash: string
-  recipient_closing_rtgs: string
-  created_at: string
-  updated_at: string
-  given_by_user: UserDetail
-  given_to_user: UserDetail
-  category: CashCategory | null
-  bank: BankDetail | null
+  payment_method: 'CASH_ON_HAND' | 'BANK'
+  remainder: string | null
+  remainder_at: string | null
+  is_hide: boolean
+  added_at: string | null
+  given_by_user: CashTxnHistoryUserRef | null
+  given_to_user: CashTxnHistoryUserRef | null
+  category: CashTxnHistoryCategoryRef | null
+  bank: CashTxnHistoryBankRef | null
 }
 
-// Laravel's native paginate() envelope — distinct from CashCategoryListPage's
-// custom {total_count, page_no, page_size, records} shape used elsewhere.
+// Laravel's paginated ResourceCollection envelope (data/links/meta) — since
+// PR #18 switched these two endpoints from raw ->paginate() to
+// CashTxnHistoryResource::collection()->response()->getData(true). Distinct
+// from CashCategoryListPage's custom {total_count, page_no, page_size,
+// records} shape used elsewhere, and from the flat current_page/last_page/
+// total shape this used before PR #18.
 export interface CashTxnHistoryPage {
-  current_page: number
   data: CashTxnHistoryRow[]
-  last_page: number
-  per_page: number
-  total: number
+  links: {
+    first: string | null
+    last: string | null
+    prev: string | null
+    next: string | null
+  }
+  meta: {
+    current_page: number
+    from: number | null
+    last_page: number
+    per_page: number
+    to: number | null
+    total: number
+  }
 }
 
 export interface CashTxnHistoryQuery {

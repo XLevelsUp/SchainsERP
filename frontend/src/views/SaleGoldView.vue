@@ -103,7 +103,7 @@ function makeEmptyForm(): Omit<SaleGoldFormValues, 'purity' | 'total_cash'> {
     customer_id: null,
     per_gram_cash: null,
     total_grams: null,
-    touch: null,
+    touch: 100,
     item_id: null,
     amnt_transfer_to_head: true,
     remarks: '',

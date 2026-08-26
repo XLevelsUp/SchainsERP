@@ -3,9 +3,12 @@ import { computed } from 'vue'
 
 // OB (opening balance, fetched live) / CB (closing balance, calculated
 // client-side from the form's amount + payment method) for both parties —
-// matches the legacy "Add Expense" dialog's balance tables. CB is null
-// until there's enough on the form to compute it (no amount entered yet);
-// shown as "—" rather than the legacy dialog's broken "NaN".
+// matches the legacy "Add Expense"/"Add Gold To Cash" dialogs' balance
+// tables, which always show Hand Cash and RTGS Cash as separate columns
+// (never collapsed) even on gold conversion screens, since which one moves
+// depends on which payment source the operator picks. CB is null until
+// there's enough on the form to compute it (no amount entered yet); shown
+// as "—" rather than the legacy dialog's broken "NaN".
 //
 // Right side is optional — omit it (e.g. Auto Entry, where only one
 // party's balance ever moves) to render a single full-width table instead
@@ -18,11 +21,9 @@ const props = withDefaults(
     leftCbCash: number | null
     leftCbRtgs: number | null
     // Grams/Purity are optional — pass all four *Grams/*Purity props to add
-    // a gold columns (gold-conversion screens); omit them for cash-only
-    // screens and the columns don't render at all. Gold screens collapse
-    // Hand Cash/RTGS Cash down to one Cash total — the Payment Sources
-    // section on those forms already itemizes the cash/bank split, so
-    // repeating it here would just be noise.
+    // gold columns (gold-conversion screens); omit them for cash-only
+    // screens and the columns don't render at all. Hand Cash/RTGS Cash
+    // always render as their own columns regardless — see header comment.
     leftObGrams?: number
     leftObPurity?: number
     leftCbGrams?: number | null
@@ -71,15 +72,13 @@ function fmt(value: number | null | undefined) {
       <thead>
         <tr class="bg-slate-50 text-left text-xs font-semibold text-slate-600">
           <th class="px-3 py-2">{{ leftLabel }}</th>
-          <template v-if="!showGold">
-            <th class="px-3 py-2 text-right" :class="activeColumn === 'cash' ? 'text-brand-700' : ''">
-              Hand Cash
-            </th>
-            <th class="px-3 py-2 text-right" :class="activeColumn === 'rtgs' ? 'text-brand-700' : ''">
-              RTGS Cash
-            </th>
-          </template>
-          <th class="px-3 py-2 text-right">{{ showGold ? 'Cash' : 'Total' }}</th>
+          <th class="px-3 py-2 text-right" :class="activeColumn === 'cash' ? 'text-brand-700' : ''">
+            Hand Cash
+          </th>
+          <th class="px-3 py-2 text-right" :class="activeColumn === 'rtgs' ? 'text-brand-700' : ''">
+            RTGS Cash
+          </th>
+          <th class="px-3 py-2 text-right">Total</th>
           <template v-if="showGold">
             <th class="px-3 py-2 text-right">Grams</th>
             <th class="px-3 py-2 text-right">Purity</th>
@@ -89,20 +88,18 @@ function fmt(value: number | null | undefined) {
       <tbody class="divide-y divide-slate-100">
         <tr>
           <td class="px-3 py-2 font-medium text-slate-500">OB</td>
-          <template v-if="!showGold">
-            <td
-              class="px-3 py-2 text-right tabular-nums"
-              :class="activeColumn === 'cash' ? 'font-semibold text-slate-900' : 'text-slate-700'"
-            >
-              {{ leftObCash.toLocaleString() }}
-            </td>
-            <td
-              class="px-3 py-2 text-right tabular-nums"
-              :class="activeColumn === 'rtgs' ? 'font-semibold text-slate-900' : 'text-slate-700'"
-            >
-              {{ leftObRtgs.toLocaleString() }}
-            </td>
-          </template>
+          <td
+            class="px-3 py-2 text-right tabular-nums"
+            :class="activeColumn === 'cash' ? 'font-semibold text-slate-900' : 'text-slate-700'"
+          >
+            {{ leftObCash.toLocaleString() }}
+          </td>
+          <td
+            class="px-3 py-2 text-right tabular-nums"
+            :class="activeColumn === 'rtgs' ? 'font-semibold text-slate-900' : 'text-slate-700'"
+          >
+            {{ leftObRtgs.toLocaleString() }}
+          </td>
           <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-700">
             {{ (leftObCash + leftObRtgs).toLocaleString() }}
           </td>
@@ -113,20 +110,18 @@ function fmt(value: number | null | undefined) {
         </tr>
         <tr class="bg-rose-50/50">
           <td class="px-3 py-2 font-medium text-slate-500">CB</td>
-          <template v-if="!showGold">
-            <td
-              class="px-3 py-2 text-right tabular-nums"
-              :class="activeColumn === 'cash' ? 'font-semibold text-slate-900' : 'text-slate-700'"
-            >
-              {{ fmt(leftCbCash) }}
-            </td>
-            <td
-              class="px-3 py-2 text-right tabular-nums"
-              :class="activeColumn === 'rtgs' ? 'font-semibold text-slate-900' : 'text-slate-700'"
-            >
-              {{ fmt(leftCbRtgs) }}
-            </td>
-          </template>
+          <td
+            class="px-3 py-2 text-right tabular-nums"
+            :class="activeColumn === 'cash' ? 'font-semibold text-slate-900' : 'text-slate-700'"
+          >
+            {{ fmt(leftCbCash) }}
+          </td>
+          <td
+            class="px-3 py-2 text-right tabular-nums"
+            :class="activeColumn === 'rtgs' ? 'font-semibold text-slate-900' : 'text-slate-700'"
+          >
+            {{ fmt(leftCbRtgs) }}
+          </td>
           <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">
             {{ leftCbCash === null || leftCbRtgs === null ? '—' : (leftCbCash + leftCbRtgs).toLocaleString() }}
           </td>
@@ -142,15 +137,13 @@ function fmt(value: number | null | undefined) {
       <thead>
         <tr class="bg-slate-50 text-left text-xs font-semibold text-slate-600">
           <th class="px-3 py-2">{{ rightLabel }}</th>
-          <template v-if="!showGold">
-            <th class="px-3 py-2 text-right" :class="activeColumn === 'cash' ? 'text-brand-700' : ''">
-              Hand Cash
-            </th>
-            <th class="px-3 py-2 text-right" :class="activeColumn === 'rtgs' ? 'text-brand-700' : ''">
-              RTGS Cash
-            </th>
-          </template>
-          <th class="px-3 py-2 text-right">{{ showGold ? 'Cash' : 'Total' }}</th>
+          <th class="px-3 py-2 text-right" :class="activeColumn === 'cash' ? 'text-brand-700' : ''">
+            Hand Cash
+          </th>
+          <th class="px-3 py-2 text-right" :class="activeColumn === 'rtgs' ? 'text-brand-700' : ''">
+            RTGS Cash
+          </th>
+          <th class="px-3 py-2 text-right">Total</th>
           <template v-if="showGold">
             <th class="px-3 py-2 text-right">Grams</th>
             <th class="px-3 py-2 text-right">Purity</th>
@@ -160,20 +153,18 @@ function fmt(value: number | null | undefined) {
       <tbody class="divide-y divide-slate-100">
         <tr>
           <td class="px-3 py-2 font-medium text-slate-500">OB</td>
-          <template v-if="!showGold">
-            <td
-              class="px-3 py-2 text-right tabular-nums"
-              :class="activeColumn === 'cash' ? 'font-semibold text-slate-900' : 'text-slate-700'"
-            >
-              {{ fmt(rightObCash) }}
-            </td>
-            <td
-              class="px-3 py-2 text-right tabular-nums"
-              :class="activeColumn === 'rtgs' ? 'font-semibold text-slate-900' : 'text-slate-700'"
-            >
-              {{ fmt(rightObRtgs) }}
-            </td>
-          </template>
+          <td
+            class="px-3 py-2 text-right tabular-nums"
+            :class="activeColumn === 'cash' ? 'font-semibold text-slate-900' : 'text-slate-700'"
+          >
+            {{ fmt(rightObCash) }}
+          </td>
+          <td
+            class="px-3 py-2 text-right tabular-nums"
+            :class="activeColumn === 'rtgs' ? 'font-semibold text-slate-900' : 'text-slate-700'"
+          >
+            {{ fmt(rightObRtgs) }}
+          </td>
           <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-700">
             {{ rightObCash == null || rightObRtgs == null ? '—' : (rightObCash + rightObRtgs).toLocaleString() }}
           </td>
@@ -184,20 +175,18 @@ function fmt(value: number | null | undefined) {
         </tr>
         <tr class="bg-emerald-50/50">
           <td class="px-3 py-2 font-medium text-slate-500">CB</td>
-          <template v-if="!showGold">
-            <td
-              class="px-3 py-2 text-right tabular-nums"
-              :class="activeColumn === 'cash' ? 'font-semibold text-slate-900' : 'text-slate-700'"
-            >
-              {{ fmt(rightCbCash) }}
-            </td>
-            <td
-              class="px-3 py-2 text-right tabular-nums"
-              :class="activeColumn === 'rtgs' ? 'font-semibold text-slate-900' : 'text-slate-700'"
-            >
-              {{ fmt(rightCbRtgs) }}
-            </td>
-          </template>
+          <td
+            class="px-3 py-2 text-right tabular-nums"
+            :class="activeColumn === 'cash' ? 'font-semibold text-slate-900' : 'text-slate-700'"
+          >
+            {{ fmt(rightCbCash) }}
+          </td>
+          <td
+            class="px-3 py-2 text-right tabular-nums"
+            :class="activeColumn === 'rtgs' ? 'font-semibold text-slate-900' : 'text-slate-700'"
+          >
+            {{ fmt(rightCbRtgs) }}
+          </td>
           <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">
             {{ rightCbCash == null || rightCbRtgs == null ? '—' : (rightCbCash + rightCbRtgs).toLocaleString() }}
           </td>

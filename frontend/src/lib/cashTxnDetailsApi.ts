@@ -5,6 +5,7 @@ import type {
   CashTxnHistoryQuery,
   CashTxnPostFormValues,
   CashTxnPostResult,
+  CashTxnPrintReceipt,
 } from '@/types'
 
 const RESOURCE = '/cash-txn-details'
@@ -83,5 +84,13 @@ export const cashTxnDetailsApi = {
   getOutHistory: (params: CashTxnHistoryQuery) =>
     api
       .get<ApiResponse<CashTxnHistoryPage>>(`${RESOURCE}/out-history${buildHistoryQuery(params)}`)
+      .then((r) => r.data),
+
+  // Single-transaction thermal print payload — CashTxnDetailController::
+  // getPrintReport's ?id= branch (the bulk date-range branch of the same
+  // endpoint isn't used here).
+  getPrintReceipt: (txnId: number) =>
+    api
+      .get<ApiResponse<CashTxnPrintReceipt>>(`${RESOURCE}/print-report?id=${txnId}`)
       .then((r) => r.data),
 }

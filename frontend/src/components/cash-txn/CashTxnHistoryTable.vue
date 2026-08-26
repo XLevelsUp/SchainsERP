@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Printer } from 'lucide-vue-next'
 import DataTable from '@/components/ui/DataTable.vue'
+import ThermalPrintModal from './ThermalPrintModal.vue'
 import { cashTxnDetailsApi } from '@/lib/cashTxnDetailsApi'
 import { ApiError } from '@/lib/api'
-import { formatDateTime } from '@/lib/date'
+import { formatDateOnly } from '@/lib/date'
 import type { CashTxnHistoryRow, CashTxnHistoryType } from '@/types'
 import type { DataTableColumn } from '@/types/table'
 
@@ -23,6 +24,8 @@ const props = defineProps<{
   direction: 'in' | 'out'
   headId: number
   userId: number
+  fromDate?: string
+  toDate?: string
   refreshKey?: number
 }>()
 
@@ -36,13 +39,16 @@ const isLoading = ref(true)
 const loadError = ref('')
 
 const columns: DataTableColumn<CashTxnHistoryRow>[] = [
-  { key: 'created_at', label: 'Date' },
+  { key: 'txn_id', label: 'ID' },
+  { key: 'added_at', label: 'Date' },
   { key: 'type', label: 'Type' },
-  { key: 'category_id', label: 'Category' },
+  { key: 'category', label: 'Category' },
   { key: 'amount', label: 'Amount' },
   { key: 'payment_method', label: 'Method' },
   { key: 'remarks', label: 'Remarks' },
 ]
+
+const printTxnId = ref<number | null>(null)
 
 // Mirrors the badge colors already used on the modals that create each
 // type, so the history reads as one system with the quick-action buttons
@@ -65,7 +71,7 @@ function typeBadge(type: CashTxnHistoryType) {
 }
 
 function methodLabel(row: CashTxnHistoryRow) {
-  if (row.payment_method === 'BANK') return row.bank?.account_name ?? 'Bank'
+  if (row.payment_method === 'BANK') return row.bank?.bank_name ?? 'Bank'
   return 'Cash on hand'
 }
 
@@ -80,14 +86,21 @@ async function load() {
   isLoading.value = true
   loadError.value = ''
   try {
-    const query = { head_id: props.headId, cash_user_id: props.userId, per_page: PER_PAGE, page: page.value }
+    const query = {
+      head_id: props.headId,
+      cash_user_id: props.userId,
+      from_date: props.fromDate || undefined,
+      to_date: props.toDate || undefined,
+      per_page: PER_PAGE,
+      page: page.value,
+    }
     const result =
       props.direction === 'in'
         ? await cashTxnDetailsApi.getInHistory(query)
         : await cashTxnDetailsApi.getOutHistory(query)
     rows.value = result.data
-    lastPage.value = result.last_page
-    total.value = result.total
+    lastPage.value = result.meta.last_page
+    total.value = result.meta.total
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load history.'
   } finally {
@@ -98,7 +111,7 @@ async function load() {
 onMounted(load)
 
 watch(
-  () => [props.headId, props.userId, props.refreshKey],
+  () => [props.headId, props.userId, props.fromDate, props.toDate, props.refreshKey],
   () => {
     page.value = 1
     load()
@@ -129,7 +142,7 @@ function nextPage() {
 
     <template v-else>
       <DataTable :columns="columns" :rows="rows" empty-message="No entries recorded yet.">
-        <template #created_at="{ value }">{{ formatDateTime(value as string) }}</template>
+        <template #added_at="{ value }">{{ formatDateOnly(value as string | null) }}</template>
         <template #type="{ value }">
           <span
             class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
@@ -138,7 +151,7 @@ function nextPage() {
             {{ typeBadge(value as CashTxnHistoryType).label }}
           </span>
         </template>
-        <template #category_id="{ row }">{{ row.category?.category_name ?? '—' }}</template>
+        <template #category="{ row }">{{ row.category?.category_name ?? '—' }}</template>
         <template #amount="{ value }">
           <span class="font-semibold tabular-nums text-slate-900">
             {{ Number(value).toLocaleString() }}
@@ -146,7 +159,26 @@ function nextPage() {
         </template>
         <template #payment_method="{ row }">{{ methodLabel(row) }}</template>
         <template #remarks="{ value }">{{ value || '—' }}</template>
+        <template #txn_id="{ value }">
+          <div class="flex flex-col items-center gap-1">
+            <span class="tabular-nums text-slate-700">{{ value }}</span>
+            <button
+              type="button"
+              class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Print receipt"
+              @click="printTxnId = value as number"
+            >
+              <Printer class="h-4 w-4" />
+            </button>
+          </div>
+        </template>
       </DataTable>
+
+      <ThermalPrintModal
+        v-if="printTxnId !== null"
+        :txn-id="printTxnId"
+        @close="printTxnId = null"
+      />
 
       <div v-if="total > 0" class="mt-2 flex items-center justify-between text-xs text-slate-500">
         <span>{{ rangeLabel }}</span>

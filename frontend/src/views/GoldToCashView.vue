@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Plus, RefreshCw, Trash } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -8,6 +8,7 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
+import PartyBalanceCards from '@/components/cash-txn/PartyBalanceCards.vue'
 import { goldToCashApi } from '@/lib/goldToCashApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
@@ -88,7 +89,7 @@ function makeEmptyForm(): Omit<GoldToCashFormValues, 'total_grams' | 'total_cash
     head_id: null,
     customer_id: null,
     total_gold: null,
-    touch: null,
+    touch: 100,
     per_gram_cash: null,
     remarks: '',
     retailer_id: null,
@@ -143,6 +144,106 @@ function removeSource(index: number) {
 const sourceTotal = computed(() => form.amount_sources.reduce((sum, s) => sum + (s.amount ?? 0), 0))
 const sourceTotalMatches = computed(
   () => Math.round(sourceTotal.value * 100) === Math.round((totalCash.value ?? 0) * 100),
+)
+
+/*
+|--------------------------------------------------------------------------
+| Live OB/CB balance preview — mirrors GoldToCashModal.vue exactly
+|--------------------------------------------------------------------------
+| Gold To Cash always pays out from the Head's own Cash/RTGS balances
+| (amnt_transfer_to_head is hardcoded true server-side — see
+| GoldToCashService), split by whichever source each payment row uses:
+| CASH_ON_HAND reduces cash_balance, BANK reduces rtgs_balance. The
+| customer's cash/RTGS is never touched — only their gold (grams/purity)
+| balance moves, since they're the one handing over gold.
+| userDetailsApi.get(id) returns the full UserDetail record
+| (rak_cash_balance/rak_rtgs_balance/grams_grand_total/purity_grand_total),
+| which the list() endpoint doesn't include, so each party is fetched
+| individually when selected. Rendered via the shared PartyBalanceCards
+| component, same as the Gold To Cash modal and the other gold-conversion
+| screens.
+*/
+
+const headBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+const customerBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+const isLoadingHeadBalance = ref(false)
+const isLoadingCustomerBalance = ref(false)
+
+async function loadPartyBalance(
+  userId: number | null,
+  balance: typeof headBalance,
+  loadingFlag: typeof isLoadingHeadBalance,
+) {
+  if (userId === null) {
+    balance.cash = 0
+    balance.rtgs = 0
+    balance.grams = 0
+    balance.purity = 0
+    return
+  }
+  loadingFlag.value = true
+  try {
+    const { user } = await userDetailsApi.get(userId)
+    balance.cash = user.rak_cash_balance
+    balance.rtgs = user.rak_rtgs_balance
+    balance.grams = user.grams_grand_total
+    balance.purity = user.purity_grand_total
+  } catch {
+    balance.cash = 0
+    balance.rtgs = 0
+    balance.grams = 0
+    balance.purity = 0
+  } finally {
+    loadingFlag.value = false
+  }
+}
+
+watch(
+  () => form.head_id,
+  (id) => loadPartyBalance(id, headBalance, isLoadingHeadBalance),
+)
+watch(
+  () => form.customer_id,
+  (id) => loadPartyBalance(id, customerBalance, isLoadingCustomerBalance),
+)
+
+const sourcesCashTotal = computed(() =>
+  form.amount_sources
+    .filter((s) => s.source === 'CASH_ON_HAND')
+    .reduce((sum, s) => sum + (s.amount ?? 0), 0),
+)
+const sourcesBankTotal = computed(() =>
+  form.amount_sources.filter((s) => s.source === 'BANK').reduce((sum, s) => sum + (s.amount ?? 0), 0),
+)
+const cashMoving = computed(() => sourceTotal.value > 0)
+
+const headCbCash = computed(() => (cashMoving.value ? headBalance.cash - sourcesCashTotal.value : null))
+const headCbRtgs = computed(() => (cashMoving.value ? headBalance.rtgs - sourcesBankTotal.value : null))
+const headCbGrams = computed(() =>
+  totalGrams.value !== null ? headBalance.grams + totalGrams.value : null,
+)
+const headCbPurity = computed(() =>
+  form.total_gold !== null ? headBalance.purity + form.total_gold : null,
+)
+
+const customerCbCash = computed(() =>
+  cashMoving.value ? customerBalance.cash : null,
+)
+const customerCbRtgs = computed(() =>
+  cashMoving.value ? customerBalance.rtgs : null,
+)
+const customerCbGrams = computed(() =>
+  totalGrams.value !== null ? customerBalance.grams - totalGrams.value : null,
+)
+const customerCbPurity = computed(() =>
+  form.total_gold !== null ? customerBalance.purity - form.total_gold : null,
+)
+
+const headName = computed(
+  () => users.value.find((u) => u.id === form.head_id)?.full_name ?? 'Head',
+)
+const customerName = computed(
+  () => users.value.find((u) => u.id === form.customer_id)?.full_name ?? 'Customer',
 )
 
 /*
@@ -373,6 +474,37 @@ async function handleSubmit() {
             size="sm"
             :rows="2"
             class="sm:col-span-3"
+          />
+        </section>
+
+        <!-- OB/CB balance preview -->
+        <section
+          v-if="form.head_id !== null || form.customer_id !== null"
+          class="border-t border-slate-200 pt-4"
+        >
+          <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+            Balance preview (OB / CB)
+          </p>
+          <PartyBalanceCards
+            :left-label="headName"
+            :left-ob-cash="headBalance.cash"
+            :left-ob-rtgs="headBalance.rtgs"
+            :left-cb-cash="headCbCash"
+            :left-cb-rtgs="headCbRtgs"
+            :left-ob-grams="headBalance.grams"
+            :left-ob-purity="headBalance.purity"
+            :left-cb-grams="headCbGrams"
+            :left-cb-purity="headCbPurity"
+            :right-label="customerName"
+            :right-ob-cash="customerBalance.cash"
+            :right-ob-rtgs="customerBalance.rtgs"
+            :right-cb-cash="customerCbCash"
+            :right-cb-rtgs="customerCbRtgs"
+            :right-ob-grams="customerBalance.grams"
+            :right-ob-purity="customerBalance.purity"
+            :right-cb-grams="customerCbGrams"
+            :right-cb-purity="customerCbPurity"
+            :is-loading="isLoadingHeadBalance || isLoadingCustomerBalance"
           />
         </section>
 
