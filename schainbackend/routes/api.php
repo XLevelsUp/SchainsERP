@@ -39,9 +39,10 @@ Route::prefix('v1')->group(function () {
     Route::get('cash-txn-details/out-history', [CashTxnDetailController::class, 'getOutHistory']);
     Route::get('cash-txn-details/in-history', [CashTxnDetailController::class, 'getInHistory']);
     Route::get('cash-txn-details/print-report', [CashTxnDetailController::class, 'getPrintReport']);
-    // Route::get('stock-details/history',        [StockDetailsController::class, 'getHistory']);
+    Route::get('stock-details/history',        [StockDetailsController::class, 'getHistory']);
     Route::get('stock-details/cash-transaction-history', [StockDetailsController::class, 'getCashTransactionHistory']);
     Route::get('stock-details/available-metals', [StockDetailsController::class, 'getAvailableMetals']);
+    Route::get('stock-details/head-stocks', [StockDetailsController::class, 'getHeadStocks']);
 
     Route::apiResource('cash-txn-details', CashTxnDetailController::class);
     Route::apiResource('cash-categories', CashCategoryController::class);

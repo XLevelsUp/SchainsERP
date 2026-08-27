@@ -41,4 +41,9 @@ class UsersItemsMapping extends Model
         'last_txn_date' => 'datetime',
         'is_primary' => 'integer',
     ];
+
+    public function item()
+    {
+        return $this->belongsTo(Item::class, 'item_id', 'item_id');
+    }
 }
