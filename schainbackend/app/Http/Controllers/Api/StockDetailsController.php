@@ -380,6 +380,27 @@ class StockDetailsController extends Controller
         }
     }
 
+    public function getConsolidatedReport(Request $request): JsonResponse
+    {
+        try {
+            $headId = $this->getActingUserId($request);
+            $result = $this->reportService->getConsolidatedReport($request->all(), $headId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Consolidated report retrieved successfully.',
+                'data' => $result,
+            ], 200);
+        } catch (\Throwable $e) {
+            Log::error('StockDetailsController::getConsolidatedReport failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to compile consolidated report.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function getCashTransactionHistory(Request $request)
     {
         try {

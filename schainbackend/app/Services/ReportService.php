@@ -14,6 +14,280 @@ class ReportService
     /**
      * Compile Items OB & CB report records based on filters.
      */
+    public function getConsolidatedReport(array $filters, int $headId): array
+    {
+        $employeeId = $filters['user_id'] ?? $filters['retailer_id'] ?? null;
+        $fromDate = $filters['from_date'] ?? null;
+        $fromTime = $filters['from_time'] ?? null;
+        $toDate = $filters['to_date'] ?? null;
+        $toTime = $filters['to_time'] ?? null;
+        $itemId = $filters['item_id'] ?? null;
+        
+        $pageSize = $filters['page_size'] ?? 1000;
+        $pageNoOut = $filters['page_no_out'] ?? 1;
+        $pageNoIn = $filters['page_no_in'] ?? 1;
+
+        $userId = null;
+        $retailerId = null;
+
+        if ($employeeId) {
+            if (strpos($employeeId, 'retailer_') === 0) {
+                $retailerId = (int) str_replace('retailer_', '', $employeeId);
+            } elseif (strpos($employeeId, 'user_') === 0) {
+                $userId = (int) str_replace('user_', '', $employeeId);
+            } else {
+                if (isset($filters['retailer_id'])) {
+                    $retailerId = (int) $employeeId;
+                } else {
+                    $userId = (int) $employeeId;
+                }
+            }
+        }
+
+        $query = StockDetails::with(['item', 'givenTo', 'givenBy', 'toItem'])
+            ->where('is_hided', 0)
+            ->where('is_freezed', 0);
+
+        if ($fromDate) {
+            $fDateTime = $fromTime ? "$fromDate $fromTime" : "$fromDate 00:00:00";
+            $query->where('added_at', '>=', $fDateTime);
+        }
+        if ($toDate) {
+            $tDateTime = $toTime ? "$toDate $toTime" : "$toDate 23:59:59";
+            $query->where('added_at', '<=', $tDateTime);
+        }
+        if ($itemId) {
+            $query->where('item_id', $itemId);
+        }
+
+        // Clone base query for OUT and IN
+        $outQuery = clone $query;
+        $inQuery = clone $query;
+
+        // Apply OUT Conditions
+        $outQuery->where(function ($q) use ($userId, $retailerId) {
+            if ($retailerId) {
+                $q->where(function ($q2) use ($retailerId) {
+                    $q2->where('retailer_id', $retailerId)
+                       ->orWhere('to_retailer_id', $retailerId);
+                });
+                $q->where(function ($q3) use ($retailerId) {
+                    $q3->where(function ($q4) use ($retailerId) {
+                        $q4->where('entry_type', 'EMPTOEMP')
+                           ->where('to_retailer_id', $retailerId)
+                           ->where('is_receiver_completed', 0);
+                    })->orWhere(function ($q4) {
+                        $q4->where('entry_type', '!=', 'EMPTOEMP')
+                           ->where('is_completed', 0);
+                    });
+                });
+                $q->where('entry_type', '!=', 'EMPTOHEAD');
+                $q->where(function ($q3) use ($retailerId) {
+                    $q3->where('entry_type', '!=', 'ANOTHERHEADTOEMP')
+                       ->orWhere(function ($q4) use ($retailerId) {
+                           $q4->where('retailer_id', $retailerId)
+                              ->orWhere('to_retailer_id', $retailerId);
+                       });
+                });
+                $q->where(function ($q3) use ($retailerId) {
+                    $q3->where('entry_type', '!=', 'HEADTOHEAD')
+                       ->orWhere('retailer_id', $retailerId);
+                });
+            } elseif ($userId) {
+                $q->where(function ($q2) use ($userId) {
+                    $q2->where('given_to', $userId)
+                       ->orWhere('given_by', $userId);
+                });
+                $q->where(function ($q3) use ($userId) {
+                    $q3->where(function ($q4) use ($userId) {
+                        $q4->where('entry_type', 'EMPTOEMP')
+                           ->where('given_to', $userId)
+                           ->where('is_receiver_completed', 0);
+                    })->orWhere(function ($q4) {
+                        $q4->where('entry_type', '!=', 'EMPTOEMP')
+                           ->where('is_completed', 0);
+                    });
+                });
+                $q->where('entry_type', '!=', 'EMPTOHEAD');
+                $q->where(function ($q3) use ($userId) {
+                    $q3->where('entry_type', '!=', 'ANOTHERHEADTOEMP')
+                       ->orWhere(function ($q4) use ($userId) {
+                           $q4->where('given_by', $userId)
+                              ->orWhere('given_to', $userId);
+                       });
+                });
+                $q->where(function ($q3) use ($userId) {
+                    $q3->where('entry_type', '!=', 'HEADTOHEAD')
+                       ->orWhere('given_to', $userId);
+                });
+            }
+            
+            $outEntryTypes = ['NORMAL', 'CashToGold', 'OUT_CASH_CONVERTER', 'IN_CASH_CONVERTER', 'GOLDCASHCONVERSION'];
+            foreach ($outEntryTypes as $type) {
+                $q->where(function ($q3) use ($type) {
+                    $q3->where('entry_type', '!=', $type)
+                       ->orWhere('stock_type', 'OUT');
+                });
+            }
+        });
+
+        // Apply IN Conditions
+        $inQuery->where(function ($q) use ($userId, $retailerId) {
+            if ($retailerId) {
+                $q->where(function ($q2) use ($retailerId) {
+                    $q2->where('retailer_id', $retailerId)
+                       ->orWhere('to_retailer_id', $retailerId);
+                });
+                $q->where(function ($q3) use ($retailerId) {
+                    $q3->where(function ($q4) use ($retailerId) {
+                        $q4->where('entry_type', 'EMPTOEMP')
+                           ->where('retailer_id', $retailerId)
+                           ->where('is_receiver_completed', 0);
+                    })->orWhere(function ($q4) {
+                        $q4->where('entry_type', '!=', 'EMPTOEMP')
+                           ->where('is_completed', 0);
+                    });
+                });
+                $q->where(function ($q3) use ($retailerId) {
+                    $q3->where('entry_type', '!=', 'HEADTOHEAD')
+                       ->orWhere('to_retailer_id', $retailerId);
+                });
+            } elseif ($userId) {
+                $q->where(function ($q2) use ($userId) {
+                    $q2->where('given_to', $userId)
+                       ->orWhere('given_by', $userId);
+                });
+                $q->where(function ($q3) use ($userId) {
+                    $q3->where(function ($q4) use ($userId) {
+                        $q4->where('entry_type', 'EMPTOEMP')
+                           ->where('given_by', $userId)
+                           ->where('is_receiver_completed', 0);
+                    })->orWhere(function ($q4) {
+                        $q4->where('entry_type', '!=', 'EMPTOEMP')
+                           ->where('is_completed', 0);
+                    });
+                });
+                $q->where(function ($q3) use ($userId) {
+                    $q3->where('entry_type', '!=', 'HEADTOHEAD')
+                       ->orWhere('given_to', $userId);
+                });
+            }
+            
+            $inEntryTypes = ['NORMAL', 'CashToGold', 'OUT_CASH_CONVERTER', 'IN_CASH_CONVERTER', 'GOLDCASHCONVERSION'];
+            foreach ($inEntryTypes as $type) {
+                $q->where(function ($q3) use ($type) {
+                    $q3->where('entry_type', '!=', $type)
+                       ->orWhere('stock_type', 'IN');
+                });
+            }
+        });
+
+        // Clone queries for totals before pagination
+        $outTotalsQuery = clone $outQuery;
+        $inTotalsQuery = clone $inQuery;
+
+        $outTotalCount = $outQuery->count();
+        $inTotalCount = $inQuery->count();
+
+        $outRecords = $outQuery->orderBy('stock_id', 'desc')
+            ->skip(($pageNoOut - 1) * $pageSize)
+            ->take($pageSize)
+            ->get();
+
+        $inRecords = $inQuery->orderBy('stock_id', 'desc')
+            ->skip(($pageNoIn - 1) * $pageSize)
+            ->take($pageSize)
+            ->get();
+
+        // DB-level Aggregation Function (Memory efficient for large datasets)
+        $calculateTotals = function ($query, $isOut) use ($userId, $retailerId) {
+            // PostgreSQL requires proper casting or type checking in CASE WHEN.
+            // Since we added columns to DB, we can do raw SQL aggregation safely.
+            
+            $targetId = $retailerId ?: $userId;
+            $idColumn = $retailerId ? 'retailer_id' : ($isOut ? 'given_to' : 'given_by');
+
+            $totals = $query->selectRaw("
+                SUM(CASE WHEN entry_type != 'GOLDCASHCONVERSION' THEN grams ELSE 0 END) as tot_grams,
+                SUM(CASE 
+                    WHEN entry_type != 'GOLDCASHCONVERSION' THEN
+                        CASE 
+                            WHEN to_touch > 0 AND entry_type IN ('EMPTOEMP', 'EMPTOHEAD', 'ANOTHERHEADTOEMP', 'HEADTOHEAD') 
+                                 AND ($idColumn = ?) THEN to_purity
+                            ELSE purity 
+                        END
+                    ELSE 0 
+                END) as tot_purity,
+                SUM(CASE 
+                    WHEN entry_type != 'GOLDCASHCONVERSION' THEN
+                        CASE 
+                            WHEN to_touch > 0 AND entry_type IN ('EMPTOEMP', 'EMPTOHEAD', 'ANOTHERHEADTOEMP', 'HEADTOHEAD') 
+                                 AND ($idColumn = ?) THEN to_waste_value
+                            ELSE waste_value 
+                        END
+                    ELSE 0 
+                END) as tot_wastage
+            ", [$targetId, $targetId])->toBase()->first();
+
+            return [
+                'grams' => round($totals->tot_grams ?? 0, 3),
+                'purity' => round($totals->tot_purity ?? 0, 3),
+                'wastage' => round($totals->tot_wastage ?? 0, 3),
+            ];
+        };
+
+        return [
+            'summary' => [
+                'out' => $calculateTotals($outTotalsQuery, true),
+                'in' => $calculateTotals($inTotalsQuery, false),
+            ],
+            'out_details' => [
+                'total_count' => $outTotalCount,
+                'page_no' => $pageNoOut,
+                'page_size' => $pageSize,
+                'records' => $outRecords->map(function ($record) {
+                    return [
+                        'stock_id' => $record->stock_id,
+                        'entry_type' => $record->entry_type,
+                        'stock_type' => $record->stock_type,
+                        'grams' => $record->grams,
+                        'touch' => $record->touch,
+                        'purity' => $record->purity,
+                        'waste_value' => $record->waste_value,
+                        'added_at' => $record->added_at,
+                        'remarks' => $record->remarks,
+                        'item_id' => $record->item_id,
+                        'item_name' => $record->item ? $record->item->item_name : null,
+                        'given_by_name' => $record->givenBy ? $record->givenBy->name : null,
+                        'given_to_name' => $record->givenTo ? $record->givenTo->name : null,
+                    ];
+                }),
+            ],
+            'in_details' => [
+                'total_count' => $inTotalCount,
+                'page_no' => $pageNoIn,
+                'page_size' => $pageSize,
+                'records' => $inRecords->map(function ($record) {
+                    return [
+                        'stock_id' => $record->stock_id,
+                        'entry_type' => $record->entry_type,
+                        'stock_type' => $record->stock_type,
+                        'grams' => $record->grams,
+                        'touch' => $record->touch,
+                        'purity' => $record->purity,
+                        'waste_value' => $record->waste_value,
+                        'added_at' => $record->added_at,
+                        'remarks' => $record->remarks,
+                        'item_id' => $record->item_id,
+                        'item_name' => $record->item ? $record->item->item_name : null,
+                        'given_by_name' => $record->givenBy ? $record->givenBy->name : null,
+                        'given_to_name' => $record->givenTo ? $record->givenTo->name : null,
+                    ];
+                }),
+            ]
+        ];
+    }
+
     public function getItemsObcbReport(array $filters, int $headId): array
     {
         $employeeId = $filters['employee_id'] ?? null;

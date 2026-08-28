@@ -72,5 +72,8 @@ Route::prefix('v1/stock')->group(function () {
     Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
     Route::post('numeric-waste-in', [StockDetailsController::class, 'postNumericWasteIn']);
     Route::post('auto-entry', [StockDetailsController::class, 'postAutoEntry']);
+    Route::get('reports/items-obcb', [StockDetailsController::class, 'getHistoryItemsObcb']);
+    Route::get('reports/consolidated', [StockDetailsController::class, 'getConsolidatedReport']);
+    Route::post('hide', [StockDetailsController::class, 'postHide']);
 
 });
