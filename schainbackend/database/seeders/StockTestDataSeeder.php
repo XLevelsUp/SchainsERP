@@ -69,7 +69,7 @@ class StockTestDataSeeder extends Seeder
             [
                 'name' => 'Head Admin',
                 'user_name' => 'head_admin',
-                'password_hash' => '$2y$12$otbYsBjIT00Tj2sJuultO.4q3PgVb9Rrz3aW.eMLlxrqBwFYnAOUK',
+                'password_hash' => \Illuminate\Support\Facades\Hash::make('password'),
                 'address' => 'Office',
                 'signature' => 'HA',
                 'code' => 'HA001',
@@ -96,7 +96,7 @@ class StockTestDataSeeder extends Seeder
             [
                 'name' => 'Employee One',
                 'user_name' => 'employee_one',
-                'password_hash' => '$2y$12$otbYsBjIT00Tj2sJuultO.4q3PgVb9Rrz3aW.eMLlxrqBwFYnAOUK',
+                'password_hash' => \Illuminate\Support\Facades\Hash::make('password'),
                 'address' => 'Branch',
                 'signature' => 'E1',
                 'code' => 'E001',
