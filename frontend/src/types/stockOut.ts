@@ -11,13 +11,16 @@ export interface StockOutItemInput {
   waste_total: number | null
   remarks: string
   item_remarks: string
+  // Per-item, not form-level — matches the API doc's payload shape (each
+  // item in the `items` array carries its own added_at) and the legacy
+  // screen's per-row Date-Time column.
+  added_at: string
 }
 
 export interface StockOutFormValues {
   given_by: number | null
   given_to: number | null
   retailer_id: number | null
-  added_at: string
   items: StockOutItemInput[]
 }
 

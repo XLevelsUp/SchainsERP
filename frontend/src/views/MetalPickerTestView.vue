@@ -17,10 +17,11 @@ import type { DataTableColumn, Item, MetalPickerSelection, UserDetailListItem } 
 |--------------------------------------------------------------------------
 | Metal Picker — standalone test harness
 |--------------------------------------------------------------------------
-| Not linked from any real transaction screen — this exists purely to try
-| GET /stock-details/available-metals and the MetalPickerModal it powers
-| before that modal gets wired into Stock Out / GMS / Item Change for real.
-| See MetalPickerModal.vue's header comment for the full context.
+| Not linked from any real transaction screen, but MetalPickerModal itself
+| now IS wired into Stock Out/In and GMS Out/In (opens automatically when
+| a row's Item is set to "Metal" — see those panels' comments). This page
+| just lets you exercise GET /stock-details/available-metals directly
+| without going through a full transaction row first.
 |--------------------------------------------------------------------------
 */
 
@@ -70,8 +71,6 @@ const resultColumns: DataTableColumn<MetalPickerSelection>[] = [
   { key: 'touch', label: 'Touch' },
   { key: 'purity', label: 'Purity' },
   { key: 'taken', label: 'Taken' },
-  { key: 'wastage', label: 'Wastage' },
-  { key: 'rowTotal', label: 'Row total' },
 ]
 
 function handleConfirm(rows: MetalPickerSelection[]) {
@@ -84,14 +83,13 @@ function handleConfirm(rows: MetalPickerSelection[]) {
   <div>
     <PageHeader
       title="Metal Picker (Test)"
-      description="Prototype for the Metal Selection API (GET /stock-details/available-metals) — not wired into any real transaction screen yet."
+      description="Standalone harness for the Metal Selection API (GET /stock-details/available-metals) — the same modal is live on Stock Out/In and GMS Out/In."
     />
 
     <p class="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
       <FlaskConical class="mt-0.5 h-4 w-4 shrink-0" />
-      Test feature. Confirming a selection here doesn't submit anything — it just shows you the
-      computed payload shape so you can verify it before this gets wired into Stock Out / GMS /
-      Item Change for real.
+      Test harness only — Saving here doesn't submit anywhere, it just shows you the computed
+      payload shape. On the real transaction panels, Save folds this straight into the row(s).
     </p>
 
     <div
@@ -150,8 +148,6 @@ function handleConfirm(rows: MetalPickerSelection[]) {
           <template #touch="{ value }">{{ Number(value).toFixed(3) }}</template>
           <template #purity="{ value }">{{ Number(value).toFixed(3) }}</template>
           <template #taken="{ value }">{{ Number(value).toFixed(3) }}</template>
-          <template #wastage="{ value }">{{ Number(value).toFixed(3) }}</template>
-          <template #rowTotal="{ value }">{{ Number(value).toFixed(3) }}</template>
         </DataTable>
       </BaseCard>
     </template>

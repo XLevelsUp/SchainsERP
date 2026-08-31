@@ -57,7 +57,7 @@ json
             "item_remarks": "Second item remarks",
             "added_at": "2026-08-03 23:26:41"
         }
-    ]
+    ]m
 }
 
 
@@ -1111,6 +1111,40 @@ json
 }
 
 
+
+24.GMS In (Goldsmith Return Entry) - Submitting Multiple Items
+Registers incoming finished gold items from a goldsmith worker to head inventory with stone/thread deductions.
+
+URL: POST /api/v1/stock/gms-in
+Headers:
+Content-Type: application/json
+X-User-ID: 1
+Request Body:
+json
+
+{
+    "given_by": 2,
+    "given_to": 1,
+    "items": [
+        {
+            "item_id": 1,
+            "grams": 100.0000,
+            "stone": 5.0000,
+            "thread": 1.0000,
+            "wastage": 4.0000,
+            "hall_mark": 91.6000,
+            "mtouch": 20.0000,
+            "mtouch_wastage": 0.0500,
+            "remarks": "GMS Return 1",
+            "item_remarks": "Worker return",
+            "added_at": "2026-08-04 23:26:41"
+        }
+    ]
+}
+
+
+
+
 IMPORTANT
 
 Frontend Implementation Note (Pop-Up Calculations): The API intentionally does NOT return dynamic table fields like Taken, Wastage, or Total, nor does it calculate the footer sum totals.
@@ -1121,6 +1155,450 @@ Vue.js must map the initial data array into the table (ID, Grams, Touch, Purity,
 Vue.js must provide empty input boxes (v-model) for dynamic fields like "Taken" or "Wastage".
 Vue.js must dynamically compute the row totals (e.g., (Row Grams) - (Row Taken)) and the global footer sum totals natively in the browser as the user types.
 When the user clicks "Save", Vue.js will send the fully computed array payload to the final submission endpoint (e.g., POST /api/v1/gms-out).
+
+
+
+25.Numeric Wastages Out - Submitting Multiple Items
+Tracks numeric wastage per-piece allocations (which can optionally trigger a cash payout). Supports dynamic arrays.
+
+URL: POST /api/v1/stock/numeric-waste
+Headers:
+Content-Type: application/json
+X-User-ID: 1
+
+Request Body:
+
+{
+    "given_by": 1,
+    "given_to": 2,
+    "added_at": "2026-07-30 23:22:56",
+    "items": [
+        {
+            "item_id": 1,
+            "grams": 10.0000,
+            "touch": 92.0000,
+            "no_of_pcs": 10.0000,
+            "amount_pcs": 100.0000,
+            "waste_id": 1,
+            "waste_total": 0.1000,
+            "waste_value": 1.0000,
+            "wValue": 1.0000,
+            "purity": 10.1200,
+            "remarks": "Wastage row 1",
+            "item_remarks": "Custom row remarks 1"
+        },
+        {
+            "item_id": 2,
+            "grams": 5.0000,
+            "touch": 92.0000,
+            "no_of_pcs": 5.0000,
+            "amount_pcs": 100.0000,
+            "waste_id": 1,
+            "waste_total": 0.1000,
+            "waste_value": 0.5000,
+            "wValue": 0.5000,
+            "purity": 5.0600,
+            "remarks": "Wastage row 2"
+        }
+    ]
+}
+
+
+
+26. Numeric Wastage In API
+Handles the saving of numeric wastage details (like stone, thread, or general inward numeric wastage). This endpoint supports batch saving by accepting an array of items.
+
+URL: POST /api/v1/numeric-waste-in
+Headers: Content-Type: application/json
+Expected JSON Payload (Example):
+json
+
+
+{
+    "given_by": 2,
+    "given_to": 1,
+    "added_at": "2026-07-30 23:22:56",
+    "items": [
+        {
+            "item_id": 1,
+            "grams": 10.5000,
+            "touch": 100.0000,
+            "no_of_pcs": 2.0000,
+            "amount_pcs": 100.0000,
+            "waste_id": 1,
+            "waste_total": 5.2000,
+            "waste_value": 1.0000,
+            "wValue": 1.0000,
+            "purity": 10.5000,
+            "remarks": "Inward Stone Wastage",
+            "item_remarks": "Custom row remarks"
+        },
+        {
+            "item_id": 2,
+            "grams": 5.0000,
+            "touch": 90.0000,
+            "no_of_pcs": 1.0000,
+            "amount_pcs": 100.0000,
+            "waste_id": 1,
+            "waste_total": 0.1000,
+            "waste_value": 0.5000,
+            "wValue": 0.5000,
+            "purity": 4.5000,
+            "remarks": "Wastage row 2"
+        }
+    ]
+}
+
+
+
+27. Head Stocks API
+Fetches the Head Stocks summary for the Metal Dashboard. It returns real-time live stock balances, or can execute "time-travel" calculations to get historical opening balances if a date/time filter is provided.
+
+URL: GET /api/v1/stock-details/head-stocks
+Query Parameters (All Optional):
+user_id (integer): ID of the Head to query. Defaults to the logged-in user if not provided.
+head_txn_from_date (string, YYYY-MM-DD): Filter to view stock balance up to this specific date.
+head_txn_from_time (string, HH:MM:SS): Time filter accompanying the date.
+Expected Response Payload (Example):
+json
+
+{
+    "success": true,
+    "message": "Head stocks retrieved successfully",
+    "data": {
+        "items": [
+            {
+                "item_id": 1,
+                "item_name": "METAL",
+                "grams": 1.260,
+                "percentage": 93.333,
+                "purity": 1.176
+            },
+            {
+                "item_id": 2,
+                "item_name": "GOLD",
+                "grams": 0.059,
+                "percentage": 1.695,
+                "purity": 0.001
+            }
+        ],
+        "totals": {
+            "grams": 1.319,
+            "purity": 1.177
+        },
+        "cash_balance": 5000.00,
+        "active_orders": 0.000
+    }
+}
+
+
+28. Transaction History API 
+Fetches the fully formatted, paginated historical transactions for the Metal Dashboard. Calculates grand totals across the dataset before paginating.
+
+URL: GET /api/v1/stock-details/history
+Query Parameters (All Optional):
+head_id (integer): ID of the Head to query. Defaults to the logged-in user if not provided.
+employee_id (integer): Filter transactions by a specific employee/party involved.
+item_id (integer): Filter by a specific Item ID.
+type (string, IN or OUT): Filter by transaction flow relative to the Head.
+from_date (string, YYYY-MM-DD): Filter starting date.
+to_date (string, YYYY-MM-DD): Filter ending date.
+page_size (integer): Number of transactions per page (Defaults to 10).
+page (integer): Target page number.
+Expected Response Payload (Example):
+json
+
+{
+    "success": true,
+    "message": "Stock history retrieved successfully",
+    "data": {
+        "totals": {
+            "grams": 1173.500,
+            "purity": 1098.705,
+            "pcs": 70
+        },
+        "transactions": {
+            "current_page": 1,
+            "data": [
+                {
+                    "id": 2284,
+                    "item_name": "GOLD (KDM)",
+                    "stock_type": "OUT",
+                    "grams": 141.220,
+                    "pcs": 0,
+                    "touch": 91.700,
+                    "wastage": 0.000,
+                    "purity": 129.499,
+                    "user_id": null,
+                    "user": "MELTING",
+                    "remarks": ""
+                },
+                {
+                    "id": 2279,
+                    "item_name": "METAL => METAL",
+                    "stock_type": "IN",
+                    "grams": 95.020,
+                    "pcs": 0,
+                    "touch": 99.900,
+                    "wastage": 0.000,
+                    "purity": 94.925,
+                    "user_id": 14,
+                    "user": "NIHAA(PR)",
+                    "remarks": "From : NIHAA(H) ABISHEK => To : NIHAA(PR)"
+                }
+            ],
+            "first_page_url": "...",
+            "last_page": 10,
+            "total": 100
+        }
+    }
+}
+
+29.Auto Entry (Unified Stock Transfer)
+Allows administrators to record direct transfers of items between two users in a single transaction payload. Supports standard items, goldsmith items (GMS), and finished items (FITEM).
+
+URL: POST /api/v1/stock/auto-entry
+Headers:
+Content-Type: application/json
+X-User-ID: 1
+Request Body Example (Unified Payload - Mixed NORMAL and GMS items):
+json
+
+{
+    "type": "EMPTOEMP",
+    "from_employee": 2,
+    "to_employee": 3,
+    "from_retailer": null,
+    "to_retailer": null,
+    "emp_item_id1": 1,
+    "emp_item_id2": 2,
+    "items": [
+        {
+            "type": "NORMAL",
+            "added_at": "2024-03-15 10:30:00",
+            "grams": 25.0000,
+            "touch": 92.0000,
+            "to_touch": 92.0000,
+            "waste_total": 0.5,
+            "waste_value": 0.125,
+            "purity": 23.125,
+            "remarks": "Standard ring transfer",
+            "item_remarks": "Auto entry row 1"
+        },
+        {
+            "type": "GMS",
+            "added_at": "2024-03-15 10:35:00",
+            "grams": 15.0000,
+            "touch": 92.0000,
+            "to_touch": 90.0000,
+            "stone": 1.0000,
+            "thread": 0.5000,
+            "to_stone": 1.0000,
+            "to_thread": 0.5000,
+            "gms_mtouch": 1.0,
+            "gms_mthouch_wastage": 0.1,
+            "waste_total": 0.5,
+            "waste_value": 0.067,
+            "purity": 12.48,
+            "remarks": "Goldsmith row transfer",
+            "item_remarks": "Auto entry row 2"
+        }
+    ]
+}
+Per-Item Parameters Description:
+type (required): "NORMAL", "GMS", or "FITEM". Determines backend routing and calculation logic.
+added_at (optional): Date-Time of the entry (YYYY-MM-DD HH:MM:SS). Defaults to current time if omitted.
+grams (required): Gross weight in grams.
+touch (required): Starting purity touch (%).
+to_touch (required): Target purity touch (%).
+waste_total (optional): Wastage percentage.
+waste_value (optional): Calculated wastage in grams (WValue).
+purity (optional): Final calculated purity. If omitted, the backend calculates it.
+remarks (optional): Overall transaction remarks.
+item_remarks (optional): Specific item remarks.
+stone, thread (optional, for GMS): Deductions for Goldsmith items.
+gms_mtouch, gms_mthouch_wastage (optional, for GMS): M-touch specific attributes.
+to_stone, to_thread (optional, for GMS): Target deductions.
+
+
+30. Items OB & CB Report 
+Generates the running opening and closing balance log for a specific user and gold item category.
+
+URL: GET /api/v1/stocks/reports/items-obcb
+Headers:
+X-User-ID: 1
+Query Parameters:
+employee_id (string, optional - e.g. user_2 or retailer_1)
+item_id (integer, optional)
+from_date (string, optional - YYYY-MM-DD)
+to_date (string, optional - YYYY-MM-DD)
+from_time (string, optional - HH:MM:SS)
+to_time (string, optional - HH:MM:SS)
+type (string, optional - IN or OUT)
+page_size (integer, optional, default: 50)
+page_no (integer, optional, default: 1)
+Response Example:
+json
+
+{
+    "success": true,
+    "message": "Items OB & CB report compiled successfully.",
+    "data": {
+        "total_count": 1,
+        "page_no": 1,
+        "page_size": 50,
+        "records": [
+            {
+                "stock_id": 1,
+                "given_by_name": "Head Admin",
+                "given_to_name": "Employee One",
+                "stock_type": "OUT",
+                "entry_type": "NORMAL",
+                "item_name": "Gold Ring",
+                "to_item_name": null,
+                "grams": 20.0,
+                 "touch": 92.0,
+                "purity": 18.4,
+                "ob_grams": 80.0,
+                "cb_grams": 100.0,
+                "ob_purity": 73.6,
+                "cb_purity": 92.0,
+                "remarks": "Standard outward",
+                "added_at": "2026-08-04 18:22:53"
+            }
+        ]
+    }
+}
+
+
+31. Consolidated Report
+Generates the complete summarized history of all outward and inward stock transactions for a specific employee or retailer.
+
+URL: GET /api/v1/stock/reports/consolidated
+Headers:
+X-User-ID: 1
+Query Parameters:
+user_id (integer, optional) - ID of the employee
+retailer_id (integer, optional) - ID of the retailer
+from_date (string, optional) - YYYY-MM-DD
+to_date (string, optional) - YYYY-MM-DD
+from_time (string, optional) - HH:MM:SS
+to_time (string, optional) - HH:MM:SS
+item_id (integer, optional)
+page_size (integer, optional, default: 1000)
+page_no_out (integer, optional, default: 1)
+page_no_in (integer, optional, default: 1)
+Response Example:
+json
+
+{
+    "success": true,
+    "message": "Consolidated report retrieved successfully.",
+    "data": {
+        "summary": {
+            "out": {
+                "grams": 146796.0,
+                "purity": 132470.106,
+                "wastage": 0.0
+            },
+            "in": {
+                "grams": 260922.6,
+                "purity": 235581.423,
+                "wastage": 0.0
+            }
+        },
+        "out_details": {
+            "total_count": 26773,
+            "page_no": 1,
+            "page_size": 1,
+            "records": [
+                {
+                    "stock_id": 100022,
+                    "entry_type": "EMPTOEMP",
+                    "stock_type": "OUT",
+                    "grams": "10.0000",
+                    "purity": "9.2000",
+                    "added_at": "2025-10-10 10:10:10",
+                    "item": { "item_name": "Gold Ring" }
+                }
+            ]
+        },
+        "in_details": {
+            "total_count": 47630,
+            "page_no": 1,
+            "page_size": 1,
+            "records": [
+                {
+                    "stock_id": 100021,
+                    "entry_type": "NORMAL",
+                    "stock_type": "IN",
+                    "grams": "5.0000",
+                    "purity": "4.6000",
+                    "added_at": "2025-10-10 10:10:10",
+                    "item": { "item_name": "Gold Chain" }
+                }
+            ]
+        }
+    }
+}
+Changes & Database Migration (Consolidated Report Optimization)
+This API underwent a massive optimization to safely process large datasets (100K+ records) while perfectly retaining legacy business logic parity. Below are the documented architectural changes.
+
+1. Why the changes were required
+Scalability and Memory Exhaustion: The previous implementation calculated summary totals by pulling entire filtered recordsets into PHP memory (->get()). During tests with 100K+ rows, hydrating tens of thousands of active Eloquent models instantly exhausted PHP memory constraints, causing fatal API crashes.
+Missing Schema Parity: Legacy logic executed math using Auto Entry columns (e.g., to_touch) which physically did not exist in the Laravel database schema, resulting in silent calculation failures or SQL column does not exist errors.
+Sequential Scans: Without proper indexing on time-series queries, the database was forced to execute full table scans (Seq Scan) which exponentially slowed down date-range filtering.
+
+2. Database Migration Changes
+A new migration (2026_08_28_203540_add_auto_entry_touch_columns_to_stock_details_table.php) was executed to fix schema parity and indexing:
+
+Added Auto Entry Columns:
+to_touch, to_mtouch, to_waste_value, to_waste_id, to_waste_total, to_purity (All defined as DECIMAL(12, 4) and INT).
+Why:. The AutoEntryService directly requires these to insert transfers, and the Consolidated Report requires them to calculate summary parity.
+Added Index: idx_stock_added_at on the added_at column.
+Why: Proved by EXPLAIN ANALYZE, date-range queries heavily bottlenecked the API. Introducing this B-Tree index reduced worst-case execution time from 88.47 ms down to 0.195 ms by allowing PostgreSQL to seek directly to the date partition.
+3. Removed / Changed Logic
+Removed: PHP-level iteration loop over Eloquent Collection.
+Why: Passing 74,000 active rows into PHP crashed the server memory.
+Replaced With: A raw SQL selectRaw aggregation query executed purely at the PostgreSQL layer.
+Removed (Attempted): The toBase()->cursor() PHP Generator pattern was initially tested.
+Why: While it kept memory flat, database-level aggregation proved to be exponentially faster and safer for pure mathematical summations.
+4. ReportService Changes
+The ReportService::calculateTotals() logic was heavily refactored:
+
+The Change: Replaced PHP foreach ($records) summation with PostgreSQL SUM() and CASE WHEN aggregation.
+Legacy Parity: The complex nested IF condition (if to_touch > 0 AND entry_type IN ('EMPTOEMP'...) THEN use to_purity) was successfully translated into native CASE WHEN SQL syntax.
+Impact: The database engine now mathematically crunches 100,000 rows natively and simply returns 3 integers (total grams, purity, wastage) to Laravel.
+5. Pagination and Performance
+Deterministic Pagination: Records are paginated using ->orderBy('stock_id', 'desc')->skip(...)->take(...). Because stock_id is the primary key, row ordering is strictly guaranteed and records will never accidentally shift between pages.
+100K-Record Benchmark Metrics:
+Execution Time: ~2.09 seconds (End-to-End, including Laravel boot and routing).
+Peak PHP Memory: ~49.2 MB (Strictly the baseline Laravel framework overhead; 0MB extra consumed by row processing).
+Active Rows Processed: 74,403 rows aggregated accurately into summary totals.
+6. API Testing Checklist
+When testing this API, ensure you validate the following:
+
+ Normal Retrieval: Ensure standard requests load < 2 seconds.
+ Date-Range Filtering: Query from_date and to_date and verify EXPLAIN uses idx_stock_added_at.
+ item_id Filtering: Ensure grid only shows the specific gold item.
+ Pagination: Pass page_no_out=2 and verify stock_id sequence doesn't skip or duplicate.
+ Large Datasets: Test with an employee holding 10K+ active rows.
+ Auto Entry Validation: Verify to_purity logic correctly overwrites purity in the summary totals when a head-transfer triggers the to_touch > 0 rule.
+ Empty Scenarios: Test date ranges with 0 records to ensure summary returns 0.000 rather than null.
+7. Migration / Deployment Notes
+CRITICAL DEPLOYMENT ORDER: You must run php artisan migrate to execute the 2026_08_28_203540_add_auto_entry_touch_columns_to_stock_details_table migration BEFORE deploying the updated ReportService codebase. If the codebase is deployed first, the new raw SQL SUM(CASE WHEN...) query will trigger fatal column does not exist Postgres exceptions on the live server.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

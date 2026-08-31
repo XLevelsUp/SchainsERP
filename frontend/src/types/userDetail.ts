@@ -26,9 +26,11 @@ export interface UserDetailListItem {
   // module=stock (or omitted — the backend defaults to 'stock')
   gm?: string
   purity?: string
+  last_txn_date?: string | null
   // module=cash
   hand_cash?: string
   rtgs_cash?: string
+  last_cash_txn_date?: string | null
 }
 
 // A user record as returned by the backend (password_hash/otp/report_password are hidden by the model).
@@ -56,6 +58,15 @@ export interface UserDetail {
   purity_grand_total: number
   added_at?: string
   updated_at?: string
+  // Per-user UI-visibility toggles — user_details has ~30 of these
+  // "is_..._shown" columns (see the create_user_details_table migration),
+  // only the ones actually read by CustomerContextPanel are modeled here.
+  // GET /user-details/{id} returns them, but UserDetailController's
+  // store()/update() validation does NOT accept them — there is currently
+  // no API to set them, only to read them.
+  is_customer_touch_need_shown?: boolean
+  is_customer_cmts_need_to_shown?: boolean
+  is_need_to_retailer_shown?: boolean
 }
 
 // One item assignment sent inside the user create request.

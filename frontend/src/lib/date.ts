@@ -21,6 +21,18 @@ export function todayDateInputValue(): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+/** Now, as "YYYY-MM-DDTHH:MM" — for pre-filling `<input type="datetime-local">`. */
+export function nowDateTimeInputValue(): string {
+  const date = new Date()
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/** Converts a `datetime-local` input value ("YYYY-MM-DDTHH:MM") to the backend's "YYYY-MM-DD HH:MM:SS". */
+export function toBackendDateTime(value: string): string {
+  if (!value) return ''
+  return `${value.replace('T', ' ')}:00`
+}
+
 /** Formats a date-only value (e.g. "YYYY-MM-DD") as "dd/mm/yy". */
 export function formatDateOnly(value?: string | null): string {
   if (!value) return '—'

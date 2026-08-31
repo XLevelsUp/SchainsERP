@@ -25,7 +25,6 @@ function toStockOutPayload(form: StockOutFormValues) {
     given_by: form.given_by,
     given_to: form.given_to,
     retailer_id: form.retailer_id,
-    added_at: form.added_at || null,
     items: form.items.map((item) => ({
       item_id: item.item_id,
       grams: item.grams,
@@ -33,6 +32,7 @@ function toStockOutPayload(form: StockOutFormValues) {
       waste_total: item.waste_total ?? 0,
       remarks: item.remarks || null,
       item_remarks: item.item_remarks || null,
+      added_at: item.added_at || null,
     })),
   }
 }
@@ -41,7 +41,6 @@ function toStockInPayload(form: StockInFormValues) {
   return {
     given_by: form.given_by,
     given_to: form.given_to,
-    added_at: form.added_at || null,
     items: form.items.map((item) => ({
       item_id: item.item_id,
       grams: item.grams,
@@ -49,6 +48,7 @@ function toStockInPayload(form: StockInFormValues) {
       waste_total: item.waste_total ?? 0,
       remarks: item.remarks || null,
       item_remarks: item.item_remarks || null,
+      added_at: item.added_at || null,
     })),
   }
 }
@@ -57,7 +57,6 @@ function toGmsInPayload(form: GmsInFormValues) {
   return {
     given_by: form.given_by,
     given_to: form.given_to,
-    added_at: form.added_at || null,
     items: form.items.map((item) => ({
       item_id: item.item_id,
       grams: item.grams,
@@ -69,6 +68,7 @@ function toGmsInPayload(form: GmsInFormValues) {
       mtouch_wastage: item.mtouch_wastage ?? 0,
       remarks: item.remarks || null,
       item_remarks: item.item_remarks || null,
+      added_at: item.added_at || null,
     })),
   }
 }
@@ -77,7 +77,6 @@ function toGmsOutPayload(form: GmsOutFormValues) {
   return {
     given_by: form.given_by,
     given_to: form.given_to,
-    added_at: form.added_at || null,
     items: form.items.map((item) => ({
       item_id: item.item_id,
       grams: item.grams,
@@ -89,6 +88,7 @@ function toGmsOutPayload(form: GmsOutFormValues) {
       mtouch_wastage: item.mtouch_wastage ?? 0,
       remarks: item.remarks || null,
       item_remarks: item.item_remarks || null,
+      added_at: item.added_at || null,
     })),
   }
 }

@@ -16,12 +16,11 @@ export interface AvailableMetalQuery {
   user_id: number
 }
 
-// A row after the operator has filled in Taken/Wastage in the picker —
-// see the API doc's "IMPORTANT" note: the endpoint only returns the raw
-// stock rows, all Taken/Wastage entry and row/footer totals are computed
-// client-side.
+// A row after the operator has filled in Taken in the picker — see the
+// API doc's "IMPORTANT" note: the endpoint only returns the raw stock
+// rows, Taken entry and the Required/Taken/Remaining summary are all
+// computed client-side. No per-lot wastage here — the resulting stock
+// row(s) this feeds into already carry their own waste_total field.
 export interface MetalPickerSelection extends AvailableMetalRow {
   taken: number
-  wastage: number
-  rowTotal: number
 }

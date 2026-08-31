@@ -8,12 +8,14 @@ export interface StockInItemInput {
   waste_total: number | null
   remarks: string
   item_remarks: string
+  // Per-item, not form-level — matches the API doc's payload shape and
+  // the legacy screen's per-row Date-Time column (see StockOutItemInput).
+  added_at: string
 }
 
 export interface StockInFormValues {
   given_by: number | null
   given_to: number | null
-  added_at: string
   items: StockInItemInput[]
 }
 
@@ -48,12 +50,13 @@ export interface GmsInItemInput {
   mtouch_wastage: number | null
   remarks: string
   item_remarks: string
+  // Per-item, not form-level — see StockInItemInput's comment.
+  added_at: string
 }
 
 export interface GmsInFormValues {
   given_by: number | null
   given_to: number | null
-  added_at: string
   items: GmsInItemInput[]
 }
 
@@ -88,12 +91,13 @@ export interface GmsOutItemInput {
   mtouch_wastage: number | null
   remarks: string
   item_remarks: string
+  // Per-item, not form-level — see StockInItemInput's comment.
+  added_at: string
 }
 
 export interface GmsOutFormValues {
   given_by: number | null
   given_to: number | null
-  added_at: string
   items: GmsOutItemInput[]
 }
 

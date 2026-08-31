@@ -16,7 +16,7 @@ import type { CategoryName, Role, UserDetailFormValues } from '@/types'
 |--------------------------------------------------------------------------
 | There's no separate "Retailer" entity/role in this backend — a retailer
 | is just a regular user_details row that later shows up in a "Retailer"
-| picker (e.g. StockOutModal's retailer_id field). So the "Add Retailer"
+| picker (e.g. StockOutPanel's retailer_id field). So the "Add Retailer"
 | quick action on the Stock page reuses this exact same form/endpoint
 | (POST /user-details) with a different title/badge for context, rather
 | than inventing a backend-unsupported "retailer" concept.
