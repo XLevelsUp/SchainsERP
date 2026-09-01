@@ -598,6 +598,164 @@
                 }
             }
         },
+        "/api/customer-touch": {
+            "get": {
+                "tags": [
+                    "Customer Touch"
+                ],
+                "summary": "Get all customer touch items",
+                "operationId": "getCustomerTouchItems",
+                "responses": {
+                    "200": {
+                        "description": "Customer touch items retrieved successfully"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Customer Touch"
+                ],
+                "summary": "Create a new customer touch item",
+                "operationId": "createCustomerTouchItem",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "item_name"
+                                ],
+                                "properties": {
+                                    "item_name": {
+                                        "type": "string",
+                                        "example": "Touch Gold"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Customer touch item created successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
+        "/api/customer-touch/{item_id}": {
+            "get": {
+                "tags": [
+                    "Customer Touch"
+                ],
+                "summary": "Get customer touch item by ID",
+                "operationId": "getCustomerTouchById",
+                "parameters": [
+                    {
+                        "name": "item_id",
+                        "in": "path",
+                        "description": "Customer Touch Item ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Customer touch item retrieved successfully"
+                    },
+                    "404": {
+                        "description": "Customer touch item not found"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Customer Touch"
+                ],
+                "summary": "Update a customer touch item",
+                "operationId": "updateCustomerTouchItem",
+                "parameters": [
+                    {
+                        "name": "item_id",
+                        "in": "path",
+                        "description": "Customer Touch Item ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "item_name": {
+                                        "type": "string",
+                                        "example": "Updated Touch Gold"
+                                    },
+                                    "is_active": {
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Customer touch item updated successfully"
+                    },
+                    "404": {
+                        "description": "Customer touch item not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "Customer Touch"
+                ],
+                "summary": "Delete a customer touch item",
+                "operationId": "deleteCustomerTouchItem",
+                "parameters": [
+                    {
+                        "name": "item_id",
+                        "in": "path",
+                        "description": "Customer Touch Item ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Customer touch item deleted successfully"
+                    },
+                    "404": {
+                        "description": "Customer touch item not found"
+                    }
+                }
+            }
+        },
         "/api/user-details": {
             "get": {
                 "tags": [
@@ -780,6 +938,123 @@
                 }
             }
         },
+        "/api/v1/stock/numeric-waste": {
+            "post": {
+                "tags": [
+                    "Stock"
+                ],
+                "summary": "Create Numeric Waste stock transaction",
+                "operationId": "createNumericWaste",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "given_to",
+                                    "items"
+                                ],
+                                "properties": {
+                                    "given_by": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "given_to": {
+                                        "type": "integer",
+                                        "example": 2
+                                    },
+                                    "added_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-08-20T23:16:54.000Z"
+                                    },
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "item_id",
+                                                "grams",
+                                                "touch",
+                                                "no_of_pcs"
+                                            ],
+                                            "properties": {
+                                                "item_id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "grams": {
+                                                    "type": "number",
+                                                    "example": 10
+                                                },
+                                                "touch": {
+                                                    "type": "number",
+                                                    "example": 92
+                                                },
+                                                "no_of_pcs": {
+                                                    "type": "integer",
+                                                    "example": 10
+                                                },
+                                                "amount_pcs": {
+                                                    "type": "number",
+                                                    "example": 100
+                                                },
+                                                "waste_id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "waste_total": {
+                                                    "type": "number",
+                                                    "example": 0.1
+                                                },
+                                                "waste_value": {
+                                                    "type": "number",
+                                                    "example": 1
+                                                },
+                                                "wValue": {
+                                                    "type": "number",
+                                                    "example": 1
+                                                },
+                                                "amount": {
+                                                    "type": "number",
+                                                    "example": 1000
+                                                },
+                                                "remarks": {
+                                                    "type": "string",
+                                                    "example": "Wastage row 1"
+                                                },
+                                                "item_remarks": {
+                                                    "type": "string",
+                                                    "example": "Custom row remarks 1"
+                                                },
+                                                "added_at": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2026-08-20T23:16:54.000Z"
+                                                },
+                                                "purity": {
+                                                    "type": "number",
+                                                    "example": 10.12
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Numeric Waste Created Successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
         "/api/user-details/{id}": {
             "post": {
                 "tags": [
@@ -894,6 +1169,10 @@
         {
             "name": "Fitem Boxes",
             "description": "Fitem Boxes"
+        },
+        {
+            "name": "Customer Touch",
+            "description": "Customer Touch CRUD API"
         }
     ]
 }

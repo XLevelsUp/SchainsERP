@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\FitemBoxController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\UserDetailController;
 use App\Http\Controllers\Api\CustomerTouchController;
+use App\Http\Controllers\Api\CustomerTouchUserMappingController;
 use App\Http\Controllers\Api\UsersItemsMappingController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\HeadEmployeeMappingController;
@@ -34,6 +35,15 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('fitem-boxes', FitemBoxController::class);
         Route::apiResource('roles', RoleController::class);
         Route::apiResource('customer-touch', CustomerTouchController::class);
+        
+        // Customer Touch User Mappings
+        Route::get('customer-touch-user-mappings', [CustomerTouchUserMappingController::class, 'index']);
+        Route::put('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'update']);
+        Route::patch('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'update']);
+        
+        // Update CC
+        Route::put('user-details/{id}/update-cc', [UserDetailController::class, 'updateCc']);
+        Route::patch('user-details/{id}/update-cc', [UserDetailController::class, 'updateCc']);
         Route::apiResource('users-items-mappings', UsersItemsMappingController::class);
         Route::apiResource('head-employee-mappings', HeadEmployeeMappingController::class);
         Route::apiResource('cash-head-employee-mappings', CashHeadEmployeeMappingController::class);
