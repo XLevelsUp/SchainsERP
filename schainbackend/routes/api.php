@@ -86,5 +86,5 @@ Route::prefix('v1/stock')->middleware('auth:api')->group(function () {
     Route::post('auto-entry', [StockDetailsController::class, 'postAutoEntry']);
     Route::get('reports/items-obcb', [StockDetailsController::class, 'getHistoryItemsObcb']);
     Route::get('reports/consolidated', [StockDetailsController::class, 'getConsolidatedReport']);
-    Route::post('hide', [StockDetailsController::class, 'postHide']);
+    // Route::post('hide', [StockDetailsController::class, 'postHide']);
 });
