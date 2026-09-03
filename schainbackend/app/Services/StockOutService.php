@@ -173,7 +173,9 @@ class StockOutService extends BaseStockService
             $createdHistories = [];
 
             foreach ($data['items'] as $itemData) {
-                $parentStock = StockDetails::findOrFail($itemData['stock_in_id']);
+                $stockInId = $itemData['stock_in_id'] ?? null;
+                $parentStock = $stockInId ? StockDetails::findOrFail($stockInId) : null;
+                
                 $grams = $itemData['grams'];
                 $fromTouch = $itemData['from_touch'];
                 $reqTouch = $itemData['req_touch'];
@@ -193,10 +195,17 @@ class StockOutService extends BaseStockService
                 ];
 
                 // Parent stock balance before change
-                $stockInOb = $parentStock->balance;
-                $stockInCb = $this->sub($parentStock->balance, $grams);
-                $stockInObPurity = $this->div($this->mul($stockInOb, $parentStock->touch), '100');
-                $stockInCbPurity = $this->div($this->mul($stockInCb, $parentStock->touch), '100');
+                $stockInOb = 0;
+                $stockInCb = 0;
+                $stockInObPurity = 0;
+                $stockInCbPurity = 0;
+
+                if ($parentStock) {
+                    $stockInOb = $parentStock->balance;
+                    $stockInCb = $this->sub($parentStock->balance, $grams);
+                    $stockInObPurity = $this->div($this->mul($stockInOb, $parentStock->touch), '100');
+                    $stockInCbPurity = $this->div($this->mul($stockInCb, $parentStock->touch), '100');
+                }
 
                 // 1. Create OUT stock details record (for from_item_id)
                 $outStock = StockDetails::create([
@@ -212,7 +221,7 @@ class StockOutService extends BaseStockService
                     'remarks' => $remarks ?? ("Item Change from: " . $fromItemId),
                     'item_remarks' => $itemRemarks,
                     'balance' => $grams,
-                    'stock_in_id' => $parentStock->stock_id,
+                    'stock_in_id' => $parentStock ? $parentStock->stock_id : null,
                     'added_by' => $addedBy,
                     'to_item_id' => $toItemId,
                     'given_by_item_grams_op' => $obSnapshot['given_by_details']['ob']['item_details']['ob_grams'] ?? 0,
@@ -242,7 +251,7 @@ class StockOutService extends BaseStockService
                     'remarks' => $remarks ?? ("Item Change to: " . $toItemId),
                     'item_remarks' => $itemRemarks,
                     'balance' => $grams,
-                    'stock_in_id' => $parentStock->stock_id,
+                    'stock_in_id' => $parentStock ? $parentStock->stock_id : null,
                     'added_by' => $addedBy,
                     'to_item_id' => $fromItemId,
                     'given_by_item_grams_op' => $obSnapshot['given_by_details']['ob']['item_details']['ob_grams'] ?? 0,
@@ -259,11 +268,13 @@ class StockOutService extends BaseStockService
                 ]);
 
                 // Deduct balance from parent stock details record
-                $parentStock->balance = $this->sub($parentStock->balance, $grams);
-                if (bccomp((string)$parentStock->balance, '0', 4) <= 0) {
-                    $parentStock->is_completed = true;
+                if ($parentStock) {
+                    $parentStock->balance = $this->sub($parentStock->balance, $grams);
+                    if (bccomp((string)$parentStock->balance, '0', 4) <= 0) {
+                        $parentStock->is_completed = true;
+                    }
+                    $parentStock->save();
                 }
-                $parentStock->save();
 
                 // Update item-specific user mappings balances
                 // OUT mapping update

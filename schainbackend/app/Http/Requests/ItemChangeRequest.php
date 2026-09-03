@@ -17,7 +17,7 @@ class ItemChangeRequest extends FormRequest
             'user_id' => 'required|integer|exists:user_details,user_id',
             'added_at' => 'nullable|date',
             'items' => 'required|array|min:1',
-            'items.*.stock_in_id' => 'required|integer|exists:stock_details,stock_id',
+            'items.*.stock_in_id' => 'nullable|integer|exists:stock_details,stock_id',
             'items.*.from_item_id' => 'required|integer|exists:items,item_id',
             'items.*.to_item_id' => 'required|integer|exists:items,item_id|different:items.*.from_item_id',
             'items.*.grams' => 'required|numeric|gt:0',
