@@ -357,6 +357,46 @@ class StockDetailsController extends Controller
     }
 
     /**
+     * Retrieve ID-Wise deep stock report and lineage
+     */
+    public function getIdWiseReport(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'stock_id' => 'required|integer'
+            ]);
+
+            $headId = $this->getActingUserId($request);
+            $result = $this->reportService->getIdWiseStockReport($request->input('stock_id'), $headId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'ID-Wise stock report compiled successfully.',
+                'data' => $result,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Stock ID not found.',
+                'errors' => 'The provided Stock ID does not exist.'
+            ], 404);
+        } catch (\Throwable $e) {
+            Log::error('StockDetailsController::getIdWiseReport failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to compile ID-Wise stock report.',
+                'error' => env('APP_DEBUG') ? $e->getMessage() : 'An unexpected error occurred.'
+            ], 500);
+        }
+    }
+
+    /**
      * 11. Retrieve Items OB & CB running ledger report
      */
     public function getHistoryItemsObcb(Request $request): JsonResponse
