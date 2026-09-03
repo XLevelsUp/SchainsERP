@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 
+use App\Http\Requests\UpdateCcRequest;
 use App\Models\UserDetail;
 use App\Models\UsersItemsMapping;
 use App\Models\HeadEmployeeMapping;
@@ -1262,6 +1263,41 @@ class UserDetailController extends Controller
                 'error' =>
                     $e->getMessage()
 
+            ], 500);
+        }
+    }
+
+    /**
+     * Dedicated lightweight method to update Customer Comments (CC).
+     * Replaces legacy Yii2 `updatecc` endpoint.
+     */
+    public function updateCc(UpdateCcRequest $request, $id): JsonResponse
+    {
+        try {
+            $user = UserDetail::findOrFail($id);
+            
+            $user->customer_commants = $request->customer_commants;
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Customer comments updated successfully',
+                'data' => [
+                    'user_id' => $user->user_id,
+                    'customer_commants' => $user->customer_commants
+                ]
+            ], 200);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update customer comments',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
