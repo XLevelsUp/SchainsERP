@@ -13,10 +13,11 @@ import type { Item, StockHistoryRow, StockHistoryTotals } from '@/types'
 |--------------------------------------------------------------------------
 | Transaction History panel — GET /stock-details/history
 |--------------------------------------------------------------------------
-| Legacy "Stock Details" screen's top-right paginated history table for the
-| logged-in head: Type/Item/date-range filters, a grand-totals row (across
-| the full filtered set, not just the current page — the backend computes
-| this before paginating), then the row-level list.
+| Legacy "Stock Details" screen's top-right paginated history table, scoped
+| to the picked user (or the logged-in head when none is picked): Type/Item/
+| date-range filters, a grand-totals row (across the full filtered set, not
+| just the current page — the backend computes this before paginating), then
+| the row-level list.
 |
 | The per-row Print icon has no dedicated backend endpoint (unlike the
 | single-transaction thermal print for cash entries) — it triggers a plain
@@ -75,7 +76,12 @@ async function load() {
   loadError.value = ''
   try {
     const result = await stockHistoryApi.list({
-      head_id: auth.user.user_id,
+      // Report from the picked user's perspective when one is selected — the
+      // backend derives each row's IN/OUT direction and counterparty name from
+      // head_id, so this has to follow the picker, not the session. Falls back
+      // to the logged-in head when nothing is picked. employee_id stays for an
+      // unchanged payload shape; it duplicates head_id and is a no-op filter.
+      head_id: props.employeeId ?? auth.user.user_id,
       employee_id: props.employeeId ?? undefined,
       type: typeFilter.value ?? undefined,
       item_id: itemFilter.value ?? undefined,

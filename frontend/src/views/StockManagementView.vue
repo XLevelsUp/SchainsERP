@@ -65,7 +65,7 @@ import type { Item, UserDetailListItem } from '@/types'
 | registered between pulls).
 |
 | selectedUserId (UserPickerPanel, left column) scopes both
-| TransactionHistoryPanel (via employee_id) and CustomerContextPanel
+| TransactionHistoryPanel (as head_id) and CustomerContextPanel
 | (Customer Touch/photo/comments/Deliver, right column, legacy screen's
 | lower-middle block) — the latter only renders once a user is picked.
 | Customer Deliver has no backing endpoint yet (order_details table

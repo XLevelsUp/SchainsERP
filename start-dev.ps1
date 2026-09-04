@@ -12,36 +12,10 @@ $frontendDir = Join-Path $repoRoot 'frontend'
 
 Write-Host "== SchainsERP dev startup ==" -ForegroundColor Cyan
 
-# --- 1. Docker Desktop ---------------------------------------------------
-$dockerReady = $false
-try { docker info *> $null; $dockerReady = $true } catch { $dockerReady = $false }
-
-if (-not $dockerReady) {
-    Write-Host "Starting Docker Desktop..." -ForegroundColor Yellow
-    $dockerExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-    if (-not (Test-Path $dockerExe)) {
-        $dockerExe = "$env:LOCALAPPDATA\Programs\DockerDesktop\Docker Desktop.exe"
-    }
-    Start-Process $dockerExe
-
-    $deadline = (Get-Date).AddSeconds(180)
-    while (-not $dockerReady -and (Get-Date) -lt $deadline) {
-        Start-Sleep -Seconds 3
-        try { docker info *> $null; $dockerReady = $true } catch { $dockerReady = $false }
-    }
-}
-
-if (-not $dockerReady) {
-    Write-Host "Docker Desktop did not become ready in time. Start it manually and re-run this script." -ForegroundColor Red
-    exit 1
-}
-Write-Host "Docker is ready." -ForegroundColor Green
-
-# --- 2. Postgres container -------------------------------------------------
 # Native commands are run through this helper rather than called directly.
 # With $ErrorActionPreference = 'Stop', PowerShell 5.1 turns ANY stderr line
 # from a native exe into a terminating NativeCommandError - so a harmless
-# docker warning used to kill this script before it ever reached the backend
+# docker warning could kill this script before it ever reached the backend
 # and frontend below. Here stderr is captured as text and only a non-zero
 # exit code counts as failure.
 function Invoke-Native {
@@ -56,6 +30,39 @@ function Invoke-Native {
     }
 }
 
+function Test-DockerReady {
+    return (Invoke-Native docker @('info')).ExitCode -eq 0
+}
+
+# --- 1. Docker Desktop ---------------------------------------------------
+# Readiness is judged by docker's exit code, not by whether it wrote to
+# stderr - Docker Desktop prints warnings on a perfectly healthy daemon,
+# and treating those as "not ready" used to send us down the 3-minute
+# relaunch path for no reason.
+$dockerReady = Test-DockerReady
+
+if (-not $dockerReady) {
+    Write-Host "Starting Docker Desktop..." -ForegroundColor Yellow
+    $dockerExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    if (-not (Test-Path $dockerExe)) {
+        $dockerExe = "$env:LOCALAPPDATA\Programs\DockerDesktop\Docker Desktop.exe"
+    }
+    Start-Process $dockerExe
+
+    $deadline = (Get-Date).AddSeconds(180)
+    while (-not $dockerReady -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 3
+        $dockerReady = Test-DockerReady
+    }
+}
+
+if (-not $dockerReady) {
+    Write-Host "Docker Desktop did not become ready in time. Start it manually and re-run this script." -ForegroundColor Red
+    exit 1
+}
+Write-Host "Docker is ready." -ForegroundColor Green
+
+# --- 2. Postgres container -------------------------------------------------
 # The container carries `--restart unless-stopped`, so Docker Desktop starts
 # it automatically. Calling `docker start` on a container that is already
 # coming up races its port bind and fails with "ports are not available:
