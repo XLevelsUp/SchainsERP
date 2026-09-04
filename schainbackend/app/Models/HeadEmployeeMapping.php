@@ -28,4 +28,14 @@ class HeadEmployeeMapping extends Model
         'employee_id' => 'integer',
         'added_at' => 'datetime',
     ];
+
+    public function head()
+    {
+        return $this->belongsTo(UserDetail::class, 'head_id', 'user_id');
+    }
+
+    public function employee()
+    {
+        return $this->belongsTo(UserDetail::class, 'employee_id', 'user_id');
+    }
 }
