@@ -288,6 +288,80 @@ class ReportService
         ];
     }
 
+    public function getIdWiseStockReport(int $stockId, int $headId): array
+    {
+        return \Illuminate\Support\Facades\Cache::remember("stock_report_id_wise_{$stockId}", 3600, function () use ($stockId, $headId) {
+            $baseStock = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo', 'bill'])->findOrFail($stockId);
+            
+            if ($baseStock->stock_type === 'OUT' && $baseStock->stock_in_id) {
+                $parentLot = StockDetails::with(['item', 'givenBy', 'givenTo', 'bill'])->findOrFail($baseStock->stock_in_id);
+            } else {
+                $parentLot = $baseStock;
+            }
+
+            $transactions = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo', 'bill'])
+                ->where('stock_in_id', $parentLot->stock_id)
+                ->orderBy('added_at', 'asc')
+                ->get();
+            
+            $formattedTransactions = $transactions->map(function($txn) use ($headId) {
+                $itemName = $txn->item ? $txn->item->item_name : '';
+                if ($txn->type === 'ITEMCHANGE' || $txn->type === 'ITEMCONVERSION') {
+                    $toItemName = $txn->toItem ? $txn->toItem->item_name : '';
+                    if ($toItemName) {
+                        $itemName = $itemName . ' => ' . $toItemName;
+                    }
+                }
+                
+                return [
+                    'id' => $txn->stock_id,
+                    'added_at' => (string)$txn->added_at,
+                    'item_name' => $itemName,
+                    'stock_type' => $txn->stock_type,
+                    'entry_type' => $txn->entry_type,
+                    'type' => $txn->type,
+                    'grams' => round((float)$txn->grams, 3),
+                    'touch' => round((float)$txn->touch, 3),
+                    'mtouch' => round((float)$txn->mtouch, 3),
+                    'wastage' => round((float)($txn->waste_total ?? $txn->waste_value ?? 0), 3),
+                    'purity' => round((float)$txn->purity, 3),
+                    'given_by' => $txn->givenBy ? $txn->givenBy->name : '-',
+                    'given_to' => $txn->givenTo ? $txn->givenTo->name : '-',
+                    'remarks' => $txn->remarks,
+                    'item_remarks' => $txn->item_remarks,
+                    'bill_id' => $txn->bill_id,
+                ];
+            })->toArray();
+
+            $totalConsumed = $transactions->sum('grams');
+            
+            return [
+                'stock_summary' => [
+                    'queried_id' => $baseStock->stock_id,
+                    'queried_type' => $baseStock->stock_type,
+                    'item_name' => $baseStock->item->item_name ?? '-',
+                ],
+                'lot_details' => [
+                    'lot_id' => $parentLot->stock_id,
+                    'item_name' => $parentLot->item->item_name ?? '-',
+                    'added_at' => (string)$parentLot->added_at,
+                    'original_grams' => (float)$parentLot->grams,
+                    'purity' => (float)$parentLot->purity,
+                    'touch' => (float)$parentLot->touch,
+                    'current_balance' => (float)$parentLot->balance,
+                    'lot_creator' => $parentLot->givenBy->name ?? '-',
+                ],
+                'quantity_summary' => [
+                    'total_received' => (float)$parentLot->grams,
+                    'total_consumed' => (float)$totalConsumed,
+                    'reconciled_balance' => round((float)($parentLot->grams - $totalConsumed), 3),
+                    'actual_balance' => round((float)$parentLot->balance, 3),
+                ],
+                'transactions' => $formattedTransactions
+            ];
+        });
+    }
+
     public function getItemsObcbReport(array $filters, int $headId): array
     {
         $employeeId = $filters['employee_id'] ?? null;
