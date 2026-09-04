@@ -18,7 +18,11 @@ try { docker info *> $null; $dockerReady = $true } catch { $dockerReady = $false
 
 if (-not $dockerReady) {
     Write-Host "Starting Docker Desktop..." -ForegroundColor Yellow
-    Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    $dockerExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    if (-not (Test-Path $dockerExe)) {
+        $dockerExe = "$env:LOCALAPPDATA\Programs\DockerDesktop\Docker Desktop.exe"
+    }
+    Start-Process $dockerExe
 
     $deadline = (Get-Date).AddSeconds(180)
     while (-not $dockerReady -and (Get-Date) -lt $deadline) {
@@ -34,10 +38,60 @@ if (-not $dockerReady) {
 Write-Host "Docker is ready." -ForegroundColor Green
 
 # --- 2. Postgres container -------------------------------------------------
-docker start schainserp-postgres *> $null
-# Make sure it survives future Docker restarts without needing `docker start` again.
-docker update --restart unless-stopped schainserp-postgres *> $null
-Write-Host "Postgres (schainserp-postgres) is up." -ForegroundColor Green
+# Native commands are run through this helper rather than called directly.
+# With $ErrorActionPreference = 'Stop', PowerShell 5.1 turns ANY stderr line
+# from a native exe into a terminating NativeCommandError - so a harmless
+# docker warning used to kill this script before it ever reached the backend
+# and frontend below. Here stderr is captured as text and only a non-zero
+# exit code counts as failure.
+function Invoke-Native {
+    param([string]$Exe, [string[]]$Arguments)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $Exe @Arguments 2>&1 | Out-String
+        return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output.Trim() }
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
+# The container carries `--restart unless-stopped`, so Docker Desktop starts
+# it automatically. Calling `docker start` on a container that is already
+# coming up races its port bind and fails with "ports are not available:
+# ... Only one usage of each socket address" - which is not a real conflict.
+# Check the state first and only start it when it is genuinely stopped.
+$running = (Invoke-Native docker @('inspect', '-f', '{{.State.Running}}', 'schainserp-postgres')).Output
+
+if ($running -eq 'true') {
+    Write-Host "Postgres (schainserp-postgres) was already running." -ForegroundColor Green
+} else {
+    Write-Host "Starting Postgres (schainserp-postgres)..." -ForegroundColor Yellow
+    $start = Invoke-Native docker @('start', 'schainserp-postgres')
+    if ($start.ExitCode -ne 0) {
+        Write-Host "Could not start the Postgres container:" -ForegroundColor Red
+        Write-Host $start.Output -ForegroundColor Red
+        exit 1
+    }
+}
+
+# Keep it surviving future Docker restarts. Idempotent.
+Invoke-Native docker @('update', '--restart', 'unless-stopped', 'schainserp-postgres') | Out-Null
+
+# Being "running" is not the same as accepting connections - Laravel will
+# fail its first query if we race it.
+$pgReady = $false
+$deadline = (Get-Date).AddSeconds(60)
+while (-not $pgReady -and (Get-Date) -lt $deadline) {
+    $probe = Invoke-Native docker @('exec', 'schainserp-postgres', 'pg_isready', '-U', 'postgres')
+    if ($probe.ExitCode -eq 0) { $pgReady = $true } else { Start-Sleep -Seconds 2 }
+}
+
+if (-not $pgReady) {
+    Write-Host "Postgres did not start accepting connections in time." -ForegroundColor Red
+    exit 1
+}
+Write-Host "Postgres is accepting connections." -ForegroundColor Green
 
 # --- 3. Clear any stale PHP dev servers from earlier crashed runs ---------
 # A killed "php artisan serve" sometimes leaves its child `php -S ...` process

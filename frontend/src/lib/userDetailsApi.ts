@@ -57,6 +57,13 @@ interface UserDetailEnvelope {
   profile_image_url: string | null
 }
 
+// PUT /user-details/{id}/update-cc echoes back only the two fields it
+// touched, not the whole user record.
+interface CustomerCommentsResult {
+  user_id: number
+  customer_commants: string | null
+}
+
 export const userDetailsApi = {
   // Flattened summary shape (PR #15) — fine for pickers/tables, not for
   // editing. Pass ?type= to filter by role (HEAD/EMPLOYEE/CUSTOMER/...).
@@ -89,4 +96,16 @@ export const userDetailsApi = {
       .then((r) => r.data),
 
   remove: (id: number) => api.delete<ApiResponse<null>>(`${RESOURCE}/${id}`),
+
+  // PUT /user-details/{id}/update-cc (UserDetailController::updateCc, added
+  // in PR #32) — a dedicated single-field endpoint so the customer comments
+  // box can be saved on its own, without round-tripping the whole user
+  // record through update()'s much larger validated payload.
+  // UpdateCcRequest caps the text at 1500 characters and allows null.
+  updateCustomerComments: (id: number, customerComments: string | null) =>
+    api
+      .put<ApiResponse<CustomerCommentsResult>>(`${RESOURCE}/${id}/update-cc`, {
+        customer_commants: customerComments,
+      })
+      .then((r) => r.data),
 }

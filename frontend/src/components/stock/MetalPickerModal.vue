@@ -13,7 +13,7 @@ import type { AvailableMetalRow, MetalPickerSelection } from '@/types'
 |--------------------------------------------------------------------------
 | Opens whenever a row's Item is set to the item literally named "Metal"
 | (case-insensitive — the backend 400s on anything else) in StockOutPanel/
-| StockInPanel/GmsOutPanel/GmsInPanel. userId is that panel's *source*
+| StockInPanel/GmsOutModal/GmsInModal. userId is that form's *source*
 | user for the transaction direction (given_by), not the page-level head
 | unconditionally — matches AvailableMetalResource's query
 | (`where('given_to', $userId)`, i.e. lots previously given TO userId that

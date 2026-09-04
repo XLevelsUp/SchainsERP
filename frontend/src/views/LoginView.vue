@@ -2,7 +2,6 @@
 import { reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { authApi } from '@/lib/authApi'
 import { ApiError } from '@/lib/api'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -41,20 +40,30 @@ function validate(): boolean {
   return !errors.user_name && !errors.password
 }
 
+// Only follow an in-app absolute path back. Anything else — a protocol-
+// relative "//host" or a full URL someone put in the query string — falls
+// back to the dashboard.
+function safeRedirect(value: unknown): string {
+  if (typeof value !== 'string') return '/'
+  return value.startsWith('/') && !value.startsWith('//') ? value : '/'
+}
+
 async function handleSubmit() {
   formError.value = ''
   if (!validate()) return
+  // Guard against a double submit racing two logins against each other.
+  if (isSubmitting.value) return
 
   isSubmitting.value = true
   try {
-    const user = await authApi.login({
+    // The store owns the session: it posts the credentials, then persists
+    // the returned user and Passport bearer token.
+    await auth.login({
       user_name: form.user_name,
       password: form.password,
     })
-    auth.login(user)
 
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
-    router.push(redirect)
+    router.push(safeRedirect(route.query.redirect))
   } catch (err) {
     formError.value = err instanceof ApiError ? err.message : 'Sign in failed.'
   } finally {

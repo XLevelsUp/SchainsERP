@@ -1594,7 +1594,189 @@ CRITICAL DEPLOYMENT ORDER: You must run php artisan migrate to execute the 2026_
 
 
 
+ API Integration & Testing Documentation
 
+This document explains how to integrate and test the Schain ERP APIs, specifically focusing on the Authentication flow and protected routes for frontend development.
+
+## 1. Backend Initial Setup (For Developers)
+
+If you are a developer setting up this project for the first time, you need to ensure the Passport API is fully installed and configured in your local environment.
+
+1. Install Composer dependencies:
+   ```bash
+   composer install
+   ```
+2. Run all database migrations (this will create all the necessary Passport tables like `oauth_clients`, `oauth_access_tokens`, etc.):
+   ```bash
+   php artisan migrate
+   ```
+3. Generate the Passport encryption keys and create the "Personal Access Client":
+   ```bash
+   php artisan passport:install
+   ```
+   *(If prompted "Which user provider should this client use to retrieve users?", just hit Enter to use the default `users` provider).*
+
+## 2. Running the Project Locally
+
+Before making API requests, ensure the Laravel backend server is running on your local machine.
+
+1. Open your terminal in the backend project directory.
+2. Run the following command:
+   ```bash
+   php artisan serve
+   ```
+3. The API will now be available at `http://localhost:8000/api/v1/...` or `http://127.0.0.1:8000/api/v1/...`
+
+## 3. Essential Frontend Setup
+
+When making requests from the frontend (using fetch, Axios, etc.), you **must** include the following headers in **all** your API requests to ensure Laravel responds correctly:
+
+```javascript
+const headers = {
+    "Accept": "application/json",
+    "Content-Type": "application/json"
+};
+```
+*Note: The `Accept: application/json` header is critical. Without it, Laravel will try to redirect unauthenticated users to a web login page instead of returning a `401 Unauthorized` JSON response.*
+
+## 4. The Authentication Workflow (JWT)
+
+Our backend uses **Laravel Passport** to issue JWT (JSON Web Tokens).
+
+32. Logging In
+Send a `POST` request to `/api/v1/login` with the user's credentials:
+
+**Request Body:**
+```json
+{
+    "user_name": "your_username",
+    "password": "your_password"
+}
+```
+
+**Success Response:**
+```json
+{
+    "success": true,
+    "message": "Login successful",
+    "data": {
+        "user": { ... },
+        "token": "eyJ0eXAiOiJKV1QiLCJhb...",
+        "token_type": "Bearer"
+    }
+}
+```
+
+### 2. Accessing Protected Routes
+Extract the `token` from the login response and store it securely (e.g., in memory or secure storage). For all subsequent requests to protected routes, include it in the `Authorization` header:
+
+```javascript
+headers["Authorization"] = `Bearer ${your_extracted_token}`;
+```
+
+## 5. Testing via Postman
+
+We have prepared a ready-to-use Postman Collection (`Schain_ERP_Postman_Collection.json`) in the root directory.
+
+1. **Import the Collection:** Open Postman -> Import -> Select the JSON file.
+2. **Automated Tokens:** Open the `Authentication > Login` request and send it. Postman will automatically extract the JWT token from the response and save it to a variable `{{auth_token}}`.
+3. **Test Protected Routes:** Open any other route. The Authorization tab is already configured to use the Bearer `{{auth_token}}`, so you can just click Send!
+
+## 6. Summary of Auth Endpoints
+
+| Endpoint | Method | Middleware | Description |
+|---|---|---|---|
+| `/api/v1/login` | `POST` | *None (Public)* | Validates credentials and returns a Passport JWT Bearer token. |
+| `/api/v1/logout` | `POST` | `auth:api` | Revokes the token used for the request. |
+| `All other /api/v1/*` | `...` | `auth:api` | Requires `Authorization: Bearer <token>` |
+
+
+
+
+
+
+
+
+
+33. Update Customer Comments (Update customer comments)
+A dedicated, lightweight endpoint for updating only the customer_commants field on a user.
+URL: PUT /api/v1/user-details/{id}/update-cc
+Headers: Authorization: Bearer <token>
+Request Body (JSON):
+json
+
+{
+    "customer_commants": "New customer comment note here"
+}
+Response Example (200 OK):
+json
+
+{
+    "success": true,
+    "message": "Customer comments updated successfully",
+    "data": {
+        "user_id": 1,
+        "customer_commants": "New customer comment note here"
+    }
+}
+
+
+34. Customer Touch User Mappings - Index
+Replaces the legacy customer-touch-user-mappings ,Returns a list of users mapped to their authorized customer touches.
+
+URL: GET /api/v1/customer-touch-user-mappings
+Query Parameters: ?user_id=1 (Optional - filters mappings by a specific user)
+Headers: Authorization: Bearer <token>
+Response Example (200 OK):
+json
+
+{
+    "success": true,
+    "message": "Customer touch user mappings retrieved successfully",
+    "data": [
+        {
+            "id": 1,
+            "user_id": 1,
+            "customer_touch_id": 1,
+            "is_active": true,
+            "added_at": "2026-09-01T16:20:53.000000Z",
+            "updated_at": "2026-09-01T16:20:53.000000Z",
+            "user": { ... },
+            "customer_touch": { ... }
+        }
+    ]
+}
+
+
+
+35. Customer Touch User Mappings - Update
+Replaces the legacy customer-touch-user-mappings/update?id=X endpoint. Allows updating an existing mapping (e.g. toggling is_active).
+
+URL: PUT /api/v1/customer-touch-user-mappings/{id}
+Headers: Authorization: Bearer <token>
+Request Body (JSON):
+json
+
+{
+    "is_active": false
+}
+Response Example (200 OK):
+json
+
+{
+    "success": true,
+    "message": "Mapping updated successfully",
+    "data": {
+        "id": 1,
+        "user_id": 1,
+        "customer_touch_id": 1,
+        "is_active": false,
+        "added_at": "2026-09-01T16:20:53.000000Z",
+        "updated_at": "2026-09-01T16:22:59.000000Z"
+    }
+}
+Database Migration Note:
+A new table customer_touch_user_mappings was created via 2026_09_01_213919_create_customer_touch_user_mappings_table to support these APIs, establishing a Many-to-Many link between user_details and customer_touch. Ensure this migration is run on staging/production before deployment!
 
 
 

@@ -32,6 +32,11 @@ const router = createRouter({
           component: () => import('@/views/CustomerTouchView.vue'),
         },
         {
+          path: 'customer-touch-mappings',
+          name: 'customer-touch-mappings',
+          component: () => import('@/views/CustomerTouchMappingsView.vue'),
+        },
+        {
           path: 'bank-details',
           name: 'bank-details',
           component: () => import('@/views/BankDetailsView.vue'),
@@ -70,6 +75,21 @@ const router = createRouter({
           path: 'cash-transactions-report',
           name: 'cash-transactions-report',
           component: () => import('@/views/CashTransactionsReportView.vue'),
+        },
+        {
+          path: 'stock-auto-entry',
+          name: 'stock-auto-entry',
+          component: () => import('@/views/StockAutoEntryView.vue'),
+        },
+        {
+          path: 'items-obcb-report',
+          name: 'items-obcb-report',
+          component: () => import('@/views/ItemsObcbReportView.vue'),
+        },
+        {
+          path: 'consolidated-report',
+          name: 'consolidated-report',
+          component: () => import('@/views/ConsolidatedReportView.vue'),
         },
         {
           path: 'metal-picker-test',

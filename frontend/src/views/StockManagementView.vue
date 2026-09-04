@@ -8,10 +8,6 @@ import { userDetailsApi } from '@/lib/userDetailsApi'
 import { ApiError } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
-import ItemChangeModal from '@/components/stock-txn/ItemChangeModal.vue'
-import ItemConversionModal from '@/components/stock-txn/ItemConversionModal.vue'
-import NumericWastageOutModal from '@/components/stock-txn/NumericWastageOutModal.vue'
-import NumericWastageInModal from '@/components/stock-txn/NumericWastageInModal.vue'
 import AddUserModal from '@/components/user/AddUserModal.vue'
 import HeadStockSummaryPanel from '@/components/stock/HeadStockSummaryPanel.vue'
 import TransactionHistoryPanel from '@/components/stock/TransactionHistoryPanel.vue'
@@ -19,8 +15,12 @@ import UserPickerPanel from '@/components/stock/UserPickerPanel.vue'
 import CustomerContextPanel from '@/components/stock/CustomerContextPanel.vue'
 import StockOutPanel from '@/components/stock/StockOutPanel.vue'
 import StockInPanel from '@/components/stock/StockInPanel.vue'
-import GmsOutPanel from '@/components/stock/GmsOutPanel.vue'
-import GmsInPanel from '@/components/stock/GmsInPanel.vue'
+import NumericWastageOutPanel from '@/components/stock/NumericWastageOutPanel.vue'
+import ItemChangeModal from '@/components/stock/ItemChangeModal.vue'
+import ItemConversionModal from '@/components/stock/ItemConversionModal.vue'
+import GmsOutModal from '@/components/stock/GmsOutModal.vue'
+import GmsInModal from '@/components/stock/GmsInModal.vue'
+import NumericWastageInModal from '@/components/stock/NumericWastageInModal.vue'
 import type { Item, UserDetailListItem } from '@/types'
 
 /*
@@ -72,28 +72,49 @@ import type { Item, UserDetailListItem } from '@/types'
 | doesn't exist) and the comments textarea isn't wired to save — see
 | CustomerContextPanel's own comment.
 |
-| Stock Out/In and GMS Out/In ("NEW OUT"/"NEW IN"/"GMS OUT"/"GMS IN") are
-| StockOutPanel/StockInPanel/GmsOutPanel/GmsInPanel, not modals — the
-| legacy screen never opens a dialog for these: clicking a button appends
-| a row to that action's own dense inline grid (OUT column: Stock Out
-| above GMS Out; IN column: Stock In above GMS In), and rows just sit
-| there ("stored in session") until the ONE shared Submit button below
-| fires every panel that has pending rows at once. Each panel still posts
-| to its own distinct endpoint separately (POST /stock/out, /stock/in,
-| /stock/gms-out, /stock/gms-in) — this is NOT merged into a single
-| combined request (e.g. the Auto Entry endpoint), just triggered
-| together. handleSubmitAll calls each panel's exposed submit() via
-| Promise.allSettled and only refreshes Head Stocks/Transaction History
-| once afterward if at least one actually succeeded. The shared OUT/
-| TOTAL/IN bar sums each panel's exposed `totals` computed.
+| Stock Out/In ("NEW OUT"/"NEW IN") are StockOutPanel/StockInPanel, not
+| modals — the legacy screen never opens a dialog for these: clicking a
+| button appends a row to that action's own dense inline grid, and rows
+| just sit there ("stored in session") until the ONE shared Submit button
+| below fires every panel that has pending rows at once. Each panel still
+| posts to its own distinct endpoint separately (POST /stock/out,
+| /stock/in) — this is NOT merged into a single combined request (e.g.
+| the Auto Entry endpoint), just triggered together. handleSubmitAll
+| calls each panel's exposed submit() via Promise.allSettled and only
+| refreshes Head Stocks/Transaction History once afterward if at least
+| one actually succeeded. The shared OUT/TOTAL/IN bar sums each panel's
+| exposed `totals` computed.
 |
 | given_by/given_to come from page context (the logged-in head +
-| selectedUserId) rather than per-row pickers on any of the four panels —
+| selectedUserId) rather than per-row pickers on any of the panels —
 | see StockOutPanel's comment for the full contract each one implements
 | (addRow/submit/clear/hasRows/totals).
 |
-| Item Change/Conversion and Numeric Wastage Out/In still use the old
-| modal pattern for now.
+| NumericWastageOutPanel rounds out the OUT column the same way, still
+| part of entryPanels/handleSubmitAll. Numeric Wastage In is a modal (see
+| below) — only Out stays inline/queued; not mentioned = not changed.
+|
+| Item Change, Item Conversion, GMS Out, GMS In, and Numeric Wastage In
+| ARE modals (ItemChangeModal/ItemConversionModal/GmsOutModal/
+| GmsInModal/NumericWastageInModal), opened via activeModal same as Add
+| User/Add Retailer — NOT part of entryPanels/the inline grid/shared
+| Submit. Each is a standalone, deliberate action with its own Submit
+| button and its own immediate POST, unlike the quick-entry-queue actions
+| above (this was an explicit requirement, not a default — the legacy
+| screen's own "Create new Gms Entry"/"Add Numeric Wastages" etc. dialogs
+| are modals). Scoped to selectedUserId (+ headId for GMS/Numeric
+| Wastage's given_to/given_by) via props, same as their inline-grid
+| counterparts were, just presented as a dialog instead of a
+| page-embedded table — deliberately NOT an independent user picker per
+| modal like the legacy screenshots show, since the page already has one
+| source of truth for "who" (UserPickerPanel). ItemChangeModal still
+| carries forward the stock_in_id backend gap (see its own comment) —
+| not fixed here, just not silently dropped either. GmsInModal's comment
+| notes a "Customer Touch" field seen in the legacy dialog that isn't
+| part of GmsInRequest's validated payload — left out, not invented.
+| NumericWastageInModal similarly drops the legacy screenshot's disabled
+| "Waste" preset dropdown — no API backs it, carried forward from the
+| panel it replaces.
 |--------------------------------------------------------------------------
 */
 
@@ -111,13 +132,14 @@ const headStockPanelRef = ref<InstanceType<typeof HeadStockSummaryPanel> | null>
 const txnHistoryPanelRef = ref<InstanceType<typeof TransactionHistoryPanel> | null>(null)
 const stockOutPanelRef = ref<InstanceType<typeof StockOutPanel> | null>(null)
 const stockInPanelRef = ref<InstanceType<typeof StockInPanel> | null>(null)
-const gmsOutPanelRef = ref<InstanceType<typeof GmsOutPanel> | null>(null)
-const gmsInPanelRef = ref<InstanceType<typeof GmsInPanel> | null>(null)
+const numericWastageOutPanelRef = ref<InstanceType<typeof NumericWastageOutPanel> | null>(null)
 
 const entryPanels = computed(() =>
-  [stockOutPanelRef.value, stockInPanelRef.value, gmsOutPanelRef.value, gmsInPanelRef.value].filter(
-    (p): p is NonNullable<typeof p> => p !== null,
-  ),
+  [
+    stockOutPanelRef.value,
+    stockInPanelRef.value,
+    numericWastageOutPanelRef.value,
+  ].filter((p): p is NonNullable<typeof p> => p !== null),
 )
 
 const zeroTotals = { grams: 0, purity: 0, wastage: 0 }
@@ -128,11 +150,12 @@ function sumTotals(...parts: Array<{ grams: number; purity: number; wastage: num
   )
 }
 const outTotals = computed(() =>
-  sumTotals(stockOutPanelRef.value?.totals ?? zeroTotals, gmsOutPanelRef.value?.totals ?? zeroTotals),
+  sumTotals(
+    stockOutPanelRef.value?.totals ?? zeroTotals,
+    numericWastageOutPanelRef.value?.totals ?? zeroTotals,
+  ),
 )
-const inTotals = computed(() =>
-  sumTotals(stockInPanelRef.value?.totals ?? zeroTotals, gmsInPanelRef.value?.totals ?? zeroTotals),
-)
+const inTotals = computed(() => sumTotals(stockInPanelRef.value?.totals ?? zeroTotals))
 const grandTotals = computed(() => sumTotals(outTotals.value, inTotals.value))
 function formatTotal(value: number) {
   return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : '0'
@@ -158,12 +181,13 @@ async function loadData() {
 onMounted(loadData)
 
 type ActiveModal =
-  | 'item-change'
-  | 'item-conversion'
-  | 'numeric-wastage-out'
-  | 'numeric-wastage-in'
   | 'add-user'
   | 'add-retailer'
+  | 'item-change'
+  | 'item-conversion'
+  | 'gms-out'
+  | 'gms-in'
+  | 'numeric-wastage-in'
   | null
 
 const activeModal = ref<ActiveModal>(null)
@@ -174,11 +198,8 @@ function openModal(modal: ActiveModal) {
 function closeModal() {
   activeModal.value = null
 }
-function handleSaved() {
-  activeModal.value = null
-}
 // Add User / Add Retailer create a user_details row that the "Given
-// by/to"/"Retailer" pickers in the other modals need to see immediately,
+// by/to"/"Retailer" pickers in the panels below need to see immediately,
 // so reload the shared users list instead of just closing.
 async function handleUserSaved() {
   activeModal.value = null
@@ -191,15 +212,19 @@ function handleAddStockOutRow() {
 function handleAddStockInRow() {
   stockInPanelRef.value?.addRow()
 }
-function handleAddGmsOutRow() {
-  gmsOutPanelRef.value?.addRow()
-}
-function handleAddGmsInRow() {
-  gmsInPanelRef.value?.addRow()
+function handleAddNumericWastageOutRow() {
+  numericWastageOutPanelRef.value?.addRow()
 }
 function handleStockChanged() {
   headStockPanelRef.value?.refresh()
   txnHistoryPanelRef.value?.refresh()
+}
+// Item Change / Item Conversion / GMS Out submit standalone (see the
+// header comment) — close the modal and refresh the same way a queued
+// panel submit does once it actually saves.
+function handleModalSaved() {
+  activeModal.value = null
+  handleStockChanged()
 }
 
 function handleClearAll() {
@@ -293,14 +318,14 @@ async function handleSubmitAll() {
           <button
             type="button"
             class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
-            @click="handleAddGmsOutRow"
+            @click="openModal('gms-out')"
           >
             GMS Out
           </button>
           <button
             type="button"
             class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
-            @click="openModal('numeric-wastage-out')"
+            @click="handleAddNumericWastageOutRow"
           >
             Numeric Wastage Out
           </button>
@@ -312,8 +337,8 @@ async function handleSubmitAll() {
           :given-to="selectedUserId"
           @saved="handleStockChanged"
         />
-        <GmsOutPanel
-          ref="gmsOutPanelRef"
+        <NumericWastageOutPanel
+          ref="numericWastageOutPanelRef"
           :items="items"
           :head-id="auth.user?.user_id ?? null"
           :given-to="selectedUserId"
@@ -334,7 +359,7 @@ async function handleSubmitAll() {
           <button
             type="button"
             class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
-            @click="handleAddGmsInRow"
+            @click="openModal('gms-in')"
           >
             GMS In
           </button>
@@ -348,13 +373,6 @@ async function handleSubmitAll() {
         </div>
         <StockInPanel
           ref="stockInPanelRef"
-          :items="items"
-          :head-id="auth.user?.user_id ?? null"
-          :given-by="selectedUserId"
-          @saved="handleStockChanged"
-        />
-        <GmsInPanel
-          ref="gmsInPanelRef"
           :items="items"
           :head-id="auth.user?.user_id ?? null"
           :given-by="selectedUserId"
@@ -407,34 +425,6 @@ async function handleSubmitAll() {
       </div>
     </div>
 
-    <ItemChangeModal
-      v-if="activeModal === 'item-change'"
-      :items="items"
-      :users="users"
-      @close="closeModal"
-      @saved="handleSaved"
-    />
-    <ItemConversionModal
-      v-if="activeModal === 'item-conversion'"
-      :items="items"
-      :users="users"
-      @close="closeModal"
-      @saved="handleSaved"
-    />
-    <NumericWastageOutModal
-      v-if="activeModal === 'numeric-wastage-out'"
-      :items="items"
-      :users="users"
-      @close="closeModal"
-      @saved="handleSaved"
-    />
-    <NumericWastageInModal
-      v-if="activeModal === 'numeric-wastage-in'"
-      :items="items"
-      :users="users"
-      @close="closeModal"
-      @saved="handleSaved"
-    />
     <AddUserModal
       v-if="activeModal === 'add-user'"
       title="Add User"
@@ -446,6 +436,44 @@ async function handleSubmitAll() {
       title="Add Retailer"
       @close="closeModal"
       @saved="handleUserSaved"
+    />
+    <ItemChangeModal
+      v-if="activeModal === 'item-change'"
+      :items="items"
+      :user-id="selectedUserId"
+      @close="closeModal"
+      @saved="handleModalSaved"
+    />
+    <ItemConversionModal
+      v-if="activeModal === 'item-conversion'"
+      :items="items"
+      :user-id="selectedUserId"
+      @close="closeModal"
+      @saved="handleModalSaved"
+    />
+    <GmsOutModal
+      v-if="activeModal === 'gms-out'"
+      :items="items"
+      :head-id="auth.user?.user_id ?? null"
+      :given-to="selectedUserId"
+      @close="closeModal"
+      @saved="handleModalSaved"
+    />
+    <GmsInModal
+      v-if="activeModal === 'gms-in'"
+      :items="items"
+      :head-id="auth.user?.user_id ?? null"
+      :given-by="selectedUserId"
+      @close="closeModal"
+      @saved="handleModalSaved"
+    />
+    <NumericWastageInModal
+      v-if="activeModal === 'numeric-wastage-in'"
+      :items="items"
+      :head-id="auth.user?.user_id ?? null"
+      :given-by="selectedUserId"
+      @close="closeModal"
+      @saved="handleModalSaved"
     />
   </div>
 </template>

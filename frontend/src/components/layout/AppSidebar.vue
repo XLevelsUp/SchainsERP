@@ -22,8 +22,10 @@ function expandSidebar() {
   isCollapsed.value = false
 }
 
-function handleLogout() {
-  auth.logout()
+// auth.logout() revokes the token server-side before clearing the local
+// session, and never rejects — so the redirect below always runs.
+async function handleLogout() {
+  await auth.logout()
   router.push({ name: 'login' })
 }
 </script>
@@ -104,13 +106,14 @@ function handleLogout() {
       </div>
       <button
         type="button"
-        class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
         :class="isCollapsed ? 'justify-center' : ''"
         :title="isCollapsed ? 'Sign out' : undefined"
+        :disabled="auth.isLoggingOut"
         @click="handleLogout"
       >
         <LogOut class="h-4 w-4 shrink-0" />
-        <span v-if="!isCollapsed">Sign out</span>
+        <span v-if="!isCollapsed">{{ auth.isLoggingOut ? 'Signing out…' : 'Sign out' }}</span>
       </button>
       <button
         type="button"

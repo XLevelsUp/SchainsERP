@@ -10,6 +10,7 @@ import CustomerDeliveryModal from '@/components/stock/CustomerDeliveryModal.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { customerTouchApi } from '@/lib/customerTouchApi'
 import { ApiError } from '@/lib/api'
+import { useToastStore } from '@/stores/toast'
 import type { CustomerTouch, UserDetail, UserDetailListItem } from '@/types'
 
 /*
@@ -40,10 +41,11 @@ import type { CustomerTouch, UserDetail, UserDetailListItem } from '@/types'
 |
 | Photo + Comments: pulled from GET /user-details/{id} (customer_commants,
 | profile_image_url are only on the show() response, not the list one —
-| see UserDetail's comment). The comments textarea is left editable to
-| match the legacy look, but there's no visible save action for it alone
-| on the reference screen, so edits here are NOT persisted. There's no
-| "_shown" flag for the photo specifically, so it's always rendered.
+| see UserDetail's comment). Comments now persist through the dedicated
+| PUT /user-details/{id}/update-cc endpoint added in PR #32; before that
+| the only way to write the field was update()'s full-record payload, so
+| the box was editable but deliberately not saved. There's no "_shown"
+| flag for the photo specifically, so it's always rendered.
 |
 | Customer Deliver opens CustomerDeliveryModal (delivery schedule/
 | tracking per customer) — confirmed there's genuinely no backend support
@@ -58,6 +60,8 @@ import type { CustomerTouch, UserDetail, UserDetailListItem } from '@/types'
 const props = defineProps<{ userId: number; users: UserDetailListItem[] }>()
 const emit = defineEmits<{ usersChanged: [] }>()
 
+const toast = useToastStore()
+
 const detail = ref<UserDetail | null>(null)
 const profileImageUrl = ref<string | null>(null)
 const isLoading = ref(false)
@@ -66,6 +70,11 @@ const loadError = ref('')
 const touchOptions = ref<CustomerTouch[]>([])
 const selectedTouchId = ref<number | null>(null)
 const comments = ref('')
+// Last value known to be on the server, so Save can stay disabled until
+// the operator has actually changed something.
+const savedComments = ref('')
+const isSavingComments = ref(false)
+const commentsError = ref('')
 const retailerId = ref<number | null>(null)
 const retailerPhone = ref('')
 const showAddRetailerModal = ref(false)
@@ -89,6 +98,7 @@ async function loadDetail() {
     detail.value = result.user
     profileImageUrl.value = result.profile_image_url
     comments.value = result.user.customer_commants ?? ''
+    savedComments.value = comments.value
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load customer details.'
   } finally {
@@ -104,12 +114,48 @@ async function loadTouchOptions() {
   }
 }
 
+// UpdateCcRequest: nullable|string|max:1500.
+const COMMENTS_MAX = 1500
+
+const commentsDirty = computed(() => comments.value !== savedComments.value)
+
+async function saveComments() {
+  commentsError.value = ''
+
+  if (comments.value.length > COMMENTS_MAX) {
+    commentsError.value = `Customer comments must be ${COMMENTS_MAX} characters or fewer.`
+    return
+  }
+  if (isSavingComments.value) return
+
+  isSavingComments.value = true
+  try {
+    // Send null for an emptied box so the column is cleared rather than set
+    // to an empty string — matches how create/update build this field.
+    const next = comments.value.trim().length > 0 ? comments.value : null
+    const result = await userDetailsApi.updateCustomerComments(props.userId, next)
+
+    // Trust the echoed value over the local one.
+    comments.value = result.customer_commants ?? ''
+    savedComments.value = comments.value
+    if (detail.value) detail.value.customer_commants = result.customer_commants
+
+    toast.show('Customer comments saved.', 'success')
+  } catch (err) {
+    commentsError.value =
+      err instanceof ApiError ? err.message : 'Failed to save customer comments.'
+  } finally {
+    isSavingComments.value = false
+  }
+}
+
 watch(
   () => props.userId,
   () => {
     selectedTouchId.value = null
     retailerId.value = null
     retailerPhone.value = ''
+    commentsError.value = ''
     loadDetail()
   },
   { immediate: true },
@@ -171,7 +217,30 @@ function handleRetailerAdded() {
           <span v-else class="text-xs text-slate-400">No photo</span>
         </div>
 
-        <BaseTextarea v-if="showComments" v-model="comments" label="Customer Comments" :rows="4" />
+        <div v-if="showComments" class="space-y-2">
+          <BaseTextarea
+            v-model="comments"
+            label="Customer Comments"
+            :rows="4"
+            :error="commentsError"
+          />
+          <div class="flex items-center justify-between gap-3">
+            <span
+              class="text-xs tabular-nums"
+              :class="comments.length > COMMENTS_MAX ? 'text-red-600' : 'text-slate-400'"
+            >
+              {{ comments.length }} / {{ COMMENTS_MAX }}
+            </span>
+            <BaseButton
+              variant="secondary"
+              type="button"
+              :disabled="!commentsDirty || isSavingComments || isLoading"
+              @click="saveComments"
+            >
+              {{ isSavingComments ? 'Saving…' : 'Save comments' }}
+            </BaseButton>
+          </div>
+        </div>
       </div>
     </div>
 

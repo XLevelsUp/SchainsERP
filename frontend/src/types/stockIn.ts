@@ -128,12 +128,13 @@ export interface NumericWastageInItemInput {
   waste_total: number | null
   remarks: string
   item_remarks: string
+  // Per-item, not form-level — see StockInItemInput's comment.
+  added_at: string
 }
 
 export interface NumericWastageInFormValues {
   given_by: number | null
   given_to: number | null
-  added_at: string
   items: NumericWastageInItemInput[]
 }
 

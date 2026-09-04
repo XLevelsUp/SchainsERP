@@ -1,49 +1,50 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { Plus, Trash } from 'lucide-vue-next'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import { stockApi } from '@/lib/stockApi'
-import { userOptionLabel } from '@/lib/userLabel'
 import { ApiError } from '@/lib/api'
-import { todayDateInputValue } from '@/lib/date'
-import { useAuthStore } from '@/stores/auth'
+import { nowDateTimeInputValue, toBackendDateTime } from '@/lib/date'
 import { useToastStore } from '@/stores/toast'
-import type {
-  Item,
-  ItemConversionAlloyInput,
-  ItemConversionFormValues,
-  ItemConversionItemInput,
-  UserDetailListItem,
-} from '@/types'
+import type { Item, ItemConversionAlloyInput, ItemConversionItemInput } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
-| Item Conversion modal — new screen, mirrors ItemConversionRequest.php.
+| Item Conversion modal — mirrors ItemConversionRequest.php
 |--------------------------------------------------------------------------
-| stock_in_id is nullable in ItemConversionRequest.php, so it's hidden from
-| the UI (always sent as null) rather than shown as a numeric input — no
-| backend endpoint lists a user's stock lots to pick from.
+| Replaces ItemConversionPanel.vue: Item Conversion is a modal action
+| here, not part of the inline add-row/shared-Submit grid — see
+| ItemChangeModal's comment for why (this one, Item Change, and GMS Out
+| submit standalone instead of queuing rows).
+|
+| Scoped to `userId` (selectedUserId from the page's UserPickerPanel),
+| same as the panel it replaces. actingUserId sent as userId too
+| (X-User-ID header) — not changed here.
+|
+| Unlike Item Change, stock_in_id is nullable in ItemConversionRequest.php
+| so it's always sent null with no backend-gap warning needed.
+|
+| Alloys: the grid version only exposed one alloy per row for space, but
+| ItemConversionRequest accepts an array — this modal has room, so it
+| exposes full add/remove alloy rows per item (matches the original
+| modal this replaces).
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ items: Item[]; users: UserDetailListItem[] }>()
+const props = defineProps<{ items: Item[]; userId: number | null }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 
-const auth = useAuthStore()
-const toastStore = useToastStore()
+const toast = useToastStore()
 
-const userOptions = computed(() =>
-  props.users.map((u) => ({ value: u.id, label: userOptionLabel(u) })),
-)
 const itemOptions = computed(() => props.items.map((i) => ({ value: i.item_id, label: i.item_name })))
 
 function makeEmptyAlloy(): ItemConversionAlloyInput {
   return { alloy_item_id: null, alloy_percentage: null, alloy_grams: null }
 }
-function makeEmptyItem(): ItemConversionItemInput {
+function makeEmptyRow(): ItemConversionItemInput {
   return {
     stock_in_id: null,
     source_item_id: null,
@@ -54,25 +55,19 @@ function makeEmptyItem(): ItemConversionItemInput {
     remarks: '',
     item_remarks: '',
     alloys: [],
+    added_at: nowDateTimeInputValue(),
   }
 }
-function makeEmptyForm(): ItemConversionFormValues {
-  return { user_id: null, added_at: todayDateInputValue(), items: [makeEmptyItem()] }
-}
 
-const form = reactive<ItemConversionFormValues>(makeEmptyForm())
-const formError = ref('')
+const rows = ref<ItemConversionItemInput[]>([makeEmptyRow()])
 const isSaving = ref(false)
-const fieldErrors = reactive<Record<string, string>>({})
+const fieldErrors = ref<Record<string, string>>({})
 
-function clearFieldErrors() {
-  Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
+function addRow() {
+  rows.value.push(makeEmptyRow())
 }
-function addItemRow() {
-  form.items.push(makeEmptyItem())
-}
-function removeItemRow(index: number) {
-  form.items.splice(index, 1)
+function removeRow(index: number) {
+  rows.value.splice(index, 1)
 }
 function addAlloyRow(row: ItemConversionItemInput) {
   row.alloys.push(makeEmptyAlloy())
@@ -90,92 +85,86 @@ function convertedGramsFor(row: ItemConversionItemInput): number {
 }
 
 function validate(): boolean {
-  clearFieldErrors()
-  formError.value = ''
+  fieldErrors.value = {}
 
-  if (form.user_id === null) fieldErrors.user_id = 'User is required.'
-
-  if (form.items.length === 0) {
-    fieldErrors.items = 'Add at least one item.'
+  if (rows.value.length === 0) {
+    fieldErrors.value.items = 'Add at least one item.'
   }
 
-  form.items.forEach((row, index) => {
+  rows.value.forEach((row, index) => {
     if (row.source_item_id === null) {
-      fieldErrors[`items.${index}.source_item_id`] = `Row ${index + 1}: select the source item.`
+      fieldErrors.value[`${index}.source_item_id`] = `Row ${index + 1}: select the source item.`
     }
     if (row.target_item_id === null) {
-      fieldErrors[`items.${index}.target_item_id`] = `Row ${index + 1}: select the target item.`
+      fieldErrors.value[`${index}.target_item_id`] = `Row ${index + 1}: select the target item.`
     }
     if (row.source_item_id !== null && row.source_item_id === row.target_item_id) {
-      fieldErrors[`items.${index}.target_item_id`] = `Row ${index + 1}: target item must differ from source item.`
+      fieldErrors.value[`${index}.target_item_id`] = `Row ${index + 1}: target item must differ from source item.`
     }
     if (row.source_grams === null || row.source_grams <= 0) {
-      fieldErrors[`items.${index}.source_grams`] = `Row ${index + 1}: source grams must be greater than 0.`
+      fieldErrors.value[`${index}.source_grams`] = `Row ${index + 1}: source grams must be greater than 0.`
     }
     if (row.source_touch === null || row.source_touch < 0 || row.source_touch > 100) {
-      fieldErrors[`items.${index}.source_touch`] = `Row ${index + 1}: source touch must be between 0 and 100.`
+      fieldErrors.value[`${index}.source_touch`] = `Row ${index + 1}: source touch must be between 0 and 100.`
     }
     if (row.target_touch === null || row.target_touch < 0 || row.target_touch > 100) {
-      fieldErrors[`items.${index}.target_touch`] = `Row ${index + 1}: target touch must be between 0 and 100.`
+      fieldErrors.value[`${index}.target_touch`] = `Row ${index + 1}: target touch must be between 0 and 100.`
     }
     row.alloys.forEach((alloy, alloyIndex) => {
       if (alloy.alloy_item_id === null) {
-        fieldErrors[`items.${index}.alloys.${alloyIndex}.alloy_item_id`] =
+        fieldErrors.value[`${index}.alloys.${alloyIndex}.alloy_item_id`] =
           `Row ${index + 1}, alloy ${alloyIndex + 1}: select an item.`
       }
       if (alloy.alloy_percentage === null || alloy.alloy_percentage < 0 || alloy.alloy_percentage > 100) {
-        fieldErrors[`items.${index}.alloys.${alloyIndex}.alloy_percentage`] =
+        fieldErrors.value[`${index}.alloys.${alloyIndex}.alloy_percentage`] =
           `Row ${index + 1}, alloy ${alloyIndex + 1}: percentage must be between 0 and 100.`
       }
       if (alloy.alloy_grams === null || alloy.alloy_grams < 0) {
-        fieldErrors[`items.${index}.alloys.${alloyIndex}.alloy_grams`] =
+        fieldErrors.value[`${index}.alloys.${alloyIndex}.alloy_grams`] =
           `Row ${index + 1}, alloy ${alloyIndex + 1}: grams must be 0 or more.`
       }
     })
   })
 
-  const firstError = Object.values(fieldErrors)[0]
+  const firstError = Object.values(fieldErrors.value)[0]
   if (firstError) {
-    formError.value = firstError
-    toastStore.show(firstError, 'error')
+    toast.show(firstError, 'error')
     return false
   }
   return true
 }
 
 async function handleSubmit() {
-  if (!validate()) return
-  if (!auth.user) {
-    formError.value = 'You must be signed in to record an item conversion.'
+  if (props.userId === null) {
+    toast.show('Select a user (left panel) before recording an Item Conversion.', 'error')
     return
   }
+  if (!validate()) return
 
   isSaving.value = true
-  formError.value = ''
   try {
     const result = await stockApi.postItemConversion(
       {
-        ...form,
-        items: form.items.map((i) => ({ ...i, alloys: i.alloys.map((a) => ({ ...a })) })),
+        user_id: props.userId,
+        items: rows.value.map((row) => ({
+          ...row,
+          added_at: toBackendDateTime(row.added_at),
+          alloys: row.alloys.filter((a) => a.alloy_item_id !== null),
+        })),
       },
-      auth.user.user_id,
+      props.userId,
     )
-    toastStore.show(`Item conversion recorded — ${result.length} item(s).`, 'success')
+    toast.show(`Item conversion recorded — ${result.length} item(s).`, 'success')
     emit('saved')
   } catch (err) {
     if (err instanceof ApiError) {
-      formError.value = err.message
       if (err.errors) {
-        for (const [key, messages] of Object.entries(err.errors)) {
-          fieldErrors[key] = messages[0]
-        }
-        toastStore.show(Object.values(err.errors)[0]?.[0] ?? err.message, 'error')
+        toast.show(Object.values(err.errors)[0]?.[0] ?? err.message, 'error')
       } else {
-        toastStore.show(err.message, 'error')
+        toast.show(err.message, 'error')
       }
     } else {
-      formError.value = 'Failed to record item conversion.'
-      toastStore.show('Failed to record item conversion.', 'error')
+      toast.show('Failed to record item conversion.', 'error')
     }
   } finally {
     isSaving.value = false
@@ -184,45 +173,22 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <BaseModal
-    title="Item Conversion"
-    badge="OUT"
-    badge-class="bg-red-600"
-    max-width="max-w-5xl"
-    @close="emit('close')"
-  >
-    <p
-      v-if="formError"
-      class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-    >
-      {{ formError }}
+  <BaseModal title="Item Conversion" badge="OUT" badge-class="bg-red-600" max-width="max-w-5xl" @close="emit('close')">
+    <p v-if="userId === null" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      Select a user in the left panel before recording an Item Conversion.
     </p>
 
     <form class="flex flex-col gap-6" @submit.prevent="handleSubmit">
-      <section class="grid gap-3 sm:grid-cols-2">
-        <BaseSelect
-          id="user_id"
-          :model-value="form.user_id"
-          label="User"
-          required
-          size="sm"
-          placeholder="Select a user…"
-          :options="userOptions"
-          :error="fieldErrors.user_id"
-          @update:model-value="(v) => (form.user_id = v as number | null)"
-        />
-        <BaseInput id="added_at" v-model="form.added_at" label="Date (optional, defaults to now)" type="date" size="sm" />
-      </section>
-
-      <section class="border-t border-slate-200 pt-4">
+      <section>
         <div class="mb-3 flex items-center justify-between">
           <h3 class="text-sm font-semibold text-slate-900">Items</h3>
-          <BaseButton variant="secondary" type="button" :icon="Plus" @click="addItemRow">Add item</BaseButton>
+          <BaseButton variant="secondary" type="button" :icon="Plus" @click="addRow">Add item</BaseButton>
         </div>
         <p v-if="fieldErrors.items" class="mb-2 text-sm text-red-600">{{ fieldErrors.items }}</p>
 
-        <div v-for="(row, index) in form.items" :key="index" class="mb-3 rounded-lg border border-slate-200 p-3">
-          <div class="grid items-end gap-3 sm:grid-cols-2">
+        <div v-for="(row, index) in rows" :key="index" class="mb-3 rounded-lg border border-slate-200 p-3">
+          <div class="grid items-end gap-3 sm:grid-cols-3">
+            <BaseInput :id="`added_at_${index}`" v-model="row.added_at" label="Date-Time" type="datetime-local" size="sm" />
             <BaseSelect
               :id="`source_item_${index}`"
               :model-value="row.source_item_id"
@@ -230,7 +196,7 @@ async function handleSubmit() {
               size="sm"
               placeholder="Select item…"
               :options="itemOptions"
-              :error="fieldErrors[`items.${index}.source_item_id`]"
+              :error="fieldErrors[`${index}.source_item_id`]"
               @update:model-value="(v) => (row.source_item_id = v as number | null)"
             />
             <BaseSelect
@@ -240,7 +206,7 @@ async function handleSubmit() {
               size="sm"
               placeholder="Select item…"
               :options="itemOptions"
-              :error="fieldErrors[`items.${index}.target_item_id`]"
+              :error="fieldErrors[`${index}.target_item_id`]"
               @update:model-value="(v) => (row.target_item_id = v as number | null)"
             />
           </div>
@@ -253,7 +219,7 @@ async function handleSubmit() {
               type="number"
               step="0.001"
               size="sm"
-              :error="fieldErrors[`items.${index}.source_grams`]"
+              :error="fieldErrors[`${index}.source_grams`]"
               @update:model-value="(v) => (row.source_grams = v === '' ? null : Number(v))"
             />
             <BaseInput
@@ -263,7 +229,7 @@ async function handleSubmit() {
               type="number"
               step="0.001"
               size="sm"
-              :error="fieldErrors[`items.${index}.source_touch`]"
+              :error="fieldErrors[`${index}.source_touch`]"
               @update:model-value="(v) => (row.source_touch = v === '' ? null : Number(v))"
             />
             <BaseInput
@@ -273,15 +239,15 @@ async function handleSubmit() {
               type="number"
               step="0.001"
               size="sm"
-              :error="fieldErrors[`items.${index}.target_touch`]"
+              :error="fieldErrors[`${index}.target_touch`]"
               @update:model-value="(v) => (row.target_touch = v === '' ? null : Number(v))"
             />
             <button
               type="button"
               class="mb-1 justify-self-start rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
               aria-label="Remove item"
-              :disabled="form.items.length === 1"
-              @click="removeItemRow(index)"
+              :disabled="rows.length === 1"
+              @click="removeRow(index)"
             >
               <Trash class="h-4 w-4" />
             </button>
@@ -324,7 +290,7 @@ async function handleSubmit() {
                 size="sm"
                 placeholder="Select item…"
                 :options="itemOptions"
-                :error="fieldErrors[`items.${index}.alloys.${alloyIndex}.alloy_item_id`]"
+                :error="fieldErrors[`${index}.alloys.${alloyIndex}.alloy_item_id`]"
                 @update:model-value="(v) => (alloy.alloy_item_id = v as number | null)"
               />
               <BaseInput
@@ -334,7 +300,7 @@ async function handleSubmit() {
                 type="number"
                 step="0.001"
                 size="sm"
-                :error="fieldErrors[`items.${index}.alloys.${alloyIndex}.alloy_percentage`]"
+                :error="fieldErrors[`${index}.alloys.${alloyIndex}.alloy_percentage`]"
                 @update:model-value="(v) => (alloy.alloy_percentage = v === '' ? null : Number(v))"
               />
               <BaseInput
@@ -344,7 +310,7 @@ async function handleSubmit() {
                 type="number"
                 step="0.001"
                 size="sm"
-                :error="fieldErrors[`items.${index}.alloys.${alloyIndex}.alloy_grams`]"
+                :error="fieldErrors[`${index}.alloys.${alloyIndex}.alloy_grams`]"
                 @update:model-value="(v) => (alloy.alloy_grams = v === '' ? null : Number(v))"
               />
               <button

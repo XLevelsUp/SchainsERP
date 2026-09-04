@@ -1,8 +1,10 @@
 // Mirrors ItemChangeRequest / StockOutService::createItemChange(). Changes
-// an existing stock lot (stock_in_id) from one item to another at a new
-// touch. No lot-listing endpoint exists yet, so stock_in_id is entered
-// manually for now — flagged to backend as a follow-up (a proper lot
-// picker needs a "list stock lots for a user/item" endpoint).
+// stock from one item to another at a new touch, optionally drawing it
+// from a specific lot. stock_in_id became `nullable` in backend commit
+// 6747887; when set, the service deducts that lot's balance and records
+// OB/CB against it, when null it skips the draw-down entirely. Metal rows
+// get their lot from MetalPickerModal (available-metals returns stock_id
+// as `id`); other items have no lot-listing endpoint, so they post null.
 export interface ItemChangeItemInput {
   stock_in_id: number | null
   from_item_id: number | null
@@ -12,11 +14,12 @@ export interface ItemChangeItemInput {
   req_touch: number | null
   remarks: string
   item_remarks: string
+  // Per-item, not form-level — see StockOutItemInput's comment.
+  added_at: string
 }
 
 export interface ItemChangeFormValues {
   user_id: number | null
-  added_at: string
   items: ItemChangeItemInput[]
 }
 
@@ -53,11 +56,12 @@ export interface ItemConversionItemInput {
   remarks: string
   item_remarks: string
   alloys: ItemConversionAlloyInput[]
+  // Per-item, not form-level — see StockOutItemInput's comment.
+  added_at: string
 }
 
 export interface ItemConversionFormValues {
   user_id: number | null
-  added_at: string
   items: ItemConversionItemInput[]
 }
 
@@ -86,12 +90,13 @@ export interface NumericWastageOutItemInput {
   waste_total: number | null
   remarks: string
   item_remarks: string
+  // Per-item, not form-level — see StockOutItemInput's comment.
+  added_at: string
 }
 
 export interface NumericWastageOutFormValues {
   given_by: number | null
   given_to: number | null
-  added_at: string
   items: NumericWastageOutItemInput[]
 }
 
