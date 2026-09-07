@@ -23,6 +23,27 @@ note anywhere that still says so should be read as meaning Render.
 | Local dev | `php artisan serve` on `127.0.0.1:8000`, Vite on `5173` proxying `/api` | PostgreSQL 16 in the `schainserp-postgres` Docker container — `127.0.0.1:5432`, db `schains_erp` (see `schainbackend/.env`) |
 | Deployed | Render web service, Docker image, Apache on Render's `$PORT` (10000) via `schainbackend/docker/entrypoint.sh` | **Render-managed PostgreSQL** — host `dpg-daf7pklg1s2s73dd1880-a`, port `5432`, db `schains_erp` (confirmed from a deploy log, 2026-09-07) |
 
+### Where the frontend lives
+
+The SPA is deployed on **Vercel** at `https://www.lensnstories.com`
+(`www` CNAME → `ee1d8a2940e5c628.vercel-dns-017.com`, apex `216.198.79.1`;
+DNS is at GoDaddy, `ns73`/`ns74.domaincontrol.com`). The main domain serves
+the frontend — it is **not** and should not be pointed at Render, which would
+replace the ERP with Laravel's welcome page.
+
+The API is reached at `https://api.lensnstories.com` (CNAME → the Render
+service). `src/lib/api.ts` builds its base from `VITE_API_BASE_URL`, falling
+back to the relative `/api/v1` that Vite's dev proxy serves. **That variable
+must be set in the Vercel project** —
+
+```
+VITE_API_BASE_URL=https://api.lensnstories.com/api/v1
+```
+
+Vite inlines `VITE_*` at build time, so changing it needs a redeploy, not a
+restart. Without it the built SPA requests `/api/v1/...` from the Vercel
+origin and every call 404s.
+
 Practical consequences for us:
 
 - MySQL-only SQL is a hard error in every environment, not just locally —

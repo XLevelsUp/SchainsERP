@@ -19,7 +19,13 @@ export class ApiError extends Error {
   }
 }
 
-const BASE_URL = '/api/v1'
+// In dev the SPA and the API share an origin: Vite proxies `/api` to the
+// Laravel server (see vite.config.ts), so a relative base is correct and
+// needs no configuration. Deployed they are separate hosts — the SPA on
+// Vercel, Laravel on Render — so VITE_API_BASE_URL supplies the absolute
+// origin, e.g. https://api.lensnstories.com/api/v1. Trailing slashes are
+// trimmed so a value with or without one builds the same URL.
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/+$/, '')
 
 interface ErrorBody {
   message?: string
