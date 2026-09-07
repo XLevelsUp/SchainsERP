@@ -12,6 +12,32 @@ discrepancy is listed in [§3](#3-api-doc-corrections).
 
 ---
 
+## 0. Environments
+
+**Both environments are PostgreSQL. Neither is Supabase.** Earlier revisions
+of this doc said the deployed database was Supabase — that was wrong, and any
+note anywhere that still says so should be read as meaning Render.
+
+| | Where | Database |
+|---|---|---|
+| Local dev | `php artisan serve` on `127.0.0.1:8000`, Vite on `5173` proxying `/api` | PostgreSQL 16 in the `schainserp-postgres` Docker container — `127.0.0.1:5432`, db `schains_erp` (see `schainbackend/.env`) |
+| Deployed | Render web service, Docker image, Apache on Render's `$PORT` (10000) via `schainbackend/docker/entrypoint.sh` | **Render-managed PostgreSQL** — host `dpg-daf7pklg1s2s73dd1880-a`, port `5432`, db `schains_erp` (confirmed from a deploy log, 2026-09-07) |
+
+Practical consequences for us:
+
+- MySQL-only SQL is a hard error in every environment, not just locally —
+  see backend ask #18.
+- The deployed database already has migration history in it. A fix that
+  assumes a clean slate (`migrate:fresh`, renumbering existing migrations)
+  will not apply there — see backend ask #1.
+- Render's Postgres credentials are not in the repo and not in any `.env`
+  we hold; the backend team manages them in the Render dashboard.
+- **There is no shell on the Render service.** Anything the deployed app
+  needs doing has to be expressible in `schainbackend/docker/entrypoint.sh`
+  and run on container start — see [§2b](#2b-what-we-changed-in-schainbackend-2026-09-07).
+
+---
+
 ## 1. Frontend work
 
 ### Done
@@ -72,13 +98,12 @@ Done on this machine 2026-09-03. Every other dev needs the same four steps.
    sodium at runtime to sign tokens.
 2. `composer install` — `laravel/passport` was added in PR #32 and is not
    in anyone's `vendor/` yet.
-3. `php artisan migrate` — **will fail partway**, see backend ask #1. The
-   first five oauth migrations apply, then the duplicate set aborts the run
-   and `customer_touch_user_mappings` never gets created. Workaround that
-   touches no backend files: after the failure, insert the ten duplicate
-   filenames into the `migrations` table with the same batch number, then
-   run `migrate` again. Delete those rows once the backend removes the
-   duplicate files.
+3. `php artisan migrate` — runs clean as of 2026-09-07, backend ask #1 is
+   fixed. If your local database still carries the old workaround (ten
+   `migrations` rows for oauth files that no longer exist), clear them once:
+   `delete from migrations where migration like '%oauth%' and migration not
+   like '2026_09_01_0004%';` — they are orphaned bookkeeping, harmless to
+   `migrate` but they would confuse `migrate:rollback`.
 4. `php artisan passport:keys` and
    `php artisan passport:client --personal` — no `storage/oauth-*.key`
    exists otherwise and login 500s.
@@ -118,20 +143,50 @@ that path.
 
 ### Blockers
 
-1. **`php artisan migrate` fails on a fresh database.** The five Passport
-   tables were committed **three times each** — `2026_09_01_000437`–`000441`,
-   `_000650`–`000654`, `_000717`–`000721` — and the files are byte-identical
-   (verified with `diff`). The second batch throws *"table already exists"*.
-   Two of the three sets need deleting. This blocks anyone following the
-   doc's own setup steps.
+1. ~~**`php artisan migrate` fails on a fresh database — and this now
+   crash-loops the Render deploy.**~~ **FIXED 2026-09-07 by the frontend
+   team**, with the backend team's go-ahead, because the deploy was down and
+   Render gives this service no shell to repair it from. See
+   [§2b](#2b-what-we-changed-in-schainbackend-2026-09-07) for exactly what
+   changed. Kept here because the numbering is referenced elsewhere and the
+   root cause is worth not repeating.
+
+   The five Passport tables were committed **three times each** —
+   `2026_09_01_000437`–`000441`, `_000650`–`000654`, `_000717`–`000721` —
+   and the files were byte-identical (verified with `diff` and `md5sum`).
+   The second batch threw
+   `SQLSTATE[42P07] Duplicate table: relation "oauth_auth_codes" already
+   exists`.
 
    **Root cause:** `passport:install` calls
    `vendor:publish --tag=passport-migrations`, which republishes all five
    migrations with fresh timestamps every time it runs. It was run three
    times (00:04, 00:06, 00:07 on 2026-09-01) and each run's copies were
-   committed. Fix is to delete two of the three sets and not re-run
-   `passport:install` on a repo that already has them — `passport:keys`
-   plus `passport:client --personal` is enough once the migrations exist.
+   committed in `1fae310`. Passport 13.7 does *not* auto-load its own
+   package migrations (`PassportServiceProvider` only registers the publish
+   tag), so the duplication is entirely from the repeated publish — nothing
+   in `vendor/` is contributing a fourth copy.
+
+   **Why it took the deploy down rather than just being noisy:**
+   `docker/entrypoint.sh` ran `php artisan migrate --force` under `set -e`,
+   so the failure exited the container before `config:cache` and
+   `exec apache2-foreground` were ever reached. Render logged
+   `==> Exited with status 1`, restarted, and hit the identical failure —
+   a crash loop that would never have cleared on its own. It was never an
+   env or credentials problem.
+
+   **Which set was kept:** `_000437`–`000441`. Migrations apply in filename
+   order, so on the Render database that set had already applied and was
+   recorded in the `migrations` table; the other ten had not. Deleting a
+   *different* set would have orphaned live ledger rows. No data repair was
+   needed on Render — the next `migrate --force` finds nothing new for
+   oauth and proceeds to `customer_touch_user_mappings`, which had never
+   run there. `migrate:fresh` was never an option: the deployed database
+   holds real data ([§0](#0-environments)).
+
+   **Do not re-run `passport:install`** on this repo — it republishes all
+   five migrations again and puts us straight back here. The entrypoint now
+   handles keys and the personal access client on its own.
 
 2. **Acting-user resolution is inconsistent now that auth is mandatory.**
    `StockDetailsController::getActingUserId` (line 83) and
@@ -245,10 +300,12 @@ that path.
 
 18. **The `date`+`time` branch will throw a SQL error on this database.** It
     builds raw SQL via `selectRaw`/`havingRaw` using `IFNULL(...)` and
-    backtick-quoted identifiers (`` `stock_details` ``) — MySQL syntax. Both
-    local dev and Supabase run **PostgreSQL**, which has no `IFNULL` (use
-    `COALESCE`) and doesn't use backticks. Any call with `date`+`time`
-    params 500s.
+    backtick-quoted identifiers (`` `stock_details` ``) — MySQL syntax. Every
+    environment we run is **PostgreSQL** — local Docker Postgres and Render's
+    managed Postgres in the deploy, *not* Supabase ([§0](#0-environments)) —
+    and Postgres has no `IFNULL` (use `COALESCE`) and doesn't use backticks.
+    There is no environment where this branch works. Any call with
+    `date`+`time` params 500s.
 
 19. **The `?user_id=` admin override can never activate.** It checks
     `$actingUser->role_id == 1` — `RoleSeeder` defines role_id 1 as
@@ -260,6 +317,57 @@ that path.
 
 20. Minor: `LiveMetalSeeder.php` has a duplicate `'added_by' => 1,` key in
     its first insert array. Harmless (PHP keeps the last value) but sloppy.
+
+---
+
+## 2b. What we changed in `schainbackend` (2026-09-07)
+
+> The frontend team does not normally touch `schainbackend/`. This is the
+> documented exception: the Render deploy was in a crash loop, Render gives
+> this service **no shell**, so every repair had to ship as repo changes that
+> run on container start. Backend team approved. Two files.
+
+**1. Deleted the ten duplicate Passport migrations** (backend ask #1) —
+`2026_09_01_000650`–`000654` and `_000717`–`000721`. Kept `_000437`–`000441`.
+52 migration files → 42.
+
+**2. Rewrote `schainbackend/docker/entrypoint.sh`.** Three additions, all
+driven by the no-shell constraint:
+
+| Step | Behaviour | Why |
+|---|---|---|
+| Migrations | Still **fatal** on failure, but dumps `migrate:status` before exiting | Booting Apache against a half-applied schema turns one clear failure into scattered 500s. The status dump is what replaces having a shell. |
+| Passport keys | Uses `PASSPORT_PRIVATE_KEY`/`PASSPORT_PUBLIC_KEY` if set; else keeps existing `storage/*.key`; else generates a pair and warns | `/storage/*.key` is gitignored, so the image ships **no key pair** and nothing generated one. Every login would have 500'd on a missing key path the moment the migration fix landed. |
+| Personal access client | Looks it up, creates it only if absent. **Non-fatal** on error | `AuthController:81` uses `$user->createToken(...)->accessToken`, which needs an `oauth_clients` row with the `personal_access` grant. Nothing created it. `passport:client --personal` is not idempotent, hence the guard. Non-fatal so a bug in this block can't brick every deploy. |
+
+Both new blocks were verified against the local database, including the
+create path inside a rolled-back transaction.
+
+### Still needs doing on Render — backend team
+
+- [ ] **Set `PASSPORT_PRIVATE_KEY` and `PASSPORT_PUBLIC_KEY` as environment
+      variables.** Without them the entrypoint generates a fresh key pair on
+      every container start, and Render's filesystem is ephemeral — so
+      **every restart silently logs out every user**. `config/passport.php`
+      already reads both (lines 31/33); nothing else is needed once they are
+      set. This is the one remaining known defect in the deploy.
+- [ ] **Confirm `APP_KEY` is set** in the Render environment. It cannot be
+      generated at boot — `key:generate` writes to a `.env` the container
+      doesn't have, and rotating it would break existing encrypted values.
+
+### Deliberately not touched
+
+- **`schainbackend/render-build.sh`** appears to be dead — the service
+  deploys from the `Dockerfile`/`ENTRYPOINT`, not this script. Flagging
+  rather than editing, because it may belong to another Render service:
+  it runs `php artisan passport:keys --force` unconditionally, which
+  **rotates the signing keys on every build** and invalidates all live
+  tokens. If it is dead, delete it. If it is live, that `--force` is a bug.
+- **The `migrate`-on-every-boot pattern itself.** Running migrations from
+  the entrypoint means any future migration failure takes the service down
+  instead of leaving the previous version serving. A Render pre-deploy
+  command would be the better home for it. Backend team's call — out of
+  scope for an outage fix.
 
 ---
 
@@ -332,5 +440,7 @@ numbers are the doc's own.
 - **The setup section omits `ext-sodium`.** It lists `composer install`,
   `migrate` and `passport:install`, but `composer install` fails outright on
   a stock Windows PHP 8.4 because Passport's `lcobucci/jwt ^5.6` requires
-  the sodium extension and it ships disabled. That step needs adding — and
-  `migrate` needs the caveat that it currently fails partway (see §1b).
+  the sodium extension and it ships disabled. That step needs adding.
+  It also lists `passport:install`, which should be dropped — running it
+  republishes the Passport migrations and recreates backend ask #1.
+  `passport:keys` plus `passport:client --personal` is the correct pair.
