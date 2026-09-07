@@ -50,6 +50,7 @@ Route::prefix('v1')->group(function () {
 
         // Cash Dashboard APIs (Must be above apiResource to prevent {id} interception)
         Route::get('report/cash-transactions-obcb', [ReportController::class, 'getCashTransactionsObcb']);
+        Route::get('report/live-metal-balance', [ReportController::class, 'getLiveMetalBalance']);
         Route::get('cash-txn-details/out-history', [CashTxnDetailController::class, 'getOutHistory']);
         Route::get('cash-txn-details/in-history', [CashTxnDetailController::class, 'getInHistory']);
         Route::get('cash-txn-details/print-report', [CashTxnDetailController::class, 'getPrintReport']);

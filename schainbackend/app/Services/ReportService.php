@@ -778,4 +778,95 @@ class ReportService
             'transactions' => $paginated
         ];
     }
+    /**
+     * Get Live Metal Balance for a User
+     */
+    public function getLiveMetalBalanceReport(array $params, int $targetUserId): array
+    {
+        $date = $params['date'] ?? null;
+        $time = $params['time'] ?? null;
+        $pageSize = $params['per_page'] ?? 50;
+
+        $query = StockDetails::with(['givenBy'])
+            ->where('given_to', $targetUserId)
+            ->where('remarks', '!=', 'CASH_TO_GOLD')
+            ->whereIn('entry_type', ['NORMAL', 'EMPTOHEAD', 'HEADTOHEAD'])
+            ->where(function ($q) {
+                $q->where(function ($sq1) {
+                    $sq1->where('entry_type', 'NORMAL')->where('item_id', 2);
+                })->orWhere(function ($sq2) {
+                    $sq2->where('entry_type', '!=', 'NORMAL')->where('to_item_id', 2);
+                });
+            })
+            ->where(function ($q) {
+                $q->where(function ($sq1) {
+                    $sq1->whereIn('type', ['ITEMCHANGE', 'ITEMCONVERSION'])
+                        ->where('stock_type', '!=', 'OUT');
+                })->orWhere(function ($sq2) {
+                    $sq2->where(function ($sq3) {
+                        $sq3->whereNotIn('type', ['ITEMCHANGE', 'ITEMCONVERSION'])
+                            ->orWhereNull('type');
+                    })->whereIn('stock_type', ['IN', 'OUT']);
+                });
+            });
+
+        if ($date && $time) {
+            $dateTime = date('Y-m-d H:i:s', strtotime("$date $time"));
+            
+            // Replicate the legacy subquery exactly
+            $query->selectRaw("stock_details.*, IFNULL((SELECT SUM(stock.grams) FROM `stock_details` as stock WHERE stock.stock_in_id = stock_details.stock_id and added_at <= ?), 0) as used_grams", [$dateTime])
+                  ->havingRaw('grams - used_grams > 0')
+                  ->orderBy('stock_in_id', 'desc');
+        } else {
+            $query->select('stock_details.*')
+                  ->where('balance', '>', 0);
+        }
+
+        $paginated = $query->paginate($pageSize);
+
+        $totalGrams = 0;
+        $totalPurity = 0;
+
+        $records = $paginated->getCollection()->map(function ($metal) use ($date, $time, &$totalGrams, &$totalPurity) {
+            if ($date && $time) {
+                // used_grams is populated by the selectRaw subquery
+                $balance = round($metal->grams, 3) - round($metal->used_grams ?? 0, 3);
+            } else {
+                $balance = $metal->balance;
+            }
+            
+            $balance = round($balance, 3);
+            $purity = round($balance * $metal->touch / 100, 3);
+
+            $totalGrams += $balance;
+            $totalPurity += $purity;
+
+            return [
+                'stock_id' => $metal->stock_id,
+                'balance' => $balance,
+                'touch' => $metal->touch,
+                'purity' => $purity,
+                'party_name' => $metal->givenBy ? $metal->givenBy->name : '',
+                'added_at' => (string)$metal->added_at
+            ];
+        });
+
+        // The overall totals logic in Yii2 was just the sum of the CURRENT page. 
+        // If we want total of all pages, we would have to query without limit.
+        // I will replicate the Yii2 logic exactly (sum of current page).
+        
+        return [
+            'summary' => [
+                'total_grams' => round($totalGrams, 3),
+                'total_purity' => round($totalPurity, 3)
+            ],
+            'records' => $records,
+            'pagination' => [
+                'current_page' => $paginated->currentPage(),
+                'last_page' => $paginated->lastPage(),
+                'per_page' => $paginated->perPage(),
+                'total' => $paginated->total(),
+            ]
+        ];
+    }
 }

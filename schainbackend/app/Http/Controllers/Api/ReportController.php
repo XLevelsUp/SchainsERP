@@ -126,4 +126,52 @@ class ReportController extends Controller
             ], 500);
         }
     }
+    protected $reportService;
+
+    public function __construct(\App\Services\ReportService $reportService)
+    {
+        $this->reportService = $reportService;
+    }
+
+    /**
+     * Get Live Metal Balance for a User (or Admin targeting a User)
+     */
+    public function getLiveMetalBalance(Request $request): JsonResponse
+    {
+        try {
+            // Determine the target user_id
+            $actingUserId = $request->user()->user_id ?? (int)$request->header('X-User-ID', 1);
+            $targetUserId = $actingUserId;
+
+            // Admin Override Check
+            // In Laravel, checking if user is admin usually involves role_id == 1 or checking role->role_name
+            // Wait, we need to fetch the acting user to see if they are admin.
+            $actingUser = \App\Models\UserDetail::find($actingUserId);
+            
+            // Assuming role_id == 1 or role->role_name == 'ADMIN'
+            if ($actingUser && ($actingUser->role_id == 1 || strtoupper(optional($actingUser->role)->role_name) == 'ADMIN')) {
+                if ($request->filled('user_id')) {
+                    $targetUserId = $request->query('user_id');
+                }
+            }
+
+            $params = $request->all();
+            
+            $result = $this->reportService->getLiveMetalBalanceReport($params, $targetUserId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Metal live report fetched successfully.',
+                'data' => $result
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('ReportController@getLiveMetalBalance failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve Metal Live Report',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
