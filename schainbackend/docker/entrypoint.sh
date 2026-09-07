@@ -20,6 +20,9 @@ echo "Clearing Laravel caches..."
 php artisan config:clear || true
 php artisan route:clear || true
 php artisan view:clear || true
+echo "Running database migrations..."
+
+php artisan migrate --force
 
 echo "Caching Laravel configuration..."
 
