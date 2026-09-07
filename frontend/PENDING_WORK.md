@@ -325,7 +325,7 @@ that path.
 > The frontend team does not normally touch `schainbackend/`. This is the
 > documented exception: the Render deploy was in a crash loop, Render gives
 > this service **no shell**, so every repair had to ship as repo changes that
-> run on container start. Backend team approved. Two files.
+> run on container start. Backend team approved.
 
 **1. Deleted the ten duplicate Passport migrations** (backend ask #1) —
 `2026_09_01_000650`–`000654` and `_000717`–`000721`. Kept `_000437`–`000441`.
@@ -340,8 +340,26 @@ driven by the no-shell constraint:
 | Passport keys | Uses `PASSPORT_PRIVATE_KEY`/`PASSPORT_PUBLIC_KEY` if set; else keeps existing `storage/*.key`; else generates a pair and warns | `/storage/*.key` is gitignored, so the image ships **no key pair** and nothing generated one. Every login would have 500'd on a missing key path the moment the migration fix landed. |
 | Personal access client | Looks it up, creates it only if absent. **Non-fatal** on error | `AuthController:81` uses `$user->createToken(...)->accessToken`, which needs an `oauth_clients` row with the `personal_access` grant. Nothing created it. `passport:client --personal` is not idempotent, hence the guard. Non-fatal so a bug in this block can't brick every deploy. |
 
-Both new blocks were verified against the local database, including the
-create path inside a rolled-back transaction.
+A fourth block baselines the Passport migration ledger before migrating: if
+an `oauth_*` table exists with no `migrations` row, it is recorded as
+applied. That is the one other state the duplicate bug could have left
+behind, and it would have failed with the *identical* "Duplicate table"
+error — undiagnosable without a shell. Idempotent, no-op when healthy.
+
+Every block was verified against the local database, the repair paths inside
+rolled-back transactions.
+
+**3. Added the missing `sessions` table migration**
+(`2026_09_07_170000_create_sessions_table.php`, verbatim from Laravel's own
+`Illuminate/Session/Console/stubs/database.stub`). `SESSION_DRIVER=database`
+but no migration ever created the table — Laravel's skeleton creates it
+inside `create_users_table`, which this project replaced with
+`create_user_details_table`; `create_cache_table` survived, `sessions` was
+lost with it. Any route in the `web` middleware group 500'd with
+`SQLSTATE[42P01] relation "sessions" does not exist`. **This reproduced
+locally too** — it was never Render-specific. `/api/*` was unaffected
+(`auth:api` is stateless), which is why nobody hit it until the deploy
+started serving `/`.
 
 ### Still needs doing on Render — backend team
 
