@@ -2,6 +2,7 @@ import { api, type ApiResponse } from './api'
 import type {
   ConsolidatedQuery,
   ConsolidatedResult,
+  IdWiseReportResult,
   ItemsObcbQuery,
   ItemsObcbResult,
 } from '@/types'
@@ -31,5 +32,13 @@ export const stockReportsApi = {
   getConsolidated: (query: ConsolidatedQuery) =>
     api
       .get<ApiResponse<ConsolidatedResult>>(`${RESOURCE}/consolidated${buildQuery(query)}`)
+      .then((r) => r.data),
+
+  // Lot lineage for one stock row: the parent lot it belongs to, every
+  // child transaction drawn from that lot, and a received/consumed/balance
+  // reconciliation. 404s if stock_id doesn't exist.
+  getIdWise: (stockId: number) =>
+    api
+      .get<ApiResponse<IdWiseReportResult>>(`${RESOURCE}/id-wise${buildQuery({ stock_id: stockId })}`)
       .then((r) => r.data),
 }

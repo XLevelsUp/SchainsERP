@@ -1,15 +1,30 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-# Render (and most PaaS hosts) inject the port to listen on via $PORT.
-# Apache's default config listens on 80, so rewrite it at container start.
-PORT="${PORT:-80}"
-sed -ri "s/^Listen .*/Listen ${PORT}/" /etc/apache2/ports.conf
-sed -ri "s/<VirtualHost \*:80>/<VirtualHost *:${PORT}>/" /etc/apache2/sites-available/000-default.conf
+PORT="${PORT:-10000}"
 
-# Config/route caches must be built after env vars are actually present
-# (they're injected at container start, not at image build time).
-php artisan config:clear
-php artisan route:clear
+echo "===================================="
+echo "Starting Laravel application"
+echo "Render PORT: ${PORT}"
+echo "===================================="
+
+# Configure Apache to use Render's assigned port
+sed -i "s/Listen 80/Listen ${PORT}/" /etc/apache2/ports.conf
+
+sed -i \
+    "s/<VirtualHost \*:80>/<VirtualHost *:${PORT}>/" \
+    /etc/apache2/sites-available/000-default.conf
+
+echo "Clearing Laravel caches..."
+
+php artisan config:clear || true
+php artisan route:clear || true
+php artisan view:clear || true
+
+echo "Caching Laravel configuration..."
+
+php artisan config:cache
+
+echo "Starting Apache..."
 
 exec apache2-foreground

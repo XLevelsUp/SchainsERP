@@ -3,8 +3,8 @@
 Living tracker for the frontend team. Updated as items land — tick things off
 here rather than opening a new doc.
 
-**Last updated:** 2026-09-03
-**Backend baseline:** `1a55e25` (PR #32 — Passport auth, customer touch mappings)
+**Last updated:** 2026-09-07
+**Backend baseline:** `bdada98` (PR #35 — live metal balance report)
 
 Every claim below was verified against backend source at that commit, not
 against the API doc. Where the two disagree, the source wins and the
@@ -226,6 +226,40 @@ that path.
 
 16. The same docblock's example shows `role_id` as an integer `1`.
     `user_details.role_id` is a `varchar(50)` in the migration.
+
+### Data correctness bugs (PR #35 — `GET /report/live-metal-balance`)
+
+> These block building a frontend screen for this endpoint — it currently
+> returns wrong data in the common case and crashes in the other. Not
+> flagging as "missing UI," flagging as "don't build UI against this yet."
+
+17. **Wrong item hardcoded as "Metal."** `ReportService::getLiveMetalBalanceReport`
+    hardcodes `item_id = 2` / `to_item_id = 2` to mean Metal. In the actual
+    `items` table, **item_id 2 is "Gold Chain"; item_id 4 is "Metal."**
+    (`LiveMetalSeeder.php`'s own inline comment calls its `item_id => 2` row
+    `// Gold`, so the seeder and the query share the same wrong assumption.)
+    Right now this endpoint reports Gold Chain balances mislabeled as "Metal
+    Live Balance" — not a crash, a wrong-answer bug. Needs `item_id`
+    corrected to 4 (or better, looked up by name the way `getAvailableMetals`
+    already does, rather than hardcoded).
+
+18. **The `date`+`time` branch will throw a SQL error on this database.** It
+    builds raw SQL via `selectRaw`/`havingRaw` using `IFNULL(...)` and
+    backtick-quoted identifiers (`` `stock_details` ``) — MySQL syntax. Both
+    local dev and Supabase run **PostgreSQL**, which has no `IFNULL` (use
+    `COALESCE`) and doesn't use backticks. Any call with `date`+`time`
+    params 500s.
+
+19. **The `?user_id=` admin override can never activate.** It checks
+    `$actingUser->role_id == 1` — `RoleSeeder` defines role_id 1 as
+    `CUSTOMER`, not admin/head (same role-numbering trap as backend ask #2).
+    It falls back to `$actingUser->role->role_name` — but the `roles` table's
+    actual column is `role`, not `role_name` (checked the migration), so
+    that lookup is always `null`. Both halves of the `OR` are unreachable for
+    any real user in this dataset.
+
+20. Minor: `LiveMetalSeeder.php` has a duplicate `'added_by' => 1,` key in
+    its first insert array. Harmless (PHP keeps the last value) but sloppy.
 
 ---
 

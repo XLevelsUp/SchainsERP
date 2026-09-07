@@ -37,6 +37,11 @@ const router = createRouter({
           component: () => import('@/views/CustomerTouchMappingsView.vue'),
         },
         {
+          path: 'head-employee-mappings',
+          name: 'head-employee-mappings',
+          component: () => import('@/views/HeadEmployeeMappingsView.vue'),
+        },
+        {
           path: 'bank-details',
           name: 'bank-details',
           component: () => import('@/views/BankDetailsView.vue'),
@@ -87,9 +92,19 @@ const router = createRouter({
           component: () => import('@/views/ItemsObcbReportView.vue'),
         },
         {
+          path: 'metal-live',
+          name: 'metal-live',
+          component: () => import('@/views/LiveMetalBalanceView.vue'),
+        },
+        {
           path: 'consolidated-report',
           name: 'consolidated-report',
           component: () => import('@/views/ConsolidatedReportView.vue'),
+        },
+        {
+          path: 'id-wise-report',
+          name: 'id-wise-report',
+          component: () => import('@/views/IdWiseReportView.vue'),
         },
         {
           path: 'metal-picker-test',
