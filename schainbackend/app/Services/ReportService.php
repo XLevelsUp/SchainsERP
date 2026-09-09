@@ -871,4 +871,187 @@ class ReportService
             ]
         ];
     }
+
+    /**
+     * Get One Day Action Report combining Stock and Cash details
+     */
+    public function getOneDayActionReport(array $filters, int $headId): array
+    {
+        $employeeId = $filters['employee_id'] ?? null;
+        $fromDate = $filters['from_date'] ?? date('Y-m-d');
+        $toDate = $filters['to_date'] ?? $fromDate;
+        $stockType = $filters['stocktype'] ?? null; // e.g. NORMAL, SALES, HEADTOHEAD
+        $type = $filters['type'] ?? null; // e.g. IN, OUT
+        $givenByGivenTo = $filters['given_by_given_to'] ?? null;
+        $givenBy = $filters['given_by'] ?? null;
+        $givenTo = $filters['given_to'] ?? null;
+        $retailerId = $filters['retailer_id'] ?? null;
+        $itemId = $filters['item_id'] ?? null;
+        $pageNo = $filters['page_no'] ?? 1;
+        $pageSize = $filters['page_size'] ?? 500;
+
+        $userId = null;
+        if ($employeeId) {
+            $userId = (int) $employeeId;
+        }
+
+        // ==========================================
+        // 1. Fetch Stock Details (NORMAL, SALES, HEADTOHEAD)
+        // ==========================================
+        $stockQuery = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo'])
+            ->whereIn('entry_type', ['NORMAL', 'SALES', 'HEADTOHEAD']);
+
+        if ($userId) {
+            $stockQuery->where('added_by', $userId);
+        }
+
+        if ($stockType) {
+            $stockQuery->where('entry_type', $stockType);
+        }
+
+        if ($type) {
+            $stockQuery->where('stock_type', $type);
+        }
+
+        if ($givenByGivenTo) {
+            $stockQuery->where(function ($q) use ($givenByGivenTo) {
+                $q->where('given_by', $givenByGivenTo)
+                  ->orWhere('given_to', $givenByGivenTo);
+            });
+        }
+        
+        if ($givenBy) {
+            $stockQuery->where('given_by', $givenBy);
+        }
+
+        if ($givenTo) {
+            $stockQuery->where('given_to', $givenTo);
+        }
+
+        if ($retailerId) {
+            $stockQuery->where('retailer_id', $retailerId);
+        }
+
+        if ($itemId) {
+            $stockQuery->where(function ($q) use ($itemId) {
+                $q->where('item_id', $itemId)
+                  ->orWhere('to_item_id', $itemId);
+            });
+        }
+
+        // Date Filter (Specific Day or Range)
+        $toDate = $filters['to_date'] ?? $fromDate;
+        if ($fromDate === $toDate) {
+            $stockQuery->whereDate('added_at', $fromDate);
+        } else {
+            $stockQuery->whereDate('added_at', '>=', $fromDate)
+                       ->whereDate('added_at', '<=', $toDate);
+        }
+
+        $stockTotalCount = $stockQuery->count();
+        $stockRecords = $stockQuery->orderBy('stock_id', 'desc')
+            ->skip(($pageNo - 1) * $pageSize)
+            ->take($pageSize)
+            ->get();
+
+        // Map Stock Details to consistent array output
+        $formattedStockRecords = $stockRecords->map(function ($stock) {
+            return [
+                'id' => $stock->stock_id,
+                'record_type' => 'STOCK',
+                'entry_type' => $stock->entry_type,
+                'stock_type' => $stock->stock_type,
+                'given_by' => $stock->givenBy ? $stock->givenBy->name : '-',
+                'given_to' => $stock->givenTo ? $stock->givenTo->name : '-',
+                'item_name' => $stock->item ? $stock->item->item_name : '-',
+                'grams' => $stock->grams,
+                'touch' => $stock->touch,
+                'purity' => $stock->purity,
+                'waste_total' => $stock->waste_total,
+                'waste_value' => $stock->waste_value,
+                'remarks' => $stock->remarks,
+                'added_by' => $stock->added_by,
+                'added_at' => $stock->added_at ? $stock->added_at->format('d-m-Y H:i:s') : '-',
+                'is_hided' => $stock->is_hided
+            ];
+        });
+
+        // ==========================================
+        // 2. Fetch Cash Txn Details
+        // ==========================================
+        $cashQuery = \App\Models\CashTxnDetail::with(['givenByUser', 'givenToUser']);
+
+        if ($fromDate === $toDate) {
+            $cashQuery->whereDate('created_at', $fromDate);
+        } else {
+            $cashQuery->whereDate('created_at', '>=', $fromDate)
+                      ->whereDate('created_at', '<=', $toDate);
+        }
+
+        if ($userId) {
+            $cashQuery->where('added_by', $userId);
+        }
+
+        if ($type) {
+            $cashQuery->where('type', $type);
+        }
+
+        if ($givenByGivenTo) {
+            $cashQuery->where(function ($q) use ($givenByGivenTo) {
+                $q->where('sender_id', $givenByGivenTo)
+                  ->orWhere('recipient_id', $givenByGivenTo);
+            });
+        }
+        
+        if ($givenBy) {
+            $cashQuery->where('sender_id', $givenBy);
+        }
+
+        if ($givenTo) {
+            $cashQuery->where('recipient_id', $givenTo);
+        }
+
+        $cashTotalCount = $cashQuery->count();
+        $cashRecords = $cashQuery->orderBy('txn_id', 'desc')
+            ->skip(($pageNo - 1) * $pageSize)
+            ->take($pageSize)
+            ->get();
+
+        // Map Cash Details to consistent array output
+        $formattedCashRecords = $cashRecords->map(function ($cash) {
+            return [
+                'id' => $cash->txn_id,
+                'record_type' => 'CASH',
+                'entry_type' => 'CASH', // standard
+                'stock_type' => $cash->type, // IN/OUT
+                'given_by' => $cash->givenByUser ? $cash->givenByUser->name : '-',
+                'given_to' => $cash->givenToUser ? $cash->givenToUser->name : '-',
+                'item_name' => 'CASH',
+                'grams' => $cash->amount, // Using grams column to display amount for consolidated views
+                'touch' => null,
+                'purity' => null,
+                'waste_total' => null,
+                'waste_value' => null,
+                'remarks' => $cash->remarks,
+                'added_by' => $cash->added_by,
+                'added_at' => $cash->created_at ? $cash->created_at->format('d-m-Y H:i:s') : '-',
+                'is_hided' => 0
+            ];
+        });
+
+        // Combine logic (Stock first, then cash, or interspersed by time if desired, currently sequential)
+        $combinedRecords = $formattedStockRecords->concat($formattedCashRecords);
+        // Sort combined by added_at desc if you want them truly interspersed
+        $combinedRecords = $combinedRecords->sortByDesc(function ($item) {
+            return \Carbon\Carbon::createFromFormat('d-m-Y H:i:s', $item['added_at'])->timestamp;
+        })->values();
+
+        return [
+            'total_stock_count' => $stockTotalCount,
+            'total_cash_count' => $cashTotalCount,
+            'page_no' => $pageNo,
+            'page_size' => $pageSize,
+            'transactions' => $combinedRecords
+        ];
+    }
 }

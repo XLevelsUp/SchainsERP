@@ -174,4 +174,38 @@ class ReportController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get One Day Action Report (Stock & Cash)
+     */
+    public function getOneDayActionReport(Request $request, \App\Services\ReportService $reportService): JsonResponse
+    {
+        try {
+            $headId = (int) $request->header('X-User-ID', 1); // Get acting user
+            $filters = $request->all();
+
+            // Default to today if no date provided
+            if (empty($filters['from_date']) && empty($filters['target_date'])) {
+                $filters['from_date'] = date('Y-m-d');
+            } elseif (!empty($filters['target_date'])) {
+                $filters['from_date'] = $filters['target_date']; // Map it for the service
+            }
+
+            $result = $reportService->getOneDayActionReport($filters, $headId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'One day action report fetched successfully.',
+                'data' => $result
+            ], 200);
+
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('ReportController::getOneDayActionReport failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch one day action report.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
