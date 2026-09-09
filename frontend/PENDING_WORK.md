@@ -3,12 +3,32 @@
 Living tracker for the frontend team. Updated as items land — tick things off
 here rather than opening a new doc.
 
-**Last updated:** 2026-09-07
+**Last updated:** 2026-09-08
 **Backend baseline:** `bdada98` (PR #35 — live metal balance report)
 
 Every claim below was verified against backend source at that commit, not
 against the API doc. Where the two disagree, the source wins and the
 discrepancy is listed in [§3](#3-api-doc-corrections).
+
+### Re-verification pass — 2026-09-08
+
+Every item in [§1](#1-frontend-work) and [§2](#2-flagged-to-backend) was
+re-checked line by line against the working tree today. **Result: nothing
+has been fixed since 2026-09-07, and no item could be marked done.**
+
+That is expected rather than alarming — `schainbackend/` has received no
+upstream commits at all in the interval. `git log bdada98..HEAD -- schainbackend/`
+returns only our own four deploy commits, and `origin/Backend` is **65 behind
+`main` and 0 ahead**, so there is no unmerged backend work in flight either.
+Backend asks #2–#20 are therefore all still open, and the four frontend
+pending items are still blocked or still deferred for the same reasons.
+
+The pass was not wasted: it turned up **one new deploy blocker** (the API
+subdomain does not resolve — see [§0](#0-environments)), **one new backend
+ask** ([#21](#21), role-id numbering), and several corrections to line
+numbers and claims that had drifted. Items carry a `Re-verified 2026-09-08`
+line with the evidence, so the next pass can diff against it rather than
+re-deriving everything.
 
 ---
 
@@ -35,6 +55,37 @@ The API is reached at `https://api.lensnstories.com` (CNAME → the Render
 service). `src/lib/api.ts` builds its base from `VITE_API_BASE_URL`, falling
 back to the relative `/api/v1` that Vite's dev proxy serves. **That variable
 must be set in the Vercel project** —
+
+> #### ⛔ BLOCKER, found 2026-09-08 — `api.lensnstories.com` does not exist in DNS
+>
+> The subdomain returns **NXDOMAIN**, not a CNAME. Confirmed against two
+> independent public resolvers, so it is not our ISP or a local cache:
+>
+> ```
+> $ nslookup api.lensnstories.com 1.1.1.1
+> *** one.one.one.one can't find api.lensnstories.com: Non-existent domain
+> ```
+>
+> The other two records in this section are healthy and still match what is
+> documented above, which is what rules out a whole-zone problem:
+> `www.lensnstories.com` → `ee1d8a2940e5c628.vercel-dns-017.com`, and the
+> apex → `216.198.79.1`. **Only the `api` record is missing.**
+>
+> Consequence: with `VITE_API_BASE_URL` pointing at this host, every API call
+> from the deployed SPA fails at DNS resolution — before TLS, before Render,
+> before any of the Passport or `APP_KEY` questions below. Those two items are
+> still worth fixing, but they cannot be *tested* until this record exists.
+> A green Render deploy does not mean the deployed frontend can reach it.
+>
+> Fix is a GoDaddy DNS change, not a code change: add the `api` CNAME →
+> the Render service hostname. Until then the deployed SPA has no working
+> backend regardless of what the Vercel env var says.
+>
+> Not yet established, and worth checking before assuming it regressed:
+> whether this record ever existed or was only ever planned. The
+> 2026-09-07 note above recorded the *intended* topology, and the deploy-log
+> evidence quoted in this section is all Render-side, none of it proves the
+> DNS record was ever live.
 
 ```
 VITE_API_BASE_URL=https://api.lensnstories.com/api/v1
@@ -87,12 +138,25 @@ below is cleanup, deferred polish, and work blocked on backend gaps.
       wire the filters. `bank_entry_date` in the response should no longer be
       hard `"-"` either.
 
+      *Re-verified 2026-09-08 — still pending, and still unblocked.* The
+      stale comment is `types/cashTransactionReport.ts:5-9`; the view has no
+      such filters (`grep` for either name in `CashTransactionsReportView.vue`
+      returns nothing). Backend readiness re-confirmed at the same line
+      numbers: `ReportController:36-42` (`cash_main_category_id`) and
+      `:87-91` (`bank_entry_from_date`/`_to_date`), both migrations present.
+      Nothing external is blocking this one — it is purely our work.
+
 - [ ] **Cash transaction edit/delete.** The comment in `lib/cashTxnDetailsApi.ts`
       says there is "no show/update/destroy for a single row, so history is
       browsable but not editable". **Also stale** —
-      `apiResource('cash-txn-details')` is registered (`routes/api.php:61`) and
+      `apiResource('cash-txn-details')` is registered (`routes/api.php:62`) and
       `CashTxnDetailController` has `index` (254), `show` (820), `update` (869)
       and `destroy` (1547). Row-level edit/delete can be built.
+
+      *Re-verified 2026-09-08 — still pending, and still unblocked.* Stale
+      comment is `lib/cashTxnDetailsApi.ts:22-23`. All four controller
+      methods confirmed at the line numbers above (unchanged). The
+      `apiResource` line moved 61 → **62**; corrected inline.
 
 - [ ] **Multi-tab session sync.** Signing out in one tab leaves other tabs
       holding a stale in-memory token until their next request 401s and
@@ -100,8 +164,17 @@ below is cleanup, deferred polish, and work blocked on backend gaps.
       tighten it. Deliberately deferred — the 401 path already degrades
       correctly.
 
+      *Re-verified 2026-09-08 — still pending, still deliberate.*
+      `lib/authSession.ts` has no `addEventListener` and no `storage`
+      handler. Unblocked whenever we decide it is worth doing.
+
 - [ ] **Session validation on boot.** Blocked on a backend `/me` endpoint —
       see [§2](#2-flagged-to-backend).
+
+      *Re-verified 2026-09-08 — still pending, still blocked.* Backend ask
+      #7 is unchanged: no `/me` route and no `me()`/`user()` method on
+      `AuthController`. The standing note at `stores/auth.ts:14` stays
+      accurate.
 
 ---
 
@@ -142,6 +215,13 @@ candidates, so they cannot be logged into. `head_admin` is the only
 role_id 1 account, and `AutoEntryService` treats role_id 1 as "head" for
 its weight adjustment — worth resetting those two hashes before testing
 that path.
+
+> **2026-09-08:** that last sentence turned out to be the visible corner of
+> a real backend bug, now written up properly as ask
+> [#21](#21) — `demo_head` is role_id **3**, both head/admin checks in the
+> code test for **1**, and `RoleSeeder` says 1 is `CUSTOMER`. Resetting the
+> hashes is still worth doing, but it is a workaround for the numbering
+> mismatch rather than a fix.
 
 ### Seed data gaps
 
@@ -218,8 +298,25 @@ that path.
    `auth:api`, those two write a different `added_by` than the rest of the
    app for the same signed-in operator.
 
+   *Re-verified 2026-09-08 — still pending, unchanged.* A full sweep for
+   `X-User-ID` across `app/` returns exactly six hits, splitting the same
+   way as before:
+
+   | Reads the token first (correct) | Header only (the bug) |
+   |---|---|
+   | `StockDetailsController:83` | `CashCategoryController:44` |
+   | `CashTxnDetailController:2395`, `:2419` | `CashAutoEntryService:37` |
+   | `ReportController:143` | |
+
+   `ReportController:143` was not in the original list — it is on the
+   correct side, so it does not widen the bug, but it does mean the two
+   stragglers are now outnumbered five to two.
+
 3. **`AuthController::login` does not check `is_active`.** A deactivated user
    can still authenticate and receive a working token.
+
+   *Re-verified 2026-09-08 — still pending, unchanged.* `is_active` does not
+   appear anywhere in `AuthController.php`.
 
 4. **Auto Entry silently discards the transaction date.**
    `AutoEntryRequest` validates `items.*.added_at`
@@ -235,14 +332,27 @@ that path.
    `StockAutoEntryView` sends the per-row value regardless, so the screen is
    correct the moment this is fixed.
 
+   *Re-verified 2026-09-08 — still pending, unchanged.* Both halves of the
+   mismatch are still exactly as described: `AutoEntryRequest:136` validates
+   `'items.*.added_at'`, while `AutoEntryService:23` reads
+   `$data['added_at']` (top level) and falls back to `now()`, feeding lines
+   80 and 183. Every auto entry is still stamped `now()`.
+
 ### Missing routes for code that already exists
 
 5. **`StockDetailsController::postHide`** (line 209) and its
    `HideStockRequest` are implemented, but the route is commented out at
-   `routes/api.php:88`. Nothing can reach it.
+   `routes/api.php:91`. Nothing can reach it.
+
+   *Re-verified 2026-09-08 — still pending.* Method still at line 209; the
+   commented route drifted **88 → 91** (corrected inline) and still reads
+   `// Route::post('hide', [StockDetailsController::class, 'postHide']);`.
 
 6. **`StockDetailsController::postCash`** (line 231) and its `CashOutRequest`
    are implemented with **no route at all**.
+
+   *Re-verified 2026-09-08 — still pending, unchanged.* Method at line 231;
+   `grep postCash routes/api.php` returns nothing.
 
 ### Missing endpoints
 
@@ -251,11 +361,19 @@ that path.
    handling the 401. Frontend handles that gracefully today, but a cheap
    validation endpoint would let the app verify a restored session on boot.
 
+   *Re-verified 2026-09-08 — still pending, unchanged.* No `me` route in
+   `routes/api.php`; no `me()` or `user()` method on `AuthController`.
+   This is the sole blocker on frontend pending item 4.
+
 8. **No lot-listing endpoint for non-metal items.** `available-metals` covers
    items literally named "Metal" only. Item Change and Item Conversion can
    therefore only attach a `stock_in_id` for metal rows; every other item
    posts `null` and loses the parent-lot draw-down and OB/CB snapshot. A
    generic "list stock lots for a user + item" endpoint would close this.
+
+   *Re-verified 2026-09-08 — still pending, unchanged.*
+   `stock-details/available-metals` (`routes/api.php:59`) remains the only
+   lot-listing route; no `stock-lots`-style endpoint exists.
 
 9. **`user_details` display flags are readable but not writable.** The
    ~30 `is_*_shown` / `is_*_need_to_shown` columns come back on
@@ -264,10 +382,26 @@ that path.
    different, unrelated subset of booleans. None of the display flags can be
    written through the API, so no settings screen for them can be built.
 
+   *Re-verified 2026-09-08 — still pending, with one correction.* Exact
+   counts rather than "~30": `create_user_details_table` defines **31**
+   distinct `is_*_shown` / `is_*_need_to_shown` columns. `update()` writes
+   an 11-boolean allow-list (`UserDetailController:885-925`), and **exactly
+   one** of the 31 is in it — `is_create_order_shown`. So "none can be
+   written" was very slightly overstated: it is 1 of 31, which does not
+   change the conclusion that a settings screen is not buildable, but the
+   backend team should know one flag is already wired if they use that
+   allow-list as the template. `store()` (line 109) validates no display
+   flags at all. Note there is no `UserDetail*Request` class — validation is
+   inline in the controller, so the fix belongs there.
+
 10. **Customer Deliver has no backend.** `app/Models/OrderDetail.php` exists as
     a stub with no migration, controller or route (verified: no references
     outside the model file). `CustomerDeliveryModal` shows an empty state
     flagging the gap.
+
+    *Re-verified 2026-09-08 — still pending, unchanged.* A `grep` for
+    `OrderDetail` across `app/`, `routes/` and `database/`, excluding the
+    model file itself, returns **0 hits**.
 
 11. **Customer touch mappings cannot be created or deleted.**
     `CustomerTouchUserMappingController` implements `index()` and `update()`
@@ -278,6 +412,11 @@ that path.
     offers no "New mapping" or delete action. Adding those two routes would
     make the screen complete.
 
+    *Re-verified 2026-09-08 — still pending, unchanged.*
+    `CustomerTouchUserMappingController` still declares exactly two public
+    methods, `index()` (17) and `update()` (48). `routes/api.php:40-42`
+    still registers only `GET`, `PUT` and `PATCH`.
+
 12. **`update()` on that controller drops the eager-loaded relations.**
     `index()` returns each mapping `with(['user', 'customerTouch'])`, but
     `update()` returns the bare model, so a save comes back without the names
@@ -285,14 +424,35 @@ that path.
     lookup to compensate — returning the same shape from both would remove
     the special case.
 
+    *Re-verified 2026-09-08 — still pending, unchanged.* `update()` still
+    ends `'data' => $mapping` with no `load()` between `save()` and the
+    response.
+
 13. **No server-side export.** Both report screens do client-side CSV of
     whatever is currently loaded. A real export endpoint would let operators
     pull the full filtered set rather than just the paged-in rows.
+
+    *Re-verified 2026-09-08 — still pending, unchanged.* A case-insensitive
+    `grep` for `export|csv|xlsx` in `routes/api.php` returns nothing.
 
 14. **Reports have no `head_id` override.** `getHistoryItemsObcb` and
     `getConsolidatedReport` derive the head from the bearer token only, so an
     admin cannot pull another head's report. (`getHistory` *does* accept
     `head_id` — the inconsistency is worth resolving one way or the other.)
+
+    *Re-verified 2026-09-08 — still pending, and the split is wider than
+    recorded.* One endpoint honours the override, **three** do not:
+
+    | Endpoint | Head derivation | Override? |
+    |---|---|---|
+    | `getHistory` | `StockDetailsController:40` — `$request->query('head_id') ?? getActingUserId()` | ✅ yes |
+    | `getHeadStocks` | `:369` — `getActingUserId()` | ❌ no |
+    | `getHistoryItemsObcb` | `:405` — `getActingUserId()` | ❌ no |
+    | `getConsolidatedReport` | `:426` — `getActingUserId()` | ❌ no |
+
+    `getHeadStocks` was not previously listed. Every `ReportService` method
+    already takes `int $headId` as its second parameter, so the fix is
+    per-controller and small.
 
 ### Cosmetic
 
@@ -300,8 +460,15 @@ that path.
     the code issues a **Passport** one (`->accessToken`). Misleading for
     anyone reading the OpenAPI output.
 
+    *Re-verified 2026-09-08 — still pending, unchanged.* `AuthController:16`
+    still reads "return a Sanctum Bearer Token", and the inline comment at
+    line 80 still says "Generate Sanctum Token".
+
 16. The same docblock's example shows `role_id` as an integer `1`.
     `user_details.role_id` is a `varchar(50)` in the migration.
+
+    *Re-verified 2026-09-08 — still pending, unchanged.* `AuthController:41`
+    — `@OA\Property(property="role_id", type="integer", example=1)`.
 
 ### Data correctness bugs (PR #35 — `GET /report/live-metal-balance`)
 
@@ -319,6 +486,26 @@ that path.
     corrected to 4 (or better, looked up by name the way `getAvailableMetals`
     already does, rather than hardcoded).
 
+    *Re-verified 2026-09-08 — still pending, and the "look it up by name"
+    half of the fix now looks mandatory rather than merely nicer.* The
+    hardcoding is unchanged (`ReportService:796` `item_id` = 2, `:798`
+    `to_item_id` = 2). But **no seeder creates an item named "Metal" at
+    all** — `grep "'Metal'"` across `database/` and `app/` returns 0 hits.
+    `StockTestDataSeeder` creates only items 1-3 (Gold Ring, Gold Chain,
+    Gold), and `MetalStockSeeder:20` gives the game away with the comment
+    *"Find item ID 2 (which we updated to Metal)"* — i.e. it depends on a
+    manual database edit that no migration or seeder reproduces.
+
+    So the item-4 "Metal" row noted in [§1b](#seed-data-gaps) is hand-made
+    local data, and **the id differs per environment by construction**.
+    Hardcoding *any* integer is therefore wrong, not just `2` — swapping it
+    to `4` would fix this developer's machine and break the next one. This
+    also means `getAvailableMetals`, which matches on the name, currently
+    has nothing to match on a freshly seeded database (already recorded from
+    the other direction in [§3](#missing--backend-enforces-doc-is-silent):
+    "§22 needs `MetalStockSeeder`"). Worth the backend team seeding a real
+    Metal item rather than leaving it to manual setup.
+
 18. **The `date`+`time` branch will throw a SQL error on this database.** It
     builds raw SQL via `selectRaw`/`havingRaw` using `IFNULL(...)` and
     backtick-quoted identifiers (`` `stock_details` ``) — MySQL syntax. Every
@@ -328,16 +515,69 @@ that path.
     There is no environment where this branch works. Any call with
     `date`+`time` params 500s.
 
+    *Re-verified 2026-09-08 — still pending, unchanged.* Single offending
+    statement, `ReportService:817` — one `selectRaw` carrying both
+    `IFNULL(...)` and `` `stock_details` ``. It is the only MySQL-ism left
+    in the file, so this is a one-line fix.
+
 19. **The `?user_id=` admin override can never activate.** It checks
     `$actingUser->role_id == 1` — `RoleSeeder` defines role_id 1 as
-    `CUSTOMER`, not admin/head (same role-numbering trap as backend ask #2).
-    It falls back to `$actingUser->role->role_name` — but the `roles` table's
-    actual column is `role`, not `role_name` (checked the migration), so
-    that lookup is always `null`. Both halves of the `OR` are unreachable for
-    any real user in this dataset.
+    `CUSTOMER`, not admin/head (same role-numbering trap as backend ask
+    [#21](#21)). It falls back to `$actingUser->role->role_name` — but the
+    `roles` table's actual column is `role`, not `role_name` (checked the
+    migration), so that lookup is always `null`. Both halves of the `OR` are
+    unreachable for any real user in this dataset.
+
+    *Re-verified 2026-09-08 — still pending, with a location correction.*
+    The code is in **`ReportController::getLiveMetalBalance` (line 152)**,
+    not in `ReportService` — worth fixing here because this section is
+    otherwise all `ReportService` and the backend team will look in the
+    wrong file. Both halves re-confirmed: `RoleSeeder:16` is
+    `['id' => 1, 'role' => 'CUSTOMER']`, and the roles migration declares
+    `$table->string('role', 50)` with no `role_name` anywhere in `app/`.
+    The cross-reference to ask #2 was wrong (that ask is about `X-User-ID`,
+    not role numbering) and now points at the new ask #21.
 
 20. Minor: `LiveMetalSeeder.php` has a duplicate `'added_by' => 1,` key in
     its first insert array. Harmless (PHP keeps the last value) but sloppy.
+
+    *Re-verified 2026-09-08 — still pending, unchanged.* `LiveMetalSeeder`
+    lines 32 and 33, both `'added_by' => 1,`.
+
+### Role numbering
+
+<a id="21"></a>
+
+21. **`role_id == 1` means two different things, and the two seeders
+    disagree.** Found during the 2026-09-08 pass; previously recorded only
+    obliquely, as a test-credentials aside in [§1b](#test-credentials).
+
+    `RoleSeeder` is the authority and defines `1 => CUSTOMER`,
+    `2 => EMPLOYEE`, `3 => HEAD`, `4 => PURCHASE`, `5 => SALARY`. Two places
+    in the code instead treat `role_id == 1` as head/admin:
+
+    - `AutoEntryService:133-134` — `$isSenderHead = ($givenBy->role_id == 1)`
+      and the matching `$isReceiverHead`, which gate the auto-entry weight
+      adjustment.
+    - `ReportController:152` — the admin override in ask #19 above.
+
+    The seeders disagree with each other too: `HeadUserSeeder:26` correctly
+    gives `demo_head` `'role_id' => 3, // HEAD role`, while
+    `StockTestDataSeeder:71-79` gives `head_admin` `'role_id' => 1`.
+
+    Practical effect, and why this is worth its own item: **`demo_head` is
+    the only account anyone can actually log into** ([§1b](#test-credentials)),
+    it is role_id 3, and both code paths above test for 1 — so the head
+    branch of `AutoEntryService` never fires and the live-metal admin
+    override never activates for the one usable account. The account that
+    *would* satisfy both, `head_admin`, has an unusable password hash. That
+    combination means the head-adjustment path in Auto Entry has most likely
+    never been exercised by anyone, and a frontend bug report against it
+    would be untestable from our side.
+
+    Fix is the backend team's call on which convention wins, but it needs to
+    be one or the other everywhere. If `RoleSeeder` is right, both code sites
+    should test for 3 and `StockTestDataSeeder` should be corrected.
 
 ---
 
@@ -389,10 +629,29 @@ started serving `/`.
       every container start, and Render's filesystem is ephemeral — so
       **every restart silently logs out every user**. `config/passport.php`
       already reads both (lines 31/33); nothing else is needed once they are
-      set. This is the one remaining known defect in the deploy.
+      set. ~~This is the one remaining known defect in the deploy.~~ —
+      superseded 2026-09-08, the missing `api` DNS record
+      ([§0](#0-environments)) is the more immediate one.
 - [ ] **Confirm `APP_KEY` is set** in the Render environment. It cannot be
       generated at boot — `key:generate` writes to a `.env` the container
       doesn't have, and rotating it would break existing encrypted values.
+
+*Both re-checked 2026-09-08 — status still unknown, and unknowable from
+here.* These live in the Render dashboard, which the frontend team cannot
+read, so neither can be ticked off by inspecting the repo. The usual
+proxy — call the deployed API and see whether login works — is unavailable
+while `api.lensnstories.com` does not resolve, so these stay open by
+default rather than by evidence. The repo-side halves are confirmed present
+and correct: `docker/entrypoint.sh:81` reads both key variables, and the
+three entrypoint blocks described above are intact.
+
+*Repo-side state re-confirmed 2026-09-08:* 43 migrations (42 after the
+dedupe, plus the sessions migration), exactly 5 `oauth_*` migrations
+(the kept `_000437`–`000441` set), and
+`2026_09_07_170000_create_sessions_table.php` present. No regression.
+`render-build.sh` is also still present and still carries
+`php artisan passport:keys --force` at line 15 — see the note below; it has
+not been touched, and neither has anyone confirmed whether it is live.
 
 ### Deliberately not touched
 

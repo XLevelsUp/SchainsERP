@@ -265,8 +265,22 @@ onMounted(async () => {
           @update:model-value="(v) => (filters.bank_id = v as number | null)"
         />
         <BaseInput id="report-txn-id" v-model="filters.txn_id_search" label="Cash Txn ID" size="sm" placeholder="Filter loaded rows…" />
-        <BaseInput id="report-from-date" v-model="filters.from_date" label="From date" type="date" size="sm" />
-        <BaseInput id="report-to-date" v-model="filters.to_date" label="To date" type="date" size="sm" />
+        <BaseInput
+          id="report-from-date"
+          v-model="filters.from_date"
+          label="From date"
+          type="date"
+          size="sm"
+          clearable
+        />
+        <BaseInput
+          id="report-to-date"
+          v-model="filters.to_date"
+          label="To date"
+          type="date"
+          size="sm"
+          clearable
+        />
       </div>
 
       <div class="mt-4 flex flex-wrap items-center gap-3">

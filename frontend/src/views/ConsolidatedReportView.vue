@@ -243,8 +243,8 @@ onMounted(() => {
       description="Outward and inward stock history for one party, with totals across the full filtered range."
     />
 
-    <BaseCard class="mb-4">
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <BaseCard :padded="false" class="mb-3 p-3">
+      <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
         <BaseSelect
           v-model="filters.party_role"
           label="Party role"
@@ -266,7 +266,7 @@ onMounted(() => {
           :options="itemOptions"
         />
         <div class="hidden lg:block"></div>
-        <BaseInput v-model="filters.from_date" label="From date" type="date" size="sm" />
+        <BaseInput v-model="filters.from_date" label="From date" type="date" size="sm" clearable />
         <BaseInput
           v-model="filters.from_time"
           label="From time"
@@ -274,8 +274,9 @@ onMounted(() => {
           step="1"
           size="sm"
           :disabled="!filters.from_date"
+          clearable
         />
-        <BaseInput v-model="filters.to_date" label="To date" type="date" size="sm" />
+        <BaseInput v-model="filters.to_date" label="To date" type="date" size="sm" clearable />
         <BaseInput
           v-model="filters.to_time"
           label="To time"
@@ -283,206 +284,219 @@ onMounted(() => {
           step="1"
           size="sm"
           :disabled="!filters.to_date"
+          clearable
         />
       </div>
-      <p class="mt-2 text-xs text-slate-500">
-        Times narrow their own date — set a date first. Without a time, the range runs from
-        00:00:00 to 23:59:59.
-      </p>
 
-      <div class="mt-4 flex flex-wrap items-center justify-end gap-2">
-        <BaseButton variant="secondary" type="button" :disabled="isLoading" @click="clearFilters">
-          Clear
-        </BaseButton>
-        <BaseButton type="button" :disabled="isLoading" @click="runSearch">
-          {{ isLoading ? 'Loading…' : 'Search' }}
-        </BaseButton>
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p class="text-xs text-slate-500">
+          Times narrow their own date — set a date first. Without a time, the range runs from
+          00:00:00 to 23:59:59.
+        </p>
+        <div class="flex items-center gap-2">
+          <BaseButton variant="secondary" type="button" :disabled="isLoading" @click="clearFilters">
+            Clear
+          </BaseButton>
+          <BaseButton type="button" :disabled="isLoading" @click="runSearch">
+            {{ isLoading ? 'Loading…' : 'Search' }}
+          </BaseButton>
+        </div>
       </div>
     </BaseCard>
 
     <p
       v-if="loadError"
-      class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+      class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
     >
       {{ loadError }}
     </p>
 
-    <div v-if="hasSearched" class="mb-6 grid gap-4 lg:grid-cols-2">
-      <div class="rounded-lg border border-slate-200 bg-white p-4">
-        <div class="mb-3 flex items-center gap-2">
-          <span class="inline-flex rounded bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700">
+    <!--
+      Outward left, inward right — the two directions get read against each
+      other, so they stay on one screen instead of one scrolling past the
+      other. Each pane owns its own totals, scroll area and "load more",
+      matching the two independent page cursors behind them.
+    -->
+    <div class="grid items-start gap-3 xl:grid-cols-2">
+      <section
+        class="flex min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white"
+      >
+        <header class="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
+          <span
+            class="inline-flex rounded bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700"
+          >
             OUT
           </span>
-          <span class="text-sm font-semibold text-slate-900">Outward totals</span>
-          <span class="ml-auto text-xs text-slate-400">{{ outTotalCount }} rows</span>
-        </div>
-        <dl class="grid grid-cols-3 gap-3">
-          <div>
-            <dt class="text-xs text-slate-500">Grams</dt>
-            <dd class="text-base font-semibold tabular-nums text-slate-900">
-              {{ formatNumber(summaryOut.grams) }}
+          <h2 class="text-sm font-semibold text-slate-900">Outward movements</h2>
+          <span v-if="hasSearched" class="ml-auto text-xs text-slate-500">
+            Showing <span class="font-medium text-slate-700">{{ outRows.length }}</span> of
+            <span class="font-medium text-slate-700">{{ outTotalCount }}</span>
+          </span>
+        </header>
+
+        <dl class="grid grid-cols-3 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50">
+          <div class="px-3 py-1.5">
+            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Grams</dt>
+            <dd class="text-sm font-semibold tabular-nums text-slate-900">
+              {{ hasSearched ? formatNumber(summaryOut.grams) : '—' }}
             </dd>
           </div>
-          <div>
-            <dt class="text-xs text-slate-500">Purity</dt>
-            <dd class="text-base font-semibold tabular-nums text-slate-900">
-              {{ formatNumber(summaryOut.purity) }}
+          <div class="px-3 py-1.5">
+            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Purity</dt>
+            <dd class="text-sm font-semibold tabular-nums text-slate-900">
+              {{ hasSearched ? formatNumber(summaryOut.purity) : '—' }}
             </dd>
           </div>
-          <div>
-            <dt class="text-xs text-slate-500">Wastage</dt>
-            <dd class="text-base font-semibold tabular-nums text-slate-900">
-              {{ formatNumber(summaryOut.wastage) }}
+          <div class="px-3 py-1.5">
+            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Wastage</dt>
+            <dd class="text-sm font-semibold tabular-nums text-slate-900">
+              {{ hasSearched ? formatNumber(summaryOut.wastage) : '—' }}
             </dd>
           </div>
         </dl>
-      </div>
 
-      <div class="rounded-lg border border-slate-200 bg-white p-4">
-        <div class="mb-3 flex items-center gap-2">
+        <DataTable
+          :columns="columns"
+          :rows="outRows"
+          size="sm"
+          flush
+          max-height="30rem"
+          :empty-message="isLoading ? 'Loading…' : 'No outward movements match these filters.'"
+        >
+          <template #added_at="{ row }">
+            <span class="whitespace-nowrap">{{ formatDateTime(row.added_at) }}</span>
+          </template>
+          <template #item_name="{ row }">
+            <span class="whitespace-nowrap">{{ row.item_name ?? '—' }}</span>
+          </template>
+          <template #entry_type="{ row }">
+            <span class="text-xs whitespace-nowrap text-slate-500">{{ row.entry_type }}</span>
+          </template>
+          <template #given_by_name="{ row }">
+            <span class="whitespace-nowrap">
+              {{ row.given_by_name ?? '—' }} → {{ row.given_to_name ?? '—' }}
+            </span>
+          </template>
+          <template #grams="{ row }">
+            <span class="block text-right tabular-nums">{{ formatNumber(row.grams) }}</span>
+          </template>
+          <template #touch="{ row }">
+            <span class="block text-right tabular-nums">{{ formatNumber(row.touch) }}</span>
+          </template>
+          <template #purity="{ row }">
+            <span class="block text-right tabular-nums">{{ formatNumber(row.purity) }}</span>
+          </template>
+          <template #waste_value="{ row }">
+            <span class="block text-right tabular-nums text-slate-500">{{
+              formatNumber(row.waste_value)
+            }}</span>
+          </template>
+          <template #remarks="{ row }">
+            <span class="text-slate-500">{{ row.remarks || '—' }}</span>
+          </template>
+        </DataTable>
+
+        <div v-if="hasMoreOut" class="flex justify-center border-t border-slate-200 px-3 py-2">
+          <BaseButton
+            variant="secondary"
+            type="button"
+            :disabled="isLoadingMoreOut"
+            @click="loadMoreOut"
+          >
+            {{ isLoadingMoreOut ? 'Loading…' : 'Load more outward' }}
+          </BaseButton>
+        </div>
+      </section>
+
+      <section
+        class="flex min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white"
+      >
+        <header class="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
           <span
             class="inline-flex rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold text-emerald-700"
           >
             IN
           </span>
-          <span class="text-sm font-semibold text-slate-900">Inward totals</span>
-          <span class="ml-auto text-xs text-slate-400">{{ inTotalCount }} rows</span>
-        </div>
-        <dl class="grid grid-cols-3 gap-3">
-          <div>
-            <dt class="text-xs text-slate-500">Grams</dt>
-            <dd class="text-base font-semibold tabular-nums text-slate-900">
-              {{ formatNumber(summaryIn.grams) }}
+          <h2 class="text-sm font-semibold text-slate-900">Inward movements</h2>
+          <span v-if="hasSearched" class="ml-auto text-xs text-slate-500">
+            Showing <span class="font-medium text-slate-700">{{ inRows.length }}</span> of
+            <span class="font-medium text-slate-700">{{ inTotalCount }}</span>
+          </span>
+        </header>
+
+        <dl class="grid grid-cols-3 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50">
+          <div class="px-3 py-1.5">
+            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Grams</dt>
+            <dd class="text-sm font-semibold tabular-nums text-slate-900">
+              {{ hasSearched ? formatNumber(summaryIn.grams) : '—' }}
             </dd>
           </div>
-          <div>
-            <dt class="text-xs text-slate-500">Purity</dt>
-            <dd class="text-base font-semibold tabular-nums text-slate-900">
-              {{ formatNumber(summaryIn.purity) }}
+          <div class="px-3 py-1.5">
+            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Purity</dt>
+            <dd class="text-sm font-semibold tabular-nums text-slate-900">
+              {{ hasSearched ? formatNumber(summaryIn.purity) : '—' }}
             </dd>
           </div>
-          <div>
-            <dt class="text-xs text-slate-500">Wastage</dt>
-            <dd class="text-base font-semibold tabular-nums text-slate-900">
-              {{ formatNumber(summaryIn.wastage) }}
+          <div class="px-3 py-1.5">
+            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Wastage</dt>
+            <dd class="text-sm font-semibold tabular-nums text-slate-900">
+              {{ hasSearched ? formatNumber(summaryIn.wastage) : '—' }}
             </dd>
           </div>
         </dl>
-      </div>
+
+        <DataTable
+          :columns="columns"
+          :rows="inRows"
+          size="sm"
+          flush
+          max-height="30rem"
+          :empty-message="isLoading ? 'Loading…' : 'No inward movements match these filters.'"
+        >
+          <template #added_at="{ row }">
+            <span class="whitespace-nowrap">{{ formatDateTime(row.added_at) }}</span>
+          </template>
+          <template #item_name="{ row }">
+            <span class="whitespace-nowrap">{{ row.item_name ?? '—' }}</span>
+          </template>
+          <template #entry_type="{ row }">
+            <span class="text-xs whitespace-nowrap text-slate-500">{{ row.entry_type }}</span>
+          </template>
+          <template #given_by_name="{ row }">
+            <span class="whitespace-nowrap">
+              {{ row.given_by_name ?? '—' }} → {{ row.given_to_name ?? '—' }}
+            </span>
+          </template>
+          <template #grams="{ row }">
+            <span class="block text-right tabular-nums">{{ formatNumber(row.grams) }}</span>
+          </template>
+          <template #touch="{ row }">
+            <span class="block text-right tabular-nums">{{ formatNumber(row.touch) }}</span>
+          </template>
+          <template #purity="{ row }">
+            <span class="block text-right tabular-nums">{{ formatNumber(row.purity) }}</span>
+          </template>
+          <template #waste_value="{ row }">
+            <span class="block text-right tabular-nums text-slate-500">{{
+              formatNumber(row.waste_value)
+            }}</span>
+          </template>
+          <template #remarks="{ row }">
+            <span class="text-slate-500">{{ row.remarks || '—' }}</span>
+          </template>
+        </DataTable>
+
+        <div v-if="hasMoreIn" class="flex justify-center border-t border-slate-200 px-3 py-2">
+          <BaseButton
+            variant="secondary"
+            type="button"
+            :disabled="isLoadingMoreIn"
+            @click="loadMoreIn"
+          >
+            {{ isLoadingMoreIn ? 'Loading…' : 'Load more inward' }}
+          </BaseButton>
+        </div>
+      </section>
     </div>
-
-    <section class="mb-6">
-      <div class="mb-2 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-slate-900">Outward movements</h2>
-        <span v-if="hasSearched" class="text-sm text-slate-500">
-          Showing <span class="font-medium text-slate-700">{{ outRows.length }}</span> of
-          <span class="font-medium text-slate-700">{{ outTotalCount }}</span>
-        </span>
-      </div>
-      <DataTable
-        :columns="columns"
-        :rows="outRows"
-        :empty-message="isLoading ? 'Loading…' : 'No outward movements match these filters.'"
-      >
-        <template #added_at="{ row }">
-          <span class="whitespace-nowrap">{{ formatDateTime(row.added_at) }}</span>
-        </template>
-        <template #item_name="{ row }">
-          <span class="whitespace-nowrap">{{ row.item_name ?? '—' }}</span>
-        </template>
-        <template #entry_type="{ row }">
-          <span class="text-xs whitespace-nowrap text-slate-500">{{ row.entry_type }}</span>
-        </template>
-        <template #given_by_name="{ row }">
-          <span class="whitespace-nowrap">
-            {{ row.given_by_name ?? '—' }} → {{ row.given_to_name ?? '—' }}
-          </span>
-        </template>
-        <template #grams="{ row }">
-          <span class="block text-right tabular-nums">{{ formatNumber(row.grams) }}</span>
-        </template>
-        <template #touch="{ row }">
-          <span class="block text-right tabular-nums">{{ formatNumber(row.touch) }}</span>
-        </template>
-        <template #purity="{ row }">
-          <span class="block text-right tabular-nums">{{ formatNumber(row.purity) }}</span>
-        </template>
-        <template #waste_value="{ row }">
-          <span class="block text-right tabular-nums text-slate-500">{{
-            formatNumber(row.waste_value)
-          }}</span>
-        </template>
-        <template #remarks="{ row }">
-          <span class="text-slate-500">{{ row.remarks || '—' }}</span>
-        </template>
-      </DataTable>
-      <div v-if="hasMoreOut" class="mt-3 flex justify-center">
-        <BaseButton
-          variant="secondary"
-          type="button"
-          :disabled="isLoadingMoreOut"
-          @click="loadMoreOut"
-        >
-          {{ isLoadingMoreOut ? 'Loading…' : 'Load more outward' }}
-        </BaseButton>
-      </div>
-    </section>
-
-    <section>
-      <div class="mb-2 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-slate-900">Inward movements</h2>
-        <span v-if="hasSearched" class="text-sm text-slate-500">
-          Showing <span class="font-medium text-slate-700">{{ inRows.length }}</span> of
-          <span class="font-medium text-slate-700">{{ inTotalCount }}</span>
-        </span>
-      </div>
-      <DataTable
-        :columns="columns"
-        :rows="inRows"
-        :empty-message="isLoading ? 'Loading…' : 'No inward movements match these filters.'"
-      >
-        <template #added_at="{ row }">
-          <span class="whitespace-nowrap">{{ formatDateTime(row.added_at) }}</span>
-        </template>
-        <template #item_name="{ row }">
-          <span class="whitespace-nowrap">{{ row.item_name ?? '—' }}</span>
-        </template>
-        <template #entry_type="{ row }">
-          <span class="text-xs whitespace-nowrap text-slate-500">{{ row.entry_type }}</span>
-        </template>
-        <template #given_by_name="{ row }">
-          <span class="whitespace-nowrap">
-            {{ row.given_by_name ?? '—' }} → {{ row.given_to_name ?? '—' }}
-          </span>
-        </template>
-        <template #grams="{ row }">
-          <span class="block text-right tabular-nums">{{ formatNumber(row.grams) }}</span>
-        </template>
-        <template #touch="{ row }">
-          <span class="block text-right tabular-nums">{{ formatNumber(row.touch) }}</span>
-        </template>
-        <template #purity="{ row }">
-          <span class="block text-right tabular-nums">{{ formatNumber(row.purity) }}</span>
-        </template>
-        <template #waste_value="{ row }">
-          <span class="block text-right tabular-nums text-slate-500">{{
-            formatNumber(row.waste_value)
-          }}</span>
-        </template>
-        <template #remarks="{ row }">
-          <span class="text-slate-500">{{ row.remarks || '—' }}</span>
-        </template>
-      </DataTable>
-      <div v-if="hasMoreIn" class="mt-3 flex justify-center">
-        <BaseButton
-          variant="secondary"
-          type="button"
-          :disabled="isLoadingMoreIn"
-          @click="loadMoreIn"
-        >
-          {{ isLoadingMoreIn ? 'Loading…' : 'Load more inward' }}
-        </BaseButton>
-      </div>
-    </section>
   </div>
 </template>

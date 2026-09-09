@@ -294,7 +294,7 @@ onMounted(() => {
           placeholder="IN and OUT…"
           :options="flowOptions"
         />
-        <BaseInput v-model="filters.from_date" label="From date" type="date" size="sm" />
+        <BaseInput v-model="filters.from_date" label="From date" type="date" size="sm" clearable />
         <BaseInput
           v-model="filters.from_time"
           label="From time"
@@ -302,8 +302,9 @@ onMounted(() => {
           step="1"
           size="sm"
           :disabled="!filters.from_date"
+          clearable
         />
-        <BaseInput v-model="filters.to_date" label="To date" type="date" size="sm" />
+        <BaseInput v-model="filters.to_date" label="To date" type="date" size="sm" clearable />
         <BaseInput
           v-model="filters.to_time"
           label="To time"
@@ -311,6 +312,7 @@ onMounted(() => {
           step="1"
           size="sm"
           :disabled="!filters.to_date"
+          clearable
         />
       </div>
       <p class="mt-2 text-xs text-slate-500">

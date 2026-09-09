@@ -159,7 +159,7 @@ onMounted(() => {
 
     <BaseCard class="mb-4">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <BaseInput v-model="filters.as_of_date" label="As of date" type="date" size="sm" />
+        <BaseInput v-model="filters.as_of_date" label="As of date" type="date" size="sm" clearable />
         <BaseInput
           v-model="filters.as_of_time"
           label="As of time"
@@ -167,6 +167,7 @@ onMounted(() => {
           step="1"
           size="sm"
           :disabled="!filters.as_of_date"
+          clearable
         />
         <BaseSelect
           v-model="filters.view_as_user_id"

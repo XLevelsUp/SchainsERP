@@ -385,7 +385,7 @@ async function handleSubmitAll() {
       v-if="entryPanels.some((p) => p.hasRows())"
       class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3"
     >
-      <div class="flex flex-wrap gap-8 text-sm">
+      <div class="flex flex-1 flex-wrap justify-center gap-8 text-sm">
         <div>
           <p class="text-xs font-semibold tracking-wide text-red-700 uppercase">Out</p>
           <p class="text-slate-700">Grams: <span class="font-semibold tabular-nums">{{ formatTotal(outTotals.grams) }}</span></p>

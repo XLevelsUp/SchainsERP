@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
+import { X } from 'lucide-vue-next'
 
 defineOptions({ inheritAttrs: false })
 
@@ -20,6 +21,16 @@ const props = withDefaults(
     // unless a caller opts into something else (e.g. step="1" for a
     // genuinely integer field like an ID or a piece count).
     step?: string
+    // Opt-in inline "x" that resets the value to ''. Meant for filter
+    // fields — date ranges, as-of dates — where "no value" is a real
+    // state the operator has to be able to get back to, and where the
+    // native date input gives no consistent way to do it (Chrome hides
+    // its own clear affordance, Firefox shows one, neither is reachable
+    // in a compact filter row). Entry fields (added_at, due_date, …)
+    // deliberately leave this off: an empty value there is a validation
+    // problem, not a filter reset. Renders the same glyph/hover styling
+    // as BaseSelect's clear button so a filter row reads consistently.
+    clearable?: boolean
   }>(),
   {
     modelValue: '',
@@ -33,12 +44,29 @@ const props = withDefaults(
     icon: undefined,
     size: 'md',
     step: undefined,
+    clearable: false,
   },
 )
 
+const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+
+const attrs = useAttrs()
+
 const effectiveStep = computed(() => props.step ?? (props.type === 'number' ? '0.001' : undefined))
 
-defineEmits<{ 'update:modelValue': [value: string] }>()
+// disabled/readonly have no props here — they ride in through $attrs, where
+// a bare `disabled` arrives as "" (falsy), so test for presence, not truth.
+function isAttrSet(value: unknown) {
+  return value !== undefined && value !== null && value !== false
+}
+
+const showClear = computed(
+  () =>
+    props.clearable &&
+    props.modelValue !== '' &&
+    !isAttrSet(attrs.disabled) &&
+    !isAttrSet(attrs.readonly),
+)
 </script>
 
 <template>
@@ -68,11 +96,22 @@ defineEmits<{ 'update:modelValue': [value: string] }>()
           error ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : '',
           size === 'sm' ? 'px-2.5 py-1.5' : 'px-3 py-2',
           icon ? (size === 'sm' ? 'pl-8' : 'pl-9') : '',
+          showClear ? (size === 'sm' ? 'pr-7' : 'pr-9') : '',
         ]"
         :aria-invalid="Boolean(error)"
         :aria-describedby="error && id ? `${id}-error` : undefined"
-        @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+        @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       />
+      <button
+        v-if="showClear"
+        type="button"
+        :aria-label="label ? `Clear ${label}` : 'Clear'"
+        class="absolute top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+        :class="size === 'sm' ? 'right-1.5' : 'right-2'"
+        @click="emit('update:modelValue', '')"
+      >
+        <X class="h-3.5 w-3.5" />
+      </button>
     </div>
     <p v-if="error" :id="id ? `${id}-error` : undefined" class="text-sm text-red-600">{{ error }}</p>
   </div>

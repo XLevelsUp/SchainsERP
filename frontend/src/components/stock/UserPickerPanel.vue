@@ -4,6 +4,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
+import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/lib/api'
 import type { UserDetailListItem } from '@/types'
 
@@ -25,6 +26,14 @@ import type { UserDetailListItem } from '@/types'
 | (order_details table doesn't exist, same known gap as HeadStockSummary-
 | Panel's "Active Orders" row).
 |
+| The signed-in operator is filtered out of the list: they are the head
+| this screen already acts as (StockManagementView passes their user_id
+| as headId to every panel/modal), so picking themselves here would scope
+| Transaction History / CustomerContextPanel to a self-transaction that
+| the panels below cannot produce. The API has no "exclude me" filter, so
+| this is a client-side filter over the same GET /user-details?module=stock
+| response.
+|
 | Phone Number Search is a plain client-side lookup over the already-
 | loaded list (no dedicated search-by-phone endpoint exists) — pressing
 | Enter or blurring with an exact phone match selects that user.
@@ -32,6 +41,8 @@ import type { UserDetailListItem } from '@/types'
 */
 
 const selectedUserId = defineModel<number | null>({ default: null })
+
+const auth = useAuthStore()
 
 const users = ref<UserDetailListItem[]>([])
 const isLoading = ref(false)
@@ -54,8 +65,12 @@ function formatUserLabel(user: UserDetailListItem) {
   return `${user.full_name}(${user.type ?? '—'}, ${user.phone_number}) ==> P = ${purity}, D = ${date} | Order Tot : 0  P : 0`
 }
 
+const selectableUsers = computed(() =>
+  users.value.filter((user) => user.id !== auth.user?.user_id),
+)
+
 const userOptions = computed(() =>
-  users.value.map((user) => ({ value: user.id, label: formatUserLabel(user) })),
+  selectableUsers.value.map((user) => ({ value: user.id, label: formatUserLabel(user) })),
 )
 
 async function load() {
@@ -73,14 +88,14 @@ async function load() {
 onMounted(load)
 
 watch(selectedUserId, (id) => {
-  const user = users.value.find((u) => u.id === id)
+  const user = selectableUsers.value.find((u) => u.id === id)
   phoneSearch.value = user?.phone_number ?? ''
 })
 
 function searchByPhone() {
   const query = phoneSearch.value.trim()
   if (!query) return
-  const match = users.value.find((u) => u.phone_number === query)
+  const match = selectableUsers.value.find((u) => u.phone_number === query)
   if (match) selectedUserId.value = match.id
 }
 

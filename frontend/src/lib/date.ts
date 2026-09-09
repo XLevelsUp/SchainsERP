@@ -27,6 +27,15 @@ export function nowDateTimeInputValue(): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+/** Now, as "YYYY-MM-DD HH:MM:SS" — the stamp printed on report slips. */
+export function nowTimestamp(): string {
+  const date = new Date()
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  )
+}
+
 /** Converts a `datetime-local` input value ("YYYY-MM-DDTHH:MM") to the backend's "YYYY-MM-DD HH:MM:SS". */
 export function toBackendDateTime(value: string): string {
   if (!value) return ''

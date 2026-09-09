@@ -360,6 +360,7 @@ async function handleSaved() {
             label="From date"
             type="date"
             size="sm"
+            clearable
           />
           <BaseInput
             id="history-to-date"
@@ -367,6 +368,7 @@ async function handleSaved() {
             label="To date"
             type="date"
             size="sm"
+            clearable
           />
         </div>
 

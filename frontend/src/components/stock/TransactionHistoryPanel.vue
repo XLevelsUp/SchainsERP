@@ -148,8 +148,8 @@ defineExpose({ refresh: load })
         placeholder="Select Item…"
         size="sm"
       />
-      <BaseInput v-model="fromDate" type="date" size="sm" placeholder="From date" />
-      <BaseInput v-model="toDate" type="date" size="sm" placeholder="To date" />
+      <BaseInput v-model="fromDate" type="date" size="sm" placeholder="From date" clearable />
+      <BaseInput v-model="toDate" type="date" size="sm" placeholder="To date" clearable />
     </div>
 
     <p v-if="loadError" class="px-4 py-3 text-sm text-red-700">{{ loadError }}</p>
