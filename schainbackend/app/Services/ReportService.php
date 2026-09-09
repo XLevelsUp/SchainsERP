@@ -896,10 +896,14 @@ class ReportService
         }
 
         // ==========================================
-        // 1. Fetch Stock Details (NORMAL, SALES, HEADTOHEAD)
+        // 1. Fetch Stock Details (NORMAL, SALES, HEADTOHEAD, and Cash Converters)
         // ==========================================
         $stockQuery = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo'])
-            ->whereIn('entry_type', ['NORMAL', 'SALES', 'HEADTOHEAD']);
+            ->whereIn('entry_type', [
+                'NORMAL', 'SALES', 'HEADTOHEAD', 
+                'OUT_CASH_CONVERTER', 'IN_CASH_CONVERTER', 
+                'GOLDCASHCONVERSION', 'CashToGold'
+            ]);
 
         if ($userId) {
             $stockQuery->where('added_by', $userId);
@@ -993,7 +997,13 @@ class ReportService
         }
 
         if ($type) {
-            $cashQuery->where('type', $type);
+            if ($type === 'OUT') {
+                $cashQuery->whereIn('type', ['EXPENSE', 'PURCHASE_GOLD', 'GOLD_TO_CASH', 'OUT_CASH_CONVERTER']);
+            } elseif ($type === 'IN') {
+                $cashQuery->whereIn('type', ['INCOME', 'SALE_GOLD', 'CASH_TO_GOLD', 'AUTO_ENTRY', 'IN_CASH_CONVERTER']);
+            } else {
+                $cashQuery->where('type', $type);
+            }
         }
 
         if ($givenByGivenTo) {
@@ -1019,11 +1029,13 @@ class ReportService
 
         // Map Cash Details to consistent array output
         $formattedCashRecords = $cashRecords->map(function ($cash) {
+            $mappedStockType = in_array($cash->type, ['INCOME', 'SALE_GOLD', 'CASH_TO_GOLD', 'AUTO_ENTRY', 'IN_CASH_CONVERTER']) ? 'IN' : 'OUT';
+            
             return [
                 'id' => $cash->txn_id,
                 'record_type' => 'CASH',
                 'entry_type' => 'CASH', // standard
-                'stock_type' => $cash->type, // IN/OUT
+                'stock_type' => $mappedStockType, // IN/OUT
                 'given_by' => $cash->givenByUser ? $cash->givenByUser->name : '-',
                 'given_to' => $cash->givenToUser ? $cash->givenToUser->name : '-',
                 'item_name' => 'CASH',
