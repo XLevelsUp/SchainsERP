@@ -12,7 +12,13 @@ import { reportApi } from '@/lib/reportApi'
 import { cashCategoriesApi } from '@/lib/cashCategoriesApi'
 import { bankDetailsApi } from '@/lib/bankDetailsApi'
 import { ApiError } from '@/lib/api'
-import type { BankDetail, CashCategory, CashTransactionReportRow, CashTransactionReportType } from '@/types'
+import type {
+  BankDetail,
+  CashCategory,
+  CashTransactionReportQuery,
+  CashTransactionReportRow,
+  CashTransactionReportType,
+} from '@/types'
 import type { DataTableColumn } from '@/types/table'
 
 /*
@@ -61,6 +67,11 @@ const filters = reactive({
   bank_id: null as number | null,
   from_date: '',
   to_date: '',
+  // Bank-statement reconciliation date, independent of the transaction date
+  // above — a transaction entered on the 3rd can carry a bank entry date of
+  // the 5th, and operators reconcile on the latter.
+  bank_entry_from_date: '',
+  bank_entry_to_date: '',
   txn_id_search: '',
 })
 
@@ -98,6 +109,9 @@ const columns: DataTableColumn<CashTransactionReportRow>[] = [
   { key: 'opening_balance', label: 'OB' },
   { key: 'closing_balance', label: 'CB' },
   { key: 'date', label: 'Added At' },
+  // Filterable via "Bank entry from/to", so it has to be visible — the
+  // resource already formats it d-M-Y and sends "-" when the column is null.
+  { key: 'bank_entry_date', label: 'Bank Entry' },
   { key: 'remarks', label: 'Remarks' },
 ]
 
@@ -131,17 +145,29 @@ async function loadLookups() {
   }
 }
 
+// Shared by runSearch and loadMore so a "load more" can never page against a
+// different filter set than the search that started it. txn_id_search is
+// deliberately absent — it filters loaded rows client-side, it is not a
+// server param.
+function activeFilters(): CashTransactionReportQuery {
+  return {
+    category_id: filters.category_id ?? undefined,
+    type: filters.type ?? undefined,
+    bank_id: filters.bank_id ?? undefined,
+    from_date: filters.from_date || undefined,
+    to_date: filters.to_date || undefined,
+    bank_entry_from_date: filters.bank_entry_from_date || undefined,
+    bank_entry_to_date: filters.bank_entry_to_date || undefined,
+  }
+}
+
 async function runSearch() {
   isLoading.value = true
   loadError.value = ''
   page.value = 1
   try {
     const res = await reportApi.getCashTransactionsObcb({
-      category_id: filters.category_id ?? undefined,
-      type: filters.type ?? undefined,
-      bank_id: filters.bank_id ?? undefined,
-      from_date: filters.from_date || undefined,
-      to_date: filters.to_date || undefined,
+      ...activeFilters(),
       page_size: PAGE_SIZE,
       page: page.value,
     })
@@ -161,11 +187,7 @@ async function loadMore() {
   try {
     const nextPage = page.value + 1
     const res = await reportApi.getCashTransactionsObcb({
-      category_id: filters.category_id ?? undefined,
-      type: filters.type ?? undefined,
-      bank_id: filters.bank_id ?? undefined,
-      from_date: filters.from_date || undefined,
-      to_date: filters.to_date || undefined,
+      ...activeFilters(),
       page_size: PAGE_SIZE,
       page: nextPage,
     })
@@ -185,12 +207,14 @@ function clearFilters() {
   filters.bank_id = null
   filters.from_date = ''
   filters.to_date = ''
+  filters.bank_entry_from_date = ''
+  filters.bank_entry_to_date = ''
   filters.txn_id_search = ''
   runSearch()
 }
 
 function exportCsv() {
-  const header = ['Txn ID', 'Given By -> Given To', 'Category', 'Amount', 'Type', 'Source', 'OB', 'CB', 'Added At', 'Remarks']
+  const header = ['Txn ID', 'Given By -> Given To', 'Category', 'Amount', 'Type', 'Source', 'OB', 'CB', 'Added At', 'Bank Entry', 'Remarks']
   const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
   const lines = [
     header.join(','),
@@ -205,6 +229,7 @@ function exportCsv() {
         r.opening_balance,
         r.closing_balance,
         r.date,
+        r.bank_entry_date,
         r.remarks ?? '',
       ]
         .map(escape)
@@ -281,7 +306,29 @@ onMounted(async () => {
           size="sm"
           clearable
         />
+        <BaseInput
+          id="report-bank-entry-from-date"
+          v-model="filters.bank_entry_from_date"
+          label="Bank entry from"
+          type="date"
+          size="sm"
+          clearable
+        />
+        <BaseInput
+          id="report-bank-entry-to-date"
+          v-model="filters.bank_entry_to_date"
+          label="Bank entry to"
+          type="date"
+          size="sm"
+          clearable
+        />
       </div>
+
+      <p class="mt-2 text-xs text-slate-500">
+        "From/To date" filter on the transaction date. "Bank entry from/to" filter on the date the
+        entry was reconciled against the bank statement — the two are independent, and rows with no
+        bank entry date show "-" in that column.
+      </p>
 
       <div class="mt-4 flex flex-wrap items-center gap-3">
         <BaseButton type="button" :disabled="isLoading" @click="runSearch">
@@ -330,6 +377,9 @@ onMounted(async () => {
         </template>
         <template #date="{ value }">
           <span class="whitespace-nowrap">{{ value }}</span>
+        </template>
+        <template #bank_entry_date="{ value }">
+          <span class="whitespace-nowrap text-slate-500">{{ value || '—' }}</span>
         </template>
         <template #remarks="{ value }">{{ value || '—' }}</template>
         <template #id="{ row }">

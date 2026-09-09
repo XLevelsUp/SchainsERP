@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { authApi, type LoginPayload } from '@/lib/authApi'
 import { clearSession, loadSession, saveSession } from '@/lib/authSession'
-import type { AuthUser } from '@/types'
+import type { AuthSession, AuthUser } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
@@ -64,5 +64,23 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, token, isAuthenticated, isLoggingOut, login, logout, clear }
+  // Adopts a session another tab wrote. The storage write already happened
+  // in that tab and authSession has already updated its mirror, so this only
+  // brings the reactive refs in line — calling saveSession/clearSession here
+  // would write the value straight back out again.
+  function adoptExternalSession(session: AuthSession | null) {
+    user.value = session?.user ?? null
+    token.value = session?.token ?? null
+  }
+
+  return {
+    user,
+    token,
+    isAuthenticated,
+    isLoggingOut,
+    login,
+    logout,
+    clear,
+    adoptExternalSession,
+  }
 })

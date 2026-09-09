@@ -29,16 +29,8 @@ function isAuthSession(value: unknown): value is AuthSession {
   return typeof user === 'object' && user !== null && typeof user.user_id === 'number'
 }
 
-function readStorage(): AuthSession | null {
-  let raw: string | null
-  try {
-    raw = localStorage.getItem(STORAGE_KEY)
-  } catch {
-    // Private mode or site data blocked — run in memory for this tab only.
-    return null
-  }
+function parseSession(raw: string | null): AuthSession | null {
   if (!raw) return null
-
   try {
     const parsed: unknown = JSON.parse(raw)
     // Anything that isn't a token-bearing session is discarded, which also
@@ -47,6 +39,15 @@ function readStorage(): AuthSession | null {
     // correct — there is no token to recover from them.
     return isAuthSession(parsed) ? parsed : null
   } catch {
+    return null
+  }
+}
+
+function readStorage(): AuthSession | null {
+  try {
+    return parseSession(localStorage.getItem(STORAGE_KEY))
+  } catch {
+    // Private mode or site data blocked — run in memory for this tab only.
     return null
   }
 }
@@ -93,4 +94,51 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
 
 export function notifyUnauthorized(): void {
   unauthorizedHandler?.()
+}
+
+/*
+|--------------------------------------------------------------------------
+| Cross-tab session sync
+|--------------------------------------------------------------------------
+| Signing out in one tab used to leave every other tab holding a stale
+| in-memory token until its next request 401'd. The `storage` event fires
+| only in the tabs that did NOT make the change, which is exactly the set
+| that needs correcting — so no echo-suppression is needed here.
+|
+| It handles sign-in as well as sign-out: if another tab signs in (or a
+| different operator takes over), this tab adopts the new token rather than
+| keeping a dead one and bouncing on its next call.
+|
+| Same single-handler shape as setUnauthorizedHandler above, and for the
+| same reason — this module must not know about Pinia or vue-router.
+| main.ts registers the handler that acts on it.
+|--------------------------------------------------------------------------
+*/
+
+type SessionChangedHandler = (session: AuthSession | null) => void
+
+let sessionChangedHandler: SessionChangedHandler | null = null
+
+export function setSessionChangedHandler(handler: SessionChangedHandler | null): void {
+  sessionChangedHandler = handler
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    // key === null means the whole store was cleared (localStorage.clear()),
+    // which takes our session with it; any other key is somebody else's.
+    if (event.key !== null && event.key !== STORAGE_KEY) return
+    if (event.storageArea && event.storageArea !== localStorage) return
+
+    const next = event.key === null ? null : parseSession(event.newValue)
+
+    // Nothing to do when the token is unchanged — writes that only touch the
+    // user object (or a re-save of the same session) would otherwise churn
+    // the store and, on a null token, re-trigger a redirect mid-navigation.
+    if (next?.token === current?.token) return
+
+    current = next
+    hydrated = true
+    sessionChangedHandler?.(next)
+  })
 }

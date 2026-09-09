@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ChevronLeft, ChevronRight, Printer } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Eye, Printer } from 'lucide-vue-next'
 import DataTable from '@/components/ui/DataTable.vue'
 import ThermalPrintModal from './ThermalPrintModal.vue'
+import CashTxnDetailModal from './CashTxnDetailModal.vue'
 import { cashTxnDetailsApi } from '@/lib/cashTxnDetailsApi'
 import { ApiError } from '@/lib/api'
 import { formatDateOnly } from '@/lib/date'
@@ -49,6 +50,7 @@ const columns: DataTableColumn<CashTxnHistoryRow>[] = [
 ]
 
 const printTxnId = ref<number | null>(null)
+const detailTxnId = ref<number | null>(null)
 
 // Mirrors the badge colors already used on the modals that create each
 // type, so the history reads as one system with the quick-action buttons
@@ -162,14 +164,24 @@ function nextPage() {
         <template #txn_id="{ value }">
           <div class="flex flex-col items-center gap-1">
             <span class="tabular-nums text-slate-700">{{ value }}</span>
-            <button
-              type="button"
-              class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              aria-label="Print receipt"
-              @click="printTxnId = value as number"
-            >
-              <Printer class="h-4 w-4" />
-            </button>
+            <div class="flex items-center gap-0.5">
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="View transaction detail"
+                @click="detailTxnId = value as number"
+              >
+                <Eye class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Print receipt"
+                @click="printTxnId = value as number"
+              >
+                <Printer class="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </template>
       </DataTable>
@@ -178,6 +190,12 @@ function nextPage() {
         v-if="printTxnId !== null"
         :txn-id="printTxnId"
         @close="printTxnId = null"
+      />
+
+      <CashTxnDetailModal
+        v-if="detailTxnId !== null"
+        :txn-id="detailTxnId"
+        @close="detailTxnId = null"
       />
 
       <div v-if="total > 0" class="mt-2 flex items-center justify-between text-xs text-slate-500">

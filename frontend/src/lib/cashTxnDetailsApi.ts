@@ -1,6 +1,7 @@
 import { api, type ApiResponse } from './api'
 import { buildMultipartForm } from './multipartForm'
 import type {
+  CashTxnDetailRow,
   CashTxnHistoryPage,
   CashTxnHistoryQuery,
   CashTxnPostFormValues,
@@ -12,15 +13,27 @@ const RESOURCE = '/cash-txn-details'
 
 // ============================================================================
 // POST /cash-txn-details/in and /cash-txn-details/out
-// (CashTxnDetailController::postIncome/postExpense). These are the only
-// cash-txn write endpoints — the old full CRUD (index/store/update/destroy,
-// plus per-transaction image upload/delete) was dropped from the backend
-// in PR #13 when cash_txn_details/cash_txn_images were reshaped to
-// sender_id/recipient_id/payment_method/cash_txn_id/image_path.
+// (CashTxnDetailController::postIncome/postExpense) are the cash-txn write
+// endpoints. PR #17 added the read side — GET .../in-history and
+// .../out-history — and PR #32 put the whole group behind `auth:api`.
 //
-// PR #17 added a read side back — GET .../in-history and .../out-history
-// (below) — but there's still no show/update/destroy for a single row, so
-// history is browsable but not editable.
+// On show/update/destroy: `apiResource('cash-txn-details')` IS registered
+// (routes/api.php:62) and all three methods exist on the controller, but only
+// `show` is usable. It eager-loads images/bank/givenByUser/givenToUser, every
+// one of which maps to a real column, so getOne below is safe.
+//
+// `update` and `destroy` are NOT wired up here on purpose. Both were written
+// against the pre-PR-#13 schema and never migrated: they read `given_by`,
+// `souce_type`, `bank_id` and `opening_account_balance`, none of which exist
+// on cash_txn_details any more (it has sender_id / recipient_id /
+// payment_method / bank_account_id, and no opening-balance columns). The
+// practical effect is that `destroy` looks up `user_id = null`, matches
+// nobody, skips its guarded balance restore, and then deletes the row and
+// returns 200 — removing the transaction from history while leaving both
+// parties' rak_cash_balance as if it had happened. `update`'s validator only
+// recognises those same dead field names, so its balance-recalculation branch
+// operates on nulls. Calling either would silently desync the cash ledger.
+// Flagged to the backend team; see PENDING_WORK.md.
 // ============================================================================
 
 function buildHistoryQuery(params: CashTxnHistoryQuery): string {
@@ -54,12 +67,13 @@ function toPayload(form: CashTxnPostFormValues) {
 }
 
 export const cashTxnDetailsApi = {
-  // There is no auth/session on this backend yet — postIncome/postExpense
-  // resolve the acting user (added_by) from an X-User-ID header (falling
-  // back to a hardcoded id if it's missing, see
-  // CashTxnDetailController::postIncome/postExpense), so it must be sent
-  // explicitly, same pattern as stockApi.ts. Always sent as multipart since
-  // PR #16 made images real file uploads on this endpoint.
+  // postIncome/postExpense resolve the acting user (added_by) as
+  // `$request->user()->user_id ?? header('X-User-ID', 1)`
+  // (CashTxnDetailController:2395/2419). Since PR #32 the bearer token wins,
+  // so the header is now belt-and-braces rather than the only signal — kept
+  // because it costs nothing and still carries the intent if a route is ever
+  // moved outside the auth group. Same pattern as stockApi.ts. Always sent as
+  // multipart since PR #16 made images real file uploads on this endpoint.
   postIncome: (form: CashTxnPostFormValues, actingUserId: number) =>
     api
       .postForm<ApiResponse<CashTxnPostResult>>(`${RESOURCE}/in`, buildMultipartForm(toPayload(form)), {
@@ -85,6 +99,13 @@ export const cashTxnDetailsApi = {
     api
       .get<ApiResponse<CashTxnHistoryPage>>(`${RESOURCE}/out-history${buildHistoryQuery(params)}`)
       .then((r) => r.data),
+
+  // GET /cash-txn-details/{id} — the one usable member of the apiResource
+  // trio (see the header comment). Returns the row with its parties, bank and
+  // images, plus the opening/closing balance snapshots the history list
+  // doesn't carry.
+  getOne: (txnId: number) =>
+    api.get<ApiResponse<CashTxnDetailRow>>(`${RESOURCE}/${txnId}`).then((r) => r.data),
 
   // Single-transaction thermal print payload — CashTxnDetailController::
   // getPrintReport's ?id= branch (the bulk date-range branch of the same

@@ -15,6 +15,8 @@ function buildQuery(params: CashTransactionReportQuery): string {
   if (params.bank_id !== undefined) qs.set('bank_id', String(params.bank_id))
   if (params.from_date) qs.set('from_date', params.from_date)
   if (params.to_date) qs.set('to_date', params.to_date)
+  if (params.bank_entry_from_date) qs.set('bank_entry_from_date', params.bank_entry_from_date)
+  if (params.bank_entry_to_date) qs.set('bank_entry_to_date', params.bank_entry_to_date)
   if (params.page_size !== undefined) qs.set('page_size', String(params.page_size))
   if (params.page !== undefined) qs.set('page', String(params.page))
   if (params.is_all) qs.set('is_all', '1')
@@ -34,9 +36,9 @@ function buildLiveMetalQuery(params: LiveMetalBalanceQuery): string {
 }
 
 export const reportApi = {
-  // GET /report/cash-transactions-obcb — see cashTransactionReport.ts for the
-  // two query params (cash_main_category_id, bank_entry_*) deliberately left
-  // unexposed because the columns they filter on don't exist in the DB yet.
+  // GET /report/cash-transactions-obcb — see cashTransactionReport.ts for why
+  // cash_main_category_id is still not exposed (the column exists, but nothing
+  // in the backend can name its values).
   getCashTransactionsObcb: (params: CashTransactionReportQuery) =>
     api.get<CashTransactionReportResponse>(`${RESOURCE}/cash-transactions-obcb${buildQuery(params)}`),
 
