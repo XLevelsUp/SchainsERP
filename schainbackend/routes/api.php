@@ -35,6 +35,7 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('fitem-boxes', FitemBoxController::class);
         Route::apiResource('roles', RoleController::class);
         Route::apiResource('customer-touch', CustomerTouchController::class);
+        Route::post('fitems', [\App\Http\Controllers\Api\FitemController::class, 'store']);
         
         // Customer Touch User Mappings
         Route::get('customer-touch-user-mappings', [CustomerTouchUserMappingController::class, 'index']);

@@ -290,19 +290,21 @@ class ReportService
 
     public function getIdWiseStockReport(int $stockId, int $headId): array
     {
-        return \Illuminate\Support\Facades\Cache::remember("stock_report_id_wise_{$stockId}", 3600, function () use ($stockId, $headId) {
-            $baseStock = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo', 'bill'])->findOrFail($stockId);
-            
-            if ($baseStock->stock_type === 'OUT' && $baseStock->stock_in_id) {
-                $parentLot = StockDetails::with(['item', 'givenBy', 'givenTo', 'bill'])->findOrFail($baseStock->stock_in_id);
-            } else {
-                $parentLot = $baseStock;
-            }
+        $baseStock = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo', 'bill'])->findOrFail($stockId);
+        
+        if ($baseStock->stock_type === 'OUT' && $baseStock->stock_in_id) {
+            $parentLot = StockDetails::with(['item', 'givenBy', 'givenTo', 'bill'])->findOrFail($baseStock->stock_in_id);
+        } else {
+            $parentLot = $baseStock;
+        }
 
-            $transactions = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo', 'bill'])
-                ->where('stock_in_id', $parentLot->stock_id)
-                ->orderBy('added_at', 'asc')
-                ->get();
+        $transactions = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo', 'bill'])
+            ->where(function ($q) use ($parentLot) {
+                $q->where('stock_id', $parentLot->stock_id)
+                  ->orWhere('stock_in_id', $parentLot->stock_id);
+            })
+            ->orderBy('added_at', 'asc')
+            ->get();
             
             $formattedTransactions = $transactions->map(function($txn) use ($headId) {
                 $itemName = $txn->item ? $txn->item->item_name : '';
@@ -359,7 +361,7 @@ class ReportService
                 ],
                 'transactions' => $formattedTransactions
             ];
-        });
+
     }
 
     public function getItemsObcbReport(array $filters, int $headId): array
