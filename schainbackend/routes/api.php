@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\StockDetailsController;
 use App\Http\Controllers\Api\CashToGoldController;
 use App\Http\Controllers\Api\GoldToCashController;
 use App\Http\Controllers\Api\CashCategoryController;
+use App\Http\Controllers\Api\PhoneBookController;
 
 Route::prefix('v1')->group(function () {
     // Public routes
@@ -63,6 +64,7 @@ Route::prefix('v1')->group(function () {
 
         Route::apiResource('cash-txn-details', CashTxnDetailController::class);
         Route::apiResource('cash-categories', CashCategoryController::class);
+        Route::apiResource('phone-book', PhoneBookController::class);
         Route::post('cash-txn-details/{id}/images', [CashTxnDetailController::class, 'addImages']);
         Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage']);
         Route::apiResource('bank-details', BankDetailController::class);
