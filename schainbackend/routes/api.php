@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\StockDetailsController;
 use App\Http\Controllers\Api\CashToGoldController;
 use App\Http\Controllers\Api\GoldToCashController;
 use App\Http\Controllers\Api\CashCategoryController;
+use App\Http\Controllers\Api\PhoneBookController;
 
 Route::prefix('v1')->group(function () {
     // Public routes
@@ -52,6 +53,7 @@ Route::prefix('v1')->group(function () {
         // Cash Dashboard APIs (Must be above apiResource to prevent {id} interception)
         Route::get('report/cash-transactions-obcb', [ReportController::class, 'getCashTransactionsObcb']);
         Route::get('report/live-metal-balance', [ReportController::class, 'getLiveMetalBalance']);
+        Route::get('report/one-day-action', [ReportController::class, 'getOneDayActionReport']);
         Route::get('cash-txn-details/out-history', [CashTxnDetailController::class, 'getOutHistory']);
         Route::get('cash-txn-details/in-history', [CashTxnDetailController::class, 'getInHistory']);
         Route::get('cash-txn-details/print-report', [CashTxnDetailController::class, 'getPrintReport']);
@@ -62,6 +64,7 @@ Route::prefix('v1')->group(function () {
 
         Route::apiResource('cash-txn-details', CashTxnDetailController::class);
         Route::apiResource('cash-categories', CashCategoryController::class);
+        Route::apiResource('phone-book', PhoneBookController::class);
         Route::post('cash-txn-details/{id}/images', [CashTxnDetailController::class, 'addImages']);
         Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage']);
         Route::apiResource('bank-details', BankDetailController::class);
