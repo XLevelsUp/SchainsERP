@@ -16,7 +16,7 @@ class HeadEmployeeMappingSeeder extends Seeder
         if ($head && $employee) {
             HeadEmployeeMapping::firstOrCreate(
                 ['head_id' => $head->user_id, 'employee_id' => $employee->user_id],
-                ['is_active' => true]
+                ['added_at' => now()]
             );
         }
     }
