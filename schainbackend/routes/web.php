@@ -17,13 +17,21 @@ Route::get('/', function () {
 */
 
 Route::get('/run-seeders', function () {
-    $output = new \Symfony\Component\Console\Output\BufferedOutput();
-    Artisan::call('db:seed', ['--force' => true], $output);
-    return response('<pre>' . $output->fetch() . '</pre>');
+    try {
+        $output = new \Symfony\Component\Console\Output\BufferedOutput();
+        Artisan::call('db:seed', ['--force' => true], $output);
+        return response('<pre>' . $output->fetch() . '</pre>');
+    } catch (\Throwable $e) {
+        return response('<pre>ERROR: ' . $e->getMessage() . "\n\n" . $e->getTraceAsString() . '</pre>', 500);
+    }
 });
 
 Route::get('/run-migrations', function () {
-    $output = new \Symfony\Component\Console\Output\BufferedOutput();
-    Artisan::call('migrate', ['--force' => true], $output);
-    return response('<pre>' . $output->fetch() . '</pre>');
+    try {
+        $output = new \Symfony\Component\Console\Output\BufferedOutput();
+        Artisan::call('migrate', ['--force' => true], $output);
+        return response('<pre>' . $output->fetch() . '</pre>');
+    } catch (\Throwable $e) {
+        return response('<pre>ERROR: ' . $e->getMessage() . "\n\n" . $e->getTraceAsString() . '</pre>', 500);
+    }
 });
