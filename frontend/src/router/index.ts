@@ -107,6 +107,16 @@ const router = createRouter({
           component: () => import('@/views/IdWiseReportView.vue'),
         },
         {
+          path: 'one-day-action',
+          name: 'one-day-action',
+          component: () => import('@/views/OneDayActionView.vue'),
+        },
+        {
+          path: 'phone-book',
+          name: 'phone-book',
+          component: () => import('@/views/PhoneBookView.vue'),
+        },
+        {
           path: 'metal-picker-test',
           name: 'metal-picker-test',
           component: () => import('@/views/MetalPickerTestView.vue'),

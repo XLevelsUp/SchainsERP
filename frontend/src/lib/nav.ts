@@ -18,6 +18,8 @@ import {
   ArrowUpDown,
   Network,
   Activity,
+  CalendarClock,
+  BookUser,
   FlaskConical,
   MoreHorizontal,
 } from 'lucide-vue-next'
@@ -28,6 +30,7 @@ export const navItems: NavItem[] = [
   { type: 'link', label: 'Stock', to: '/stock', icon: Package },
   { type: 'link', label: 'Cash Management', to: '/cash-management', icon: ArrowLeftRight },
   { type: 'link', label: 'Clients', to: '/clients', icon: Users },
+  { type: 'link', label: 'Phone Book', to: '/phone-book', icon: BookUser },
   {
     type: 'group',
     label: 'Settings',
@@ -65,6 +68,7 @@ export const navItems: NavItem[] = [
       { type: 'link', label: 'Metal Live', to: '/metal-live', icon: Activity },
       { type: 'link', label: 'Consolidated Report', to: '/consolidated-report', icon: ChartBar },
       { type: 'link', label: 'ID Wise', to: '/id-wise-report', icon: ArrowUpDown },
+      { type: 'link', label: 'One Day Action', to: '/one-day-action', icon: CalendarClock },
       { type: 'link', label: 'Pages', to: '/pages', icon: FileText },
     ],
   },

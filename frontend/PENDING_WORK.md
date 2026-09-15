@@ -3,12 +3,40 @@
 Living tracker for the frontend team. Updated as items land — tick things off
 here rather than opening a new doc.
 
-**Last updated:** 2026-09-08
-**Backend baseline:** `bdada98` (PR #35 — live metal balance report)
+**Last updated:** 2026-09-11
+**Backend baseline:** `a55b7cc` (PR #37 — phone book, one day action, token TTLs)
 
 Every claim below was verified against backend source at that commit, not
 against the API doc. Where the two disagree, the source wins and the
 discrepancy is listed in [§3](#3-api-doc-corrections).
+
+### PR #37 pass — 2026-09-11
+
+`a55b7cc` (merge of `XLevelsUp/Backend`) landed three independent changes in
+519 added lines, nothing deleted:
+
+| Change | Where |
+|---|---|
+| `GET /report/one-day-action` — a day's stock movements and cash transactions in one feed | `ReportController:181`, `ReportService:878` |
+| `apiResource('phone-book')` — CRUD over `user_details` | `PhoneBookController.php`, `PhoneBookResource.php` |
+| Passport token lifetimes: access + personal access **24h**, refresh 30d | `AppServiceProvider:21-23` |
+
+Both routes were probed on Render and answer `401`, not `404`, so they are
+deployed. **Unlike the previous few PRs, every class, relation and column
+this one references actually exists** — `StockDetails::givenBy/givenTo/
+item/toItem`, `CashTxnDetail::givenByUser/givenToUser`, and the
+`entry_type`/`stock_type`/`retailer_id`/`added_by` columns all check out.
+Neither feature was on our asks list; both arrived unrequested.
+
+Two frontends were built against them in the same pass (see
+[§1](#1-frontend-work)), and six new backend asks came out of reading the
+code — [#22–#27](#22) — plus the F-Items screen below, which is now the
+only documented endpoint in the testing doc with no UI at all.
+
+The token-lifetime change is the one that affects everybody today: personal
+access tokens defaulted to a year and now expire in 24h, so all users get
+signed out daily. Nothing breaks — `lib/api.ts:86` already turns the 401
+into a clean bounce — but see the pending item about it.
 
 ### Re-verification pass — 2026-09-08
 
@@ -56,7 +84,30 @@ service). `src/lib/api.ts` builds its base from `VITE_API_BASE_URL`, falling
 back to the relative `/api/v1` that Vite's dev proxy serves. **That variable
 must be set in the Vercel project** —
 
-> #### ⛔ BLOCKER, found 2026-09-08 — `api.lensnstories.com` does not exist in DNS
+> #### ✅ RESOLVED 2026-09-09 — the `api` record now exists
+>
+> `api.lensnstories.com` resolves via CNAME to `schainserp.onrender.com`
+> (216.24.57.7 / .15), TLS is valid, and a request pinned to that host
+> returns the API's own JSON. The GoDaddy step is done; the blocker below is
+> kept for history.
+>
+> **What actually blocks the deployed SPA now** is `VITE_API_BASE_URL` not
+> being set in the Vercel project. The live bundle has the relative
+> `/api/v1` compiled in, so the SPA POSTs login to its own Vercel origin and
+> gets a **405** with `Content-Disposition: inline; filename="index.html"`.
+> Setting the variable and redeploying **without the build cache** fixes it
+> — Vite inlines `VITE_*` at build time, so a cached rebuild changes
+> nothing.
+>
+> Behind that sits a second one: the Step 1.6 seeders were never run.
+> `POST https://schainserp.onrender.com/api/v1/login` with
+> `demo_head`/`password` returns `{"success":false,"message":"Invalid
+> username or password"}`, which means Laravel queried the database
+> successfully and found no such user. CORS is fine (preflight returns 204
+> with `access-control-allow-origin: *`), and the SPA deep-link rewrite is
+> fine (`GET /login` → 200).
+>
+> <details><summary>Original 2026-09-08 finding</summary>
 >
 > The subdomain returns **NXDOMAIN**, not a CNAME. Confirmed against two
 > independent public resolvers, so it is not our ISP or a local cache:
@@ -86,6 +137,8 @@ must be set in the Vercel project** —
 > 2026-09-07 note above recorded the *intended* topology, and the deploy-log
 > evidence quoted in this section is all Render-side, none of it proves the
 > DNS record was ever live.
+>
+> </details>
 
 ```
 VITE_API_BASE_URL=https://api.lensnstories.com/api/v1
@@ -123,11 +176,71 @@ Practical consequences for us:
 | Consolidated report | `views/ConsolidatedReportView.vue` |
 | Customer Touch Mappings — list, filter, inline active toggle, reassign | `views/CustomerTouchMappingsView.vue`, `lib/customerTouchMappingsApi.ts` |
 | Stock Auto Entry — 4 transaction types, NORMAL/GMS/FITEM rows, live previews | `views/StockAutoEntryView.vue`, `types/stockAutoEntry.ts`, `lib/stockApi.ts` |
+| Clearable date filters — inline × on every filter date/time input | `components/ui/BaseInput.vue` (`clearable` prop), 7 filter screens |
+| Stock user picker hides the signed-in operator | `components/stock/UserPickerPanel.vue` |
+| One Day Action report (PR #37) | `views/OneDayActionView.vue`, `types/oneDayAction.ts`, `lib/reportApi.ts` |
+| Phone Book — read-only directory (PR #37) | `views/PhoneBookView.vue`, `types/phoneBook.ts`, `lib/phoneBookApi.ts` |
 
-**Every endpoint shipped in PRs #29–#32 now has a frontend.** What remains
-below is cleanup, deferred polish, and work blocked on backend gaps.
+**Every endpoint shipped in PRs #29–#32 now has a frontend**, and PR #37's
+two new endpoints have one as of 2026-09-11. What remains below is cleanup,
+deferred polish, and work blocked on backend gaps.
+
+Two deliberate limits on the PR #37 screens, both visible on-screen as
+amber banners rather than hidden:
+
+- **One Day Action** shows every user's activity, because
+  `ReportService::getOneDayActionReport` takes a `$headId` and never uses
+  it ([#22](#22)). The view sends no `X-User-ID` for the same reason —
+  implying a scoping that does not exist would be worse than not sending
+  it. Grams and rupees are totalled separately since cash amounts arrive in
+  the `grams` field ([#24](#24)), and `added_at` is parsed locally because
+  it is the one endpoint using `DD-MM-YYYY` ([#25](#25)).
+- **Phone Book is read-only.** `store`/`update`/`destroy` are registered
+  and were deliberately not wrapped in `lib/phoneBookApi.ts` — creating a
+  contact mints a real ERP login with a hardcoded shared password, and
+  deleting one deactivates the shared `user_details` row ([#27](#27)).
+  Contacts are created and edited on the Users screen, which goes through
+  `UserDetailController` and sets real credentials.
 
 ### Pending
+
+- [ ] **F-Items IN/OUT screen.** `POST /api/v1/fitems` has existed since
+      before PR #37 but was only documented in the 2026-09-11 doc update
+      (section 41), and it is now the only documented endpoint with no UI.
+      `FitemRequest` gives a clean, fully validated contract: `type`
+      (IN|OUT), `given_by`, `given_to` (must differ), optional `added_at`,
+      and an `items[]` array of `item_id`, `grams`, `touch`, optional
+      `mtouch`, `wastage`, `box_id`, `item_gross_weight`,
+      `item_added_gross_grams`, `item_no_of_pcs`, `item_remarks`,
+      `remarks`, `added_at`. `FitemBoxesView` already manages the boxes
+      that `box_id` refers to, so the dropdown data exists.
+
+      Not built in the PR #37 pass for one reason worth a decision before
+      anyone starts: **there is no read endpoint.** `routes/api.php:39`
+      registers `POST fitems` only, so the screen would be submit-only.
+      Entries do land in `stock_details` with `type = FITEM`, which means
+      the existing Transaction History panel and the reports can show them
+      — but that is a UX call (a standalone screen vs. a fourth entry mode
+      inside Stock Auto Entry, which already has a FITEM row type) rather
+      than something to guess at. Unblocked either way.
+
+- [ ] **Token expiry is now 24h — decide whether to detect it on boot.**
+      `AppServiceProvider:21-23` (PR #37) sets
+      `personalAccessTokensExpireIn(24h)`, down from Passport's one-year
+      default, so everyone is signed out daily. Nothing is broken:
+      `lib/api.ts:86` clears the session and bounces on the 401. The gap is
+      that **the app looks signed in until the first API call**, and the
+      dashboard makes none — `DashboardView` is static tiles and
+      `RemindersPanel` is local-only — so someone opening the app the next
+      morning sees a normal dashboard and only discovers the expiry when
+      they open a module.
+
+      Passport access tokens are JWTs, so reading the `exp` claim in
+      `lib/authSession.ts` at boot would close this with no backend change
+      and no `/me` endpoint. That would also partially cover the "session
+      validation on boot" item below, which is otherwise blocked on ask #7.
+      Alternative: ask the backend to return `expires_at` alongside the
+      token, which is cleaner but not in our control.
 
 - [ ] **Re-enable the two Cash Transactions report filters.** The comment in
       `types/cashTransactionReport.ts` says `cash_main_category_id` and
@@ -520,6 +633,8 @@ that path.
     `IFNULL(...)` and `` `stock_details` ``. It is the only MySQL-ism left
     in the file, so this is a one-line fix.
 
+<a id="19"></a>
+
 19. **The `?user_id=` admin override can never activate.** It checks
     `$actingUser->role_id == 1` — `RoleSeeder` defines role_id 1 as
     `CUSTOMER`, not admin/head (same role-numbering trap as backend ask
@@ -578,6 +693,117 @@ that path.
     Fix is the backend team's call on which convention wins, but it needs to
     be one or the other everywhere. If `RoleSeeder` is right, both code sites
     should test for 3 and `StockTestDataSeeder` should be corrected.
+
+### One Day Action report (PR #37 — `GET /report/one-day-action`)
+
+<a id="22"></a>
+
+22. **The report ignores its own `$headId`, so it is not scoped to anyone.**
+    `ReportController:184` reads `X-User-ID` and passes it to
+    `ReportService::getOneDayActionReport($filters, $headId)` — and the
+    method never references `$headId` in its body. Compare
+    `getHeadStocks`, which scopes on it in four places.
+
+    Effect: any signed-in user gets every user's stock movements and cash
+    transactions for the day. The frontend cannot filter around this —
+    `employee_id` filters `added_by` (who keyed the entry), which is a
+    different question, and there is no head parameter at all.
+
+    Note also that the same controller uses the better pattern one method
+    up, at line 143: `$request->user()->user_id ?? (int)$request->header('X-User-ID', 1)`.
+    This method reads the header only, so it would silently default to
+    user 1 even if the service did use it.
+
+23. **Pagination is applied per source, then the two lists are
+    concatenated.** `page_no`/`page_size` are applied to the stock query
+    and the cash query separately, so page 2 means "stock rows 501–1000
+    *plus* cash rows 501–1000", and the response carries
+    `total_stock_count` and `total_cash_count` rather than one total.
+
+    A conventional paginator over this would lie about what a page
+    contains. The frontend loads page 1 at the backend's own default of
+    500, appends further pages, re-sorts the merged list client-side, and
+    shows the two counts separately — which works, but a single paginated
+    query would be a better contract.
+
+<a id="24"></a>
+
+24. **Cash amounts are returned in the `grams` field.** Deliberate, per the
+    service's own comment ("Using grams column to display amount for
+    consolidated views"), and `touch`/`purity`/`waste_*` are null on those
+    rows. It means the column cannot be totalled without first splitting on
+    `record_type`, and any consumer that sums it naively adds rupees to
+    grams. A separate `amount` field would remove the trap.
+
+<a id="25"></a>
+
+25. **`added_at` is formatted `DD-MM-YYYY HH:mm:ss`.** Every other endpoint
+    in the app returns `YYYY-MM-DD HH:mm:ss`, which `new Date()` parses and
+    `lib/date`'s `formatDateTime` handles. This one does not parse, so the
+    frontend carries a bespoke parser for a single endpoint. Returning the
+    raw timestamp and letting the client format would be more consistent.
+
+    Related, low probability but a hard 500 if it hits: the combined sort
+    calls `Carbon::createFromFormat('d-m-Y H:i:s', $item['added_at'])`,
+    while the formatter maps a null timestamp to `'-'`, which that call
+    throws on. `stock_details.added_at` is `useCurrent()` and non-null so
+    stock rows are safe, but `cash_txn_details.created_at` comes from
+    `$table->timestamps()` and is nullable — one imported row with a null
+    `created_at` takes down the whole endpoint.
+
+### Phone book (PR #37 — `apiResource('phone-book')`)
+
+<a id="26"></a>
+
+26. **`role.role_name` is always null — the same `role_name` mistake as ask
+    [#19](#19), now in a second file.** `PhoneBookResource:18` reads
+    `$this->role?->role_name`, but the `roles` table column is `role` —
+    `Role.php:15` and the `create_roles_table` migration both say so, and
+    `RoleSeeder` inserts `'role' => 'CUSTOMER'`. The relation loads fine;
+    the field name is simply wrong, so every contact's role reads empty.
+    The frontend keeps the column in place so it starts working the moment
+    this is corrected.
+
+    Worth fixing as one job with #19: two independent files now reach for a
+    column that has never existed, which suggests the name is wrong in
+    whatever the backend team is working from rather than being a typo
+    twice.
+
+<a id="27"></a>
+
+27. **The three write routes are unsafe against a shared table, so the
+    frontend does not call them.** `phone-book` is `user_details` — the
+    same rows the Users and Clients screens own and every picker selects
+    from — and:
+
+    - `store()` injects `user_name = 'pb_' . time() . rand(10,99)` and
+      `password_hash = bcrypt('phonebook123')`. **Every contact created
+      this way is a working ERP login with a hardcoded, shared password.**
+      `AuthController::login` does not check `is_active`, so switching the
+      contact off would not close the account — only deleting the row or
+      changing the password would.
+    - `destroy()` sets `is_delete = true, is_active = false` on that shared
+      row, so "deleting a contact" can deactivate a head, employee or
+      customer that has live transactions.
+    - `update()` writes name/phone/role/address onto the same shared row
+      with no guard for what kind of record it is.
+
+    Two smaller ones in the same controller: `index()` never filters
+    `is_delete`, so rows deleted through `destroy()` keep appearing unless
+    the caller also filters by `is_active`; and `profile_image` comes back
+    as a raw storage path (`profile_images/x.jpg`) rather than the resolved
+    `profile_image_url` that `GET /user-details/{id}` returns for the same
+    column.
+
+    If the phone book is meant to manage contacts that are *not* ERP users,
+    it needs its own table or at minimum a non-loginable marker — not a
+    `user_details` row with a constant password.
+
+    Doc mismatch worth noting: testing doc section 48 shows the list
+    returning `role_id`, `address` and `remarks` and a populated
+    `role.role_name`. `PhoneBookResource` returns none of those four —
+    only `user_id`, `name`, `phone_no`, `profile_image`, `is_active` and
+    the (null) role object.
 
 ---
 

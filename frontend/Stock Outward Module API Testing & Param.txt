@@ -1781,9 +1781,561 @@ A new table customer_touch_user_mappings was created via 2026_09_01_213919_creat
 
 
 
+36. ID-Wise Stock Report API
+**Endpoint:** `GET /api/v1/stock/reports/id-wise`
+**Description:**
+Fetches the complete lineage of a single stock ID. Traces the ID back to its parent Lot, calculates the aggregated total consumed from all child transactions, computes the actual versus reconciled balance, and lists all chronological movements.
+**Query Parameters:**
+* `stock_id` (integer, required): The ID of the stock to query.
+**Example Request:**
+```bash
+curl -X GET "https://api.yourdomain.com/api/v1/stock/reports/id-wise?stock_id=1054" \
+     -H "Authorization: Bearer <your_jwt_token>" \
+     -H "Content-Type: application/json"
+Example Successful Response (200 OK):
+
+json
+
+{
+    "success": true,
+    "message": "ID-Wise stock report compiled successfully.",
+    "data": {
+        "stock_summary": {
+            "queried_id": 1054,
+            "queried_type": "IN",
+            "item_name": "Gold Ring"
+        },
+        "lot_details": {
+            "lot_id": 1054,
+            "item_name": "Gold Ring",
+            "added_at": "2023-10-01 10:00:00",
+            "original_grams": 500.0,
+            "purity": 91.6,
+            "touch": 92.0,
+            "current_balance": 150.0,
+            "lot_creator": "Admin User"
+        },
+        "quantity_summary": {
+            "total_received": 500.0,
+            "total_consumed": 350.0,
+            "reconciled_balance": 150.0,
+            "actual_balance": 150.0
+        },
+        "transactions": [
+            {
+                "id": 1055,
+                "added_at": "2023-10-02 11:30:00",
+                "item_name": "Gold Ring",
+                "stock_type": "OUT",
+                "entry_type": "NORMAL",
+                "type": "NORMAL",
+                "grams": 200.0,
+                "touch": 92.0,
+                "mtouch": 92.0,
+                "wastage": 0.0,
+                "purity": 91.6,
+                "given_by": "Admin User",
+                "given_to": "Employee 1",
+                "remarks": "Sale",
+                "item_remarks": null,
+                "bill_id": 445
+            }
+        ]
+    }
+}
+
+
+37. Head-Employee Mappings API
+This module allows mapping one employee to multiple heads (bulk insertion/updating).
+
+Fetch Mappings
+URL: GET /api/v1/head-employee-mappings Headers: Authorization: Bearer <token> Query Parameters (Optional): ?employee_is_active=1&head_is_active=1 Response Example (200 OK):
+
+json
+
+{
+    "success": true,
+    "message": "Head employee mappings retrieved successfully",
+    "data": [
+        {
+            "employee_id": 10,
+            "employee_name": "John Doe",
+            "heads": [
+                {
+                    "mapping_id": 5,
+                    "head_id": 4,
+                    "head_name": "Admin Manager",
+                    "added_at": "2026-09-04 19:30:00"
+                }
+            ]
+        }
+    ]
+}
+Create Mappings (Bulk)
+38.URL: POST /api/v1/head-employee-mappings Headers: Authorization: Bearer <token> Request Body (JSON):
+
+json
+
+{
+    "employee_id": 10,
+    "head_ids": [4, 5, 7]
+}
+Response Example (201 Created):
+
+json
+
+{
+    "success": true,
+    "message": "Head employee mappings created successfully",
+    "data": [
+        {
+            "id": 1,
+            "head_id": 4,
+            "employee_id": 10,
+            "added_at": "2026-09-04T14:29:19.000000Z"
+        }
+    ]
+}
+Update Mappings (Bulk)
+39.URL: PUT /api/v1/head-employee-mappings/{employee_id} Headers: Authorization: Bearer <token> Request Body (JSON):
+
+json
+
+{
+    "head_ids": [4, 8]
+}
+Response Example (200 OK):
+
+json
+
+{
+    "success": true,
+    "message": "Head employee mappings updated successfully",
+    "data": [
+        {
+            "id": 1,
+            "head_id": 4,
+            "employee_id": 10,
+            "added_at": "2026-09-04T14:29:19.000000Z",
+            "head": {
+                "user_id": 4,
+                "name": "Admin Manager"
+            }
+        }
+    ]
+}
 
 
 
 
+
+40. Live Metal Balance Report API
+This API fetches the Live Metal Stock balance for a given user. It supports querying historical balances (by providing date and time) or live balances. It handles the used_grams offset calculation dynamically.
+
+Fetch Metal Balance
+URL: GET /api/v1/report/live-metal-balance
+ Headers: Authorization: Bearer <token>
+ Query Parameters (Optional):
+
+user_id (int): Target user ID. (Only works if the logged-in user is an Admin; otherwise, it forces the logged-in user's ID).
+date (string): e.g., 2026-09-01
+time (string): e.g., 14:30:00
+page (int): Page number.
+per_page (int): Results per page.
+Response Example (200 OK):
+
+json
+
+{
+    "success": true,
+    "message": "Metal live report fetched successfully.",
+    "data": {
+        "summary": {
+            "total_grams": 15.5,
+            "total_purity": 14.198
+        },
+        "records": [
+            {
+                "stock_id": 105,
+                "balance": 15.5,
+                "touch": 91.6,
+                "purity": 14.198,
+                "party_name": "John Goldsmith",
+                "added_at": "2026-09-01 14:30:00"
+            }
+        ],
+        "pagination": {
+            "current_page": 1,
+            "last_page": 1,
+            "per_page": 50,
+            "total": 1
+        }
+    }
+}
+
+41. F Items (F-Items) IN/OUT API
+Endpoint: POST {{base_url}}/api/v1/fitems
+Headers:
+
+Authorization: Bearer <your_token>
+Accept: application/json
+Content-Type: application/json
+Description: This unified endpoint handles inserting Fancy Items (F-Items) into both the fitem_histories and stock_details tables. It supports multiple items in a single request. Pass "type": "IN" to increase stock and "type": "OUT" to deplete stock.
+
+Request Payload Example (IN)
+json
+
+{
+  "type": "IN",
+  "given_by": 1,
+  "given_to": 2,
+  "items": [
+    {
+      "item_id": 4,
+      "grams": 10.5,
+      "touch": 91.6,
+      "wastage": 0.5,
+      "mtouch": 91.6,
+      "box_id": 1,
+      "item_no_of_pcs": 2,
+      "item_remarks": "Diamond Necklace",
+      "remarks": "Supplier batch A"
+    }
+  ]
+}
+Success Response Example
+json
+
+{
+    "success": true,
+    "message": "F-Items processed successfully.",
+    "data": [
+        {
+            "balance": 10.5,
+            "given_by": 1,
+            "given_to": 2,
+            "added_by": 1,
+            "entry_type": "NORMAL",
+            "type": "FITEM",
+            "stock_type": "IN",
+            "item_id": 4,
+            "grams": 10.5,
+            "touch": 91.6,
+            "mtouch": 91.6,
+            "purity": 9.618,
+            "waste_value": 0.5,
+            "no_of_pcs": 2,
+            "item_remarks": "Diamond Necklace",
+            "remarks": "Supplier batch A",
+            "added_at": "2026-09-08T18:15:06.000000Z",
+            "stock_id": 9
+        }
+    ]
+}
+
+
+42. Fancy Items Boxes (Master Data) API
+Endpoint: /api/v1/fitem-boxes
+This is a standard RESTful API resource for Admins to create and manage the Master list of Fancy Item Boxes (fitem_boxes). The IDs generated here are passed into the POST /api/v1/fitems endpoint.
+
+43. List All Boxes
+GET {{base_url}}/api/v1/fitem-boxes Description: Fetches all available F-Item Boxes for the frontend dropdown.
+
+44. Create a Box
+POST {{base_url}}/api/v1/fitem-boxes Payload Example:
+
+json
+
+{
+    "box_name": "Premium Diamond Box",
+    "item_id": 4,
+    "is_active": 1,
+    "added_by": 1
+}
+45. Update a Box
+PUT {{base_url}}/api/v1/fitem-boxes/{box_id} Payload Example:
+
+json
+
+{
+    "box_name": "Premium Diamond Box Updated",
+    "is_active": 1,
+    "updated_by": 1
+}
+46. Delete a Box
+DELETE {{base_url}}/api/v1/fitem-boxes/{box_id}
+
+
+
+
+ 47.One Day Action Report (Stock & Cash)
+Fetches a consolidated feed of both stock transactions (NORMAL, SALES, HEADTOHEAD) and cash transactions for a specific day. This perfectly replicates the legacy Yii2 One Day Action report.
+
+URL: GET /api/v1/report/one-day-action
+
+Query Parameters:
+
+from_date (optional): The specific day to fetch (e.g., 2026-09-09). Defaults to today.
+employee_id (optional): Filter by a specific user.
+retailer_id (optional): Filter by a specific retailer (for stock).
+stocktype (optional): Filter by entry type (e.g., NORMAL, SALES, HEADTOHEAD).
+type (optional): Filter by stock type (IN, OUT).
+item_id (optional): Filter by a specific item ID (for stock).
+page_no (optional): Pagination page number (default 1).
+page_size (optional): Number of records per page (default 500).
+from_date (optional): (Frontend Date Picker Value) The start date you want to view the report for (e.g., 2026-09-09). If left blank, it defaults to today.
+to_date (optional): (Frontend Date Picker Value) The end date for the report range. If left blank, it defaults to whatever from_date is.
+
+
+Example Request:
+
+bash
+
+curl --location 'http://localhost:8000/api/v1/report/one-day-action?from_date=2026-09-09' --header 'X-User-ID: 1'
+Response Example:
+
+json
+
+{
+    "success": true,
+    "message": "One day action report fetched successfully.",
+    "data": {
+        "total_stock_count": 1,
+        "total_cash_count": 1,
+        "page_no": 1,
+        "page_size": 500,
+        "transactions": [
+            {
+                "id": 15,
+                "record_type": "STOCK",
+                "entry_type": "NORMAL",
+                "stock_type": "IN",
+                "given_by": "Retailer User",
+                "given_to": "Head Admin",
+                "item_name": "Gold Chain",
+                "grams": 10.5,
+                "touch": 91.6,
+                "purity": 9.618,
+                "waste_total": 0.5,
+                "waste_value": 0.458,
+                "remarks": "Sample Stock Entry",
+                "added_by": 1,
+                "added_at": "09-09-2026 14:30:00",
+                "is_hided": 0
+            },
+            {
+                "id": 8,
+                "record_type": "CASH",
+                "entry_type": "CASH",
+                "stock_type": "IN",
+                "given_by": "Retailer User",
+                "given_to": "Head Admin",
+                "item_name": "CASH",
+                "grams": 50000,
+                "touch": null,
+                "purity": null,
+                "waste_total": null,
+                "waste_value": null,
+                "remarks": "Sample Cash Entry",
+                "added_by": 1,
+                "added_at": "09-09-2026 10:15:00",
+                "is_hided": 0
+            }
+        ]
+    }
+}
+
+
+
+ Phonebook API Module
+This section outlines the complete CRUD operations for the Phonebook module to manage contacts, suppliers, retailers, and employees.
+
+48. List Phonebook Contacts (Index) Fetches all contacts configured in the Phonebook view. Includes search, active filtering, and accurate pagination.
+
+URL: GET /api/v1/phone-book
+
+Query Parameters:
+
+page (optional): Page number.
+per_page (optional): Items per page (default 50).
+search (optional): Filters contacts by name or phone_no.
+is_active (optional): true or false to filter active/inactive.
+role_id (optional): ID of the role to filter by (e.g., Supplier).
+sort (optional): name, -name, phone_no, -phone_no, is_active, -is_active for ordering.
+Response:
+
+json
+
+{
+  "success": true,
+  "message": "Phone book retrieved successfully.",
+  "data": {
+    "current_page": 1,
+    "data": [
+      {
+        "user_id": 1,
+        "name": "Head Admin",
+        "phone_no": "1234567890",
+        "profile_image": "image_url.jpg",
+        "role_id": 1,
+        "is_active": true,
+        "address": "123 Main St",
+        "remarks": "Admin User",
+        "role": {
+          "id": 1,
+          "role_name": "Admin"
+        }
+      }
+    ],
+    "total": 1
+  }
+}
+
+
+49. Create a Phonebook Contact Creates a new contact in the phonebook directory. Must be sent as multipart/form-data to support image uploads.
+
+URL: POST /api/v1/phone-book
+
+Request Payload (multipart/form-data):
+
+Key	Type	Required	Description
+name	Text	Yes	Name of the contact
+phone_no	Text	Yes	Phone number
+profile_image	File	No	Upload image file (jpg, png, etc.)
+role_id	Integer	Yes	The Role ID (e.g., 4 for Supplier, 5 for Customer)
+is_active	Boolean	No	1 (true) or 0 (false)
+address	Text	No	Physical address
+remarks	Text	No	Additional notes
+Response:
+
+json
+
+{
+  "success": true,
+  "message": "Contact created successfully."
+}
+
+
+50. Show a Single Phonebook Contact Retrieves the details of a specific contact by their ID.
+
+URL: GET /api/v1/phone-book/{id}
+
+Response:
+
+json
+
+{
+  "success": true,
+  "message": "Contact retrieved successfully.",
+  "data": {
+    "user_id": 10,
+    "name": "John Doe",
+    "phone_no": "9876543210",
+    "profile_image": "image_url.jpg",
+    "role_id": 4,
+    "is_active": true,
+    "address": "123 Main St",
+    "remarks": "Excellent supplier"
+  }
+}
+
+
+
+
+51. Update a Phonebook Contact Updates an existing contact's details and image. Must be sent as multipart/form-data because it contains a file upload.
+
+URL: POST /api/v1/phone-book/{id}
+
+Request Payload (multipart/form-data):
+
+Key	Type	Required	Description
+_method	Text	Yes	MUST be set to PUT to fake the PUT request in Laravel
+name	Text	Yes	Name of the contact
+phone_no	Text	Yes	Phone number
+profile_image	File	No	Upload new image file to replace old one
+role_id	Integer	Yes	The Role ID
+is_active	Boolean	No	1 (true) or 0 (false)
+address	Text	No	Physical address
+remarks	Text	No	Additional notes
+Response:
+
+json
+
+{
+  "success": true,
+  "message": "Contact updated successfully."
+}
+
+52. Delete a Phonebook Contact Deletes (soft deletes) a contact from the directory.
+
+URL: DELETE /api/v1/phone-book/{id}
+
+Response:
+
+json
+
+{
+  "success": true,
+  "message": "Contact deleted successfully."
+}
+
+
+
+
+
+
+
+53.Hide Stock API Documentation
+Use this document to quickly import or structure the Hide Stock endpoint in Postman.
+
+Endpoint Details
+Method: POST
+URL: {{base_url}}/api/v1/stock/hide
+Auth: Bearer Token (Sanctum)
+Headers:
+Content-Type: application/json
+Accept: application/json
+Request Body
+The endpoint expects an array of stock_ids that exist in the stock_details table.
+
+json
+
+{
+    "stock_ids": [10, 11, 15]
+}
+Example cURL Command
+You can easily import this into Postman by going to File -> Import -> Raw text, and pasting this:
+
+bash
+
+curl --location 'https://api.lensnstories.com/api/v1/stock/hide' \
+--header 'Content-Type: application/json' \
+--header 'Accept: application/json' \
+--header 'Authorization: Bearer YOUR_ACCESS_TOKEN_HERE' \
+--data '{
+    "stock_ids": [1, 2, 3]
+}'
+Responses
+200 OK (Success)
+json
+
+{
+    "success": true,
+    "message": "Stock Hidden Successfully"
+}
+ 422 Unprocessable Entity (Validation Failed)
+This happens if you pass an empty array, missing field, or a stock_id that does not exist in the database.
+
+json
+
+{
+    "success": false,
+    "message": "Validation error",
+    "errors": {
+        "stock_ids.0": [
+            "The selected stock_ids.0 is invalid."
+        ]
+    }
+}
 
 

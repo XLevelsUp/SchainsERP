@@ -4,6 +4,8 @@ import type {
   CashTransactionReportResponse,
   LiveMetalBalanceQuery,
   LiveMetalBalanceResult,
+  OneDayActionQuery,
+  OneDayActionResult,
 } from '@/types'
 
 const RESOURCE = '/report'
@@ -35,6 +37,15 @@ function buildLiveMetalQuery(params: LiveMetalBalanceQuery): string {
   return s ? `?${s}` : ''
 }
 
+function buildOneDayActionQuery(params: OneDayActionQuery): string {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') qs.set(key, String(value))
+  }
+  const s = qs.toString()
+  return s ? `?${s}` : ''
+}
+
 export const reportApi = {
   // GET /report/cash-transactions-obcb — see cashTransactionReport.ts for why
   // cash_main_category_id is still not exposed (the column exists, but nothing
@@ -48,5 +59,18 @@ export const reportApi = {
   getLiveMetalBalance: (params: LiveMetalBalanceQuery = {}) =>
     api
       .get<ApiResponse<LiveMetalBalanceResult>>(`${RESOURCE}/live-metal-balance${buildLiveMetalQuery(params)}`)
+      .then((r) => r.data),
+
+  // GET /report/one-day-action — one day's stock movements and cash
+  // transactions in a single feed (PR #37, testing doc section 47).
+  //
+  // Deliberately sends no X-User-ID header. The controller reads one and
+  // hands it to the service as $headId, but the service never references
+  // the parameter, so the report is global no matter what we send
+  // (PENDING_WORK.md #22). Sending it would imply a scoping that does not
+  // exist; when the backend fixes that, this is where the header goes.
+  getOneDayAction: (params: OneDayActionQuery = {}) =>
+    api
+      .get<ApiResponse<OneDayActionResult>>(`${RESOURCE}/one-day-action${buildOneDayActionQuery(params)}`)
       .then((r) => r.data),
 }
