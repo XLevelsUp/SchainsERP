@@ -30,6 +30,7 @@ Route::prefix('v1')->group(function () {
     // Protected routes
     Route::middleware('auth:api')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
+        Route::get('/me', [AuthController::class, 'me']);
 
         Route::apiResource('user-details', UserDetailController::class);
         Route::apiResource('items', ItemController::class);
@@ -61,6 +62,7 @@ Route::prefix('v1')->group(function () {
         Route::get('stock-details/cash-transaction-history', [StockDetailsController::class, 'getCashTransactionHistory']);
         Route::get('stock-details/available-metals', [StockDetailsController::class, 'getAvailableMetals']);
         Route::get('stock-details/head-stocks', [StockDetailsController::class, 'getHeadStocks']);
+        Route::get('stock-details/available-lots', [StockDetailsController::class, 'getAvailableStockLots']);
 
         Route::apiResource('cash-txn-details', CashTxnDetailController::class);
         Route::apiResource('cash-categories', CashCategoryController::class);
@@ -92,5 +94,6 @@ Route::prefix('v1/stock')->middleware('auth:api')->group(function () {
     Route::get('reports/items-obcb', [StockDetailsController::class, 'getHistoryItemsObcb']);
     Route::get('reports/consolidated', [StockDetailsController::class, 'getConsolidatedReport']);
     Route::get('reports/id-wise', [StockDetailsController::class, 'getIdWiseReport']);
-    // Route::post('hide', [StockDetailsController::class, 'postHide']);
+    Route::post('hide', [StockDetailsController::class, 'postHide']);
+    Route::post('cash-out', [StockDetailsController::class, 'postCash']);
 });

@@ -21,6 +21,9 @@ class AutoEntryRequest extends FormRequest
                 Rule::in(['EMPTOEMP', 'EMPTOHEAD', 'ANOTHERHEADTOEMP', 'HEADTOHEAD']),
             ],
 
+            // Top-level backdating support (applied to all items if no per-item added_at)
+            'added_at' => ['nullable', 'date_format:Y-m-d H:i:s'],
+
             // EMPTOEMP conditional fields
             'from_employee' => [
                 Rule::requiredIf($this->type === 'EMPTOEMP'),
