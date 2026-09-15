@@ -22,6 +22,7 @@ class StockInDetail extends Model
         'entry_type',
         'stock_type',
         'grams',
+        'no_of_pcs',
         'touch',
         'purity',
         'remarks',

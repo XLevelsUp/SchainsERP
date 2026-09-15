@@ -788,16 +788,17 @@ class ReportService
         $date = $params['date'] ?? null;
         $time = $params['time'] ?? null;
         $pageSize = $params['per_page'] ?? 50;
+        $itemId = $params['item_id'] ?? 2; // Default to 2 if not passed
 
         $query = StockDetails::with(['givenBy'])
             ->where('given_to', $targetUserId)
             ->where('remarks', '!=', 'CASH_TO_GOLD')
             ->whereIn('entry_type', ['NORMAL', 'EMPTOHEAD', 'HEADTOHEAD'])
-            ->where(function ($q) {
-                $q->where(function ($sq1) {
-                    $sq1->where('entry_type', 'NORMAL')->where('item_id', 2);
-                })->orWhere(function ($sq2) {
-                    $sq2->where('entry_type', '!=', 'NORMAL')->where('to_item_id', 2);
+            ->where(function ($q) use ($itemId) {
+                $q->where(function ($sq1) use ($itemId) {
+                    $sq1->where('entry_type', 'NORMAL')->where('item_id', $itemId);
+                })->orWhere(function ($sq2) use ($itemId) {
+                    $sq2->where('entry_type', '!=', 'NORMAL')->where('to_item_id', $itemId);
                 });
             })
             ->where(function ($q) {

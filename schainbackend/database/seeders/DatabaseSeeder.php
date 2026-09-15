@@ -37,6 +37,7 @@ class DatabaseSeeder extends Seeder
             CashCategorySeeder::class,
             BankDetailSeeder::class,
             HeadEmployeeMappingSeeder::class,
+            MassTestDataSeeder::class,
         ]);
     }
 }

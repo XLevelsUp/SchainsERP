@@ -461,7 +461,7 @@ class StockDetailsController extends Controller
                 ])
                     ->where('is_completed', 0)
                     ->where('is_freezed', 0)
-                    ->whereIn('remarks', ['PURCHASE_GOLD', 'SALE_GOLD', 'GOLD_TO_CASH', 'CASH_TO_GOLD']);
+                    ->whereIn('remarks', ['PURCHASE_GOLD', 'SALE_GOLD', 'GOLD_TO_CASH', 'CASH_TO_GOLD', 'IN_CASH_CONVERTER', 'OUT_CASH_CONVERTER']);
 
                 if ($cashUserId && $headId) {
                     // Get transactions where these two users are involved (either direction)
@@ -594,6 +594,97 @@ class StockDetailsController extends Controller
                 'success' => false,
                 'message' => 'Failed to retrieve head stocks',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generic available stock lots for any item (not limited to Metal).
+     * Used by Item Change and Item Conversion to pick a stock_in_id for any item type.
+     *
+     * GET /api/v1/stock-details/available-lots
+     * Query params:
+     *   user_id   (required) - the user whose IN lots to list
+     *   item_id   (required) - the item to filter by
+     *   date      (optional) - Y-m-d, balances as of this date
+     *   time      (optional) - H:i:s, combined with date
+     *   page_size (optional) - default 50
+     */
+    public function getAvailableStockLots(Request $request): JsonResponse
+    {
+        try {
+            $userId   = $request->query('user_id');
+            $itemId   = $request->query('item_id');
+            $date     = $request->query('date');
+            $time     = $request->query('time');
+            $pageSize = (int) $request->query('page_size', 50);
+
+            if (!$userId || !$itemId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'user_id and item_id are required.'
+                ], 422);
+            }
+
+            $query = StockDetails::with(['givenBy'])
+                ->where('given_to', $userId)
+                ->where('item_id', $itemId)
+                ->whereIn('stock_type', ['IN'])
+                ->whereNull('stock_in_id'); // Only parent IN lots
+
+            if ($date && $time) {
+                $dateTime = date('Y-m-d H:i:s', strtotime("$date $time"));
+                $query->selectRaw(
+                    "stock_details.*, COALESCE((SELECT SUM(s.grams) FROM stock_details s WHERE s.stock_in_id = stock_details.stock_id AND s.added_at <= ?), 0) as used_grams",
+                    [$dateTime]
+                )
+                ->havingRaw('grams - used_grams > 0')
+                ->orderBy('stock_id', 'desc');
+            } else {
+                $query->select('stock_details.*')
+                    ->where('balance', '>', 0)
+                    ->orderBy('stock_id', 'desc');
+            }
+
+            $paginated = $query->paginate($pageSize);
+
+            $records = $paginated->getCollection()->map(function ($lot) use ($date, $time) {
+                $balance = ($date && $time)
+                    ? round($lot->grams, 3) - round($lot->used_grams ?? 0, 3)
+                    : $lot->balance;
+
+                return [
+                    'stock_id'      => $lot->stock_id,
+                    'item_id'       => $lot->item_id,
+                    'balance'       => round($balance, 3),
+                    'grams'         => $lot->grams,
+                    'touch'         => $lot->touch,
+                    'purity'        => $lot->purity,
+                    'added_at'      => (string) $lot->added_at,
+                    'party_name'    => $lot->givenBy?->name,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Available stock lots retrieved successfully.',
+                'data'    => [
+                    'current_page'  => $paginated->currentPage(),
+                    'data'          => $records,
+                    'total'         => $paginated->total(),
+                    'per_page'      => $paginated->perPage(),
+                    'last_page'     => $paginated->lastPage(),
+                    'next_page_url' => $paginated->nextPageUrl(),
+                    'prev_page_url' => $paginated->previousPageUrl(),
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('getAvailableStockLots failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve available stock lots.',
+                'error'   => $e->getMessage()
             ], 500);
         }
     }
