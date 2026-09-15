@@ -77,6 +77,14 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // Block deactivated accounts
+        if (!$user->is_active) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your account has been deactivated. Please contact your administrator.'
+            ], 403);
+        }
+
         // Generate Sanctum Token
         $token = $user->createToken('auth_token')->accessToken;
 
@@ -127,6 +135,27 @@ class AuthController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Successfully logged out'
+        ], 200);
+    }
+
+    /**
+     * Return the currently authenticated user's data.
+     * Frontend can call this on app boot to verify the token is still valid.
+     */
+    public function me(Request $request)
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Authenticated user retrieved.',
+            'data' => [
+                'user_id'  => $user->user_id,
+                'name'     => $user->name,
+                'user_name'=> $user->user_name,
+                'role_id'  => $user->role_id,
+                'is_active'=> $user->is_active,
+            ]
         ], 200);
     }
 }
