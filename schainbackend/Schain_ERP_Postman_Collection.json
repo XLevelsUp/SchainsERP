@@ -1,161 +1,320 @@
 {
-	"info": {
-		"_postman_id": "12345678-1234-1234-1234-123456789012",
-		"name": "Schains ERP API",
-		"description": "API collection for Schains ERP including Authentication",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-	},
-	"item": [
-		{
-			"name": "Authentication",
-			"item": [
-				{
-					"name": "Login",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"var jsonData = pm.response.json();",
-									"if (jsonData.success && jsonData.data && jsonData.data.token) {",
-									"    pm.collectionVariables.set(\"auth_token\", jsonData.data.token);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Accept",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "formdata",
-							"formdata": [
-								{
-									"key": "user_name",
-									"value": "your_username",
-									"type": "text"
-								},
-								{
-									"key": "password",
-									"value": "your_password",
-									"type": "text"
-								}
-							]
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/login",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"login"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Logout",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Accept",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/logout",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"logout"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Get Authenticated User (Example Protected Route)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/user-details",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"user-details"
-							]
-						}
-					},
-					"response": []
-				}
-			],
-			"auth": {
-				"type": "bearer",
-				"bearer": [
-					{
-						"key": "token",
-						"value": "{{auth_token}}",
-						"type": "string"
-					}
-				]
-			},
-			"event": [
-				{
-					"listen": "prerequest",
-					"script": {
-						"type": "text/javascript",
-						"exec": [
-							""
-						]
-					}
-				},
-				{
-					"listen": "test",
-					"script": {
-						"type": "text/javascript",
-						"exec": [
-							""
-						]
-					}
-				}
-			]
-		}
-	],
-	"variable": [
-		{
-			"key": "base_url",
-			"value": "http://localhost:8000",
-			"type": "string"
-		},
-		{
-			"key": "auth_token",
-			"value": "",
-			"type": "string"
-		}
-	]
+    "info": {
+        "_postman_id": "12345678-1234-1234-1234-123456789012",
+        "name": "Schains ERP API",
+        "description": "API collection for Schains ERP including Authentication",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Authentication",
+            "item": [
+                {
+                    "name": "Login",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.success && jsonData.data && jsonData.data.token) {",
+                                    "    pm.collectionVariables.set(\"auth_token\", jsonData.data.token);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "user_name",
+                                    "value": "your_username",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "password",
+                                    "value": "your_password",
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/login",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "login"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Logout",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/logout",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "logout"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Authenticated User (Example Protected Route)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/user-details",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "user-details"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ],
+            "auth": {
+                "type": "bearer",
+                "bearer": [
+                    {
+                        "key": "token",
+                        "value": "{{auth_token}}",
+                        "type": "string"
+                    }
+                ]
+            },
+            "event": [
+                {
+                    "listen": "prerequest",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            ""
+                        ]
+                    }
+                },
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            ""
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "User Details",
+            "item": [
+                {
+                    "name": "Create User Detail",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/user-details",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "user-details"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Test User\",\n    \"user_name\": \"test_user_1\",\n    \"password\": \"password123\",\n    \"phone_no\": \"9998887776\",\n    \"role_id\": 2,\n    \"category_name\": \"BOTH\",\n    \"is_remainder_shown\": true,\n    \"is_delivery_item_shown\": true,\n    \"is_polish_needed\": false,\n    \"is_wa_delivery_stock_needed\": false,\n    \"is_polish_chk_need_shown\": true,\n    \"is_delivery_chk_need_shown\": false,\n    \"is_cashamt_thermal_shown\": true,\n    \"is_customer_touch_need_shown\": false,\n    \"is_complete_history_need_shown\": true,\n    \"is_create_order_need_to_shown\": false,\n    \"is_cash_mngmt_need_to_shown\": true,\n    \"is_freeze_entry_need_to_shown\": false,\n    \"is_admin_login_otp_need_to_shown\": false,\n    \"is_customer_cmts_need_to_shown\": true,\n    \"is_outside_need_to_shown\": false,\n    \"is_tally_need_to_shown\": false,\n    \"is_die_num_search_need_to_shown\": false,\n    \"is_con_box_rpt_need_to_shown\": false,\n    \"is_box_tot_rpt_need_to_shown\": false,\n    \"is_ob_cb_rpt_need_to_shown\": false,\n    \"is_gallery_need_to_shown\": false,\n    \"is_worker_need_to_shown\": false,\n    \"is_emp_group_task_need_to_shown\": false,\n    \"is_day_grand_rpt_need_shown\": false,\n    \"is_need_pink_box_shown\": false,\n    \"is_need_order_status_shown\": false,\n    \"is_need_role_wise_cash_rpt_shown\": false,\n    \"is_need_to_retailer_shown\": false,\n    \"is_need_grosswgt_print_shown\": false,\n    \"is_cus_fitem_pur_out_shown\": false,\n    \"is_cus_fitem_pur_in_shown\": false,\n    \"is_need_show_order_display_in_head_login\": false,\n    \"is_metal_stock_shown\": false\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update User Detail",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/user-details/1",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "user-details",
+                                "1"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Updated Test User\",\n    \"is_remainder_shown\": true,\n    \"is_delivery_item_shown\": true,\n    \"is_polish_needed\": false,\n    \"is_wa_delivery_stock_needed\": false,\n    \"is_polish_chk_need_shown\": true,\n    \"is_delivery_chk_need_shown\": false,\n    \"is_cashamt_thermal_shown\": true,\n    \"is_customer_touch_need_shown\": false,\n    \"is_complete_history_need_shown\": true,\n    \"is_create_order_need_to_shown\": false,\n    \"is_cash_mngmt_need_to_shown\": true,\n    \"is_freeze_entry_need_to_shown\": false,\n    \"is_admin_login_otp_need_to_shown\": false,\n    \"is_customer_cmts_need_to_shown\": true,\n    \"is_outside_need_to_shown\": false,\n    \"is_tally_need_to_shown\": false,\n    \"is_die_num_search_need_to_shown\": false,\n    \"is_con_box_rpt_need_to_shown\": false,\n    \"is_box_tot_rpt_need_to_shown\": false,\n    \"is_ob_cb_rpt_need_to_shown\": false,\n    \"is_gallery_need_to_shown\": false,\n    \"is_worker_need_to_shown\": false,\n    \"is_emp_group_task_need_to_shown\": false,\n    \"is_day_grand_rpt_need_shown\": false,\n    \"is_need_pink_box_shown\": false,\n    \"is_need_order_status_shown\": false,\n    \"is_need_role_wise_cash_rpt_shown\": false,\n    \"is_need_to_retailer_shown\": false,\n    \"is_need_grosswgt_print_shown\": false,\n    \"is_cus_fitem_pur_out_shown\": false,\n    \"is_cus_fitem_pur_in_shown\": false,\n    \"is_need_show_order_display_in_head_login\": false,\n    \"is_metal_stock_shown\": false\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Customer Touch User Mappings",
+            "item": [
+                {
+                    "name": "Create Mapping",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/customer-touch-user-mappings",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "customer-touch-user-mappings"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"user_id\": 1,\n    \"customer_touch_id\": 1,\n    \"is_active\": 1\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Mapping",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{auth_token}}",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/customer-touch-user-mappings/1",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "customer-touch-user-mappings",
+                                "1"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8000",
+            "type": "string"
+        },
+        {
+            "key": "auth_token",
+            "value": "",
+            "type": "string"
+        }
+    ]
 }

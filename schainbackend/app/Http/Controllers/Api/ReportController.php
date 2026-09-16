@@ -144,14 +144,16 @@ class ReportController extends Controller
             $targetUserId = $actingUserId;
 
             // Admin Override Check
-            // In Laravel, checking if user is admin usually involves role_id == 1 or checking role->role_name
+            // In Laravel, checking if user is admin usually involves role_id == 1 or checking role->role
             // Wait, we need to fetch the acting user to see if they are admin.
             $actingUser = \App\Models\UserDetail::find($actingUserId);
             
-            // Assuming role_id == 1 or role->role_name == 'ADMIN'
-            if ($actingUser && ($actingUser->role_id == 1 || strtoupper(optional($actingUser->role)->role_name) == 'ADMIN')) {
-                if ($request->filled('user_id')) {
-                    $targetUserId = $request->query('user_id');
+            // Assuming role_id == 1 or role->role == 'ADMIN' or 'HEAD'
+            if ($actingUser && ($actingUser->role_id == 1 || in_array(strtoupper(optional($actingUser->role)->role), ['ADMIN', 'HEAD']))) {
+                if ($request->filled('view_as')) {
+                    $targetUserId = (int) $request->query('view_as');
+                } elseif ($request->filled('user_id')) {
+                    $targetUserId = (int) $request->query('user_id');
                 }
             }
 

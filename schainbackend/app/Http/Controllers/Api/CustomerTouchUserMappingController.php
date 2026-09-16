@@ -81,4 +81,56 @@ class CustomerTouchUserMappingController extends Controller
             ], 500);
         }
     }
+    public function store(Request $request): JsonResponse
+    {
+        $request->validate([
+            'user_id' => 'required|integer',
+            'customer_touch_id' => 'required|integer',
+            'is_active' => 'boolean'
+        ]);
+
+        try {
+            $mapping = CustomerTouchUserMapping::create([
+                'user_id' => $request->user_id,
+                'customer_touch_id' => $request->customer_touch_id,
+                'is_active' => $request->is_active ?? 1
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Mapping created successfully',
+                'data' => $mapping
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create mapping',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function destroy($id): JsonResponse
+    {
+        try {
+            $mapping = CustomerTouchUserMapping::findOrFail($id);
+            $mapping->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Mapping deleted successfully'
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mapping not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete mapping',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
