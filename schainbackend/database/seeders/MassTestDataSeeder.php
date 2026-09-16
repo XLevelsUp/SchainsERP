@@ -22,6 +22,12 @@ class MassTestDataSeeder extends Seeder
             return;
         }
 
+        $item = Item::first();
+        if (!$item) {
+            $this->command->error('Missing items for test data.');
+            return;
+        }
+
         $stockInService = app(StockInService::class);
         $stockOutService = app(StockOutService::class);
 
@@ -34,7 +40,7 @@ class MassTestDataSeeder extends Seeder
                 'added_at' => $date->format('Y-m-d H:i:s'),
                 'items' => [
                     [
-                        'item_id' => 1,
+                        'item_id' => $item->item_id,
                         'grams' => rand(10, 50),
                         'touch' => 91.6,
                         'remarks' => "Mass test IN $i",
@@ -54,7 +60,7 @@ class MassTestDataSeeder extends Seeder
                     'added_at' => $date->format('Y-m-d H:i:s'),
                     'items' => [
                         [
-                            'item_id' => 1,
+                            'item_id' => $item->item_id,
                             'grams' => rand(1, 10),
                             'touch' => 91.6,
                             'remarks' => "Mass test OUT $i",
