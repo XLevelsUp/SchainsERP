@@ -94,7 +94,9 @@ Route::prefix('v1/stock')->middleware('auth:api')->group(function () {
     Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
     Route::post('numeric-waste-in', [StockDetailsController::class, 'postNumericWasteIn']);
     Route::post('auto-entry', [StockDetailsController::class, 'postAutoEntry']);
+    Route::get('reports/items-obcb/export', [StockDetailsController::class, 'exportHistoryItemsObcb']);
     Route::get('reports/items-obcb', [StockDetailsController::class, 'getHistoryItemsObcb']);
+    Route::get('reports/consolidated/export', [StockDetailsController::class, 'exportConsolidatedReport']);
     Route::get('reports/consolidated', [StockDetailsController::class, 'getConsolidatedReport']);
     Route::get('reports/id-wise', [StockDetailsController::class, 'getIdWiseReport']);
     Route::post('hide', [StockDetailsController::class, 'postHide']);
