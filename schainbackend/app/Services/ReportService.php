@@ -788,7 +788,7 @@ class ReportService
         $date = $params['date'] ?? null;
         $time = $params['time'] ?? null;
         $pageSize = $params['per_page'] ?? 50;
-        $itemId = $params['item_id'] ?? 2; // Default to 2 if not passed
+        $itemId = $params['item_id'] ?? 4; // Default to 4 if not passed
 
         $query = StockDetails::with(['givenBy'])
             ->where('given_to', $targetUserId)

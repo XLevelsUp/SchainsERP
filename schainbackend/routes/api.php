@@ -33,6 +33,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
 
         Route::apiResource('user-details', UserDetailController::class);
+        Route::apiResource('orders', \App\Http\Controllers\Api\OrderController::class);
         Route::apiResource('items', ItemController::class);
         Route::apiResource('fitem-boxes', FitemBoxController::class);
         Route::apiResource('roles', RoleController::class);
@@ -41,8 +42,10 @@ Route::prefix('v1')->group(function () {
         
         // Customer Touch User Mappings
         Route::get('customer-touch-user-mappings', [CustomerTouchUserMappingController::class, 'index']);
+        Route::post('customer-touch-user-mappings', [CustomerTouchUserMappingController::class, 'store']);
         Route::put('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'update']);
         Route::patch('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'update']);
+        Route::delete('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'destroy']);
         
         // Update CC
         Route::put('user-details/{id}/update-cc', [UserDetailController::class, 'updateCc']);

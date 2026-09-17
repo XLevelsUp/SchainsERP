@@ -60,6 +60,7 @@ class UserDetailController extends Controller
                     'id' => $user->user_id,
                     'full_name' => $user->name,
                     'type' => $user->role ? $user->role->role : null,
+                    'role' => $user->role ? $user->role->role : null,
                     'category_name' => $user->category_name,
                     'retailer_user_name' => 'Normal user',
                     'phone_number' => $user->phone_no,
@@ -215,6 +216,140 @@ class UserDetailController extends Controller
                 'sometimes|boolean',
 
             'is_otp_verified' =>
+                'sometimes|boolean',
+
+            'is_remainder_shown' =>
+                'sometimes|boolean',
+            'is_delivery_item_shown' =>
+                'sometimes|boolean',
+            'is_polish_needed' =>
+                'sometimes|boolean',
+            'is_wa_delivery_stock_needed' =>
+                'sometimes|boolean',
+            'is_polish_chk_need_shown' =>
+                'sometimes|boolean',
+            'is_delivery_chk_need_shown' =>
+                'sometimes|boolean',
+            'is_cashamt_thermal_shown' =>
+                'sometimes|boolean',
+            'is_customer_touch_need_shown' =>
+                'sometimes|boolean',
+            'is_complete_history_need_shown' =>
+                'sometimes|boolean',
+            'is_create_order_need_to_shown' =>
+                'sometimes|boolean',
+            'is_cash_mngmt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_freeze_entry_need_to_shown' =>
+                'sometimes|boolean',
+            'is_admin_login_otp_need_to_shown' =>
+                'sometimes|boolean',
+            'is_customer_cmts_need_to_shown' =>
+                'sometimes|boolean',
+            'is_outside_need_to_shown' =>
+                'sometimes|boolean',
+            'is_tally_need_to_shown' =>
+                'sometimes|boolean',
+            'is_die_num_search_need_to_shown' =>
+                'sometimes|boolean',
+            'is_con_box_rpt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_box_tot_rpt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_ob_cb_rpt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_gallery_need_to_shown' =>
+                'sometimes|boolean',
+            'is_worker_need_to_shown' =>
+                'sometimes|boolean',
+            'is_emp_group_task_need_to_shown' =>
+                'sometimes|boolean',
+            'is_day_grand_rpt_need_shown' =>
+                'sometimes|boolean',
+            'is_need_pink_box_shown' =>
+                'sometimes|boolean',
+            'is_need_order_status_shown' =>
+                'sometimes|boolean',
+            'is_need_role_wise_cash_rpt_shown' =>
+                'sometimes|boolean',
+            'is_need_to_retailer_shown' =>
+                'sometimes|boolean',
+            'is_need_grosswgt_print_shown' =>
+                'sometimes|boolean',
+            'is_cus_fitem_pur_out_shown' =>
+                'sometimes|boolean',
+            'is_cus_fitem_pur_in_shown' =>
+                'sometimes|boolean',
+            'is_need_show_order_display_in_head_login' =>
+                'sometimes|boolean',
+            'is_metal_stock_shown' =>
+                'sometimes|boolean',
+
+            'is_remainder_shown' =>
+                'sometimes|boolean',
+            'is_delivery_item_shown' =>
+                'sometimes|boolean',
+            'is_polish_needed' =>
+                'sometimes|boolean',
+            'is_wa_delivery_stock_needed' =>
+                'sometimes|boolean',
+            'is_polish_chk_need_shown' =>
+                'sometimes|boolean',
+            'is_delivery_chk_need_shown' =>
+                'sometimes|boolean',
+            'is_cashamt_thermal_shown' =>
+                'sometimes|boolean',
+            'is_customer_touch_need_shown' =>
+                'sometimes|boolean',
+            'is_complete_history_need_shown' =>
+                'sometimes|boolean',
+            'is_create_order_need_to_shown' =>
+                'sometimes|boolean',
+            'is_cash_mngmt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_freeze_entry_need_to_shown' =>
+                'sometimes|boolean',
+            'is_admin_login_otp_need_to_shown' =>
+                'sometimes|boolean',
+            'is_customer_cmts_need_to_shown' =>
+                'sometimes|boolean',
+            'is_outside_need_to_shown' =>
+                'sometimes|boolean',
+            'is_tally_need_to_shown' =>
+                'sometimes|boolean',
+            'is_die_num_search_need_to_shown' =>
+                'sometimes|boolean',
+            'is_con_box_rpt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_box_tot_rpt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_ob_cb_rpt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_gallery_need_to_shown' =>
+                'sometimes|boolean',
+            'is_worker_need_to_shown' =>
+                'sometimes|boolean',
+            'is_emp_group_task_need_to_shown' =>
+                'sometimes|boolean',
+            'is_day_grand_rpt_need_shown' =>
+                'sometimes|boolean',
+            'is_need_pink_box_shown' =>
+                'sometimes|boolean',
+            'is_need_order_status_shown' =>
+                'sometimes|boolean',
+            'is_need_role_wise_cash_rpt_shown' =>
+                'sometimes|boolean',
+            'is_need_to_retailer_shown' =>
+                'sometimes|boolean',
+            'is_need_grosswgt_print_shown' =>
+                'sometimes|boolean',
+            'is_cus_fitem_pur_out_shown' =>
+                'sometimes|boolean',
+            'is_cus_fitem_pur_in_shown' =>
+                'sometimes|boolean',
+            'is_need_show_order_display_in_head_login' =>
+                'sometimes|boolean',
+            'is_metal_stock_shown' =>
                 'sometimes|boolean',
 
 
@@ -394,6 +529,73 @@ class UserDetailController extends Controller
                             'is_otp_verified',
                             false
                         ),
+
+                    'is_remainder_shown' =>
+                        $request->input('is_remainder_shown', false),
+                    'is_delivery_item_shown' =>
+                        $request->input('is_delivery_item_shown', false),
+                    'is_polish_needed' =>
+                        $request->input('is_polish_needed', false),
+                    'is_wa_delivery_stock_needed' =>
+                        $request->input('is_wa_delivery_stock_needed', false),
+                    'is_polish_chk_need_shown' =>
+                        $request->input('is_polish_chk_need_shown', false),
+                    'is_delivery_chk_need_shown' =>
+                        $request->input('is_delivery_chk_need_shown', false),
+                    'is_cashamt_thermal_shown' =>
+                        $request->input('is_cashamt_thermal_shown', false),
+                    'is_customer_touch_need_shown' =>
+                        $request->input('is_customer_touch_need_shown', false),
+                    'is_complete_history_need_shown' =>
+                        $request->input('is_complete_history_need_shown', false),
+                    'is_create_order_need_to_shown' =>
+                        $request->input('is_create_order_need_to_shown', false),
+                    'is_cash_mngmt_need_to_shown' =>
+                        $request->input('is_cash_mngmt_need_to_shown', false),
+                    'is_freeze_entry_need_to_shown' =>
+                        $request->input('is_freeze_entry_need_to_shown', false),
+                    'is_admin_login_otp_need_to_shown' =>
+                        $request->input('is_admin_login_otp_need_to_shown', false),
+                    'is_customer_cmts_need_to_shown' =>
+                        $request->input('is_customer_cmts_need_to_shown', false),
+                    'is_outside_need_to_shown' =>
+                        $request->input('is_outside_need_to_shown', false),
+                    'is_tally_need_to_shown' =>
+                        $request->input('is_tally_need_to_shown', false),
+                    'is_die_num_search_need_to_shown' =>
+                        $request->input('is_die_num_search_need_to_shown', false),
+                    'is_con_box_rpt_need_to_shown' =>
+                        $request->input('is_con_box_rpt_need_to_shown', false),
+                    'is_box_tot_rpt_need_to_shown' =>
+                        $request->input('is_box_tot_rpt_need_to_shown', false),
+                    'is_ob_cb_rpt_need_to_shown' =>
+                        $request->input('is_ob_cb_rpt_need_to_shown', false),
+                    'is_gallery_need_to_shown' =>
+                        $request->input('is_gallery_need_to_shown', false),
+                    'is_worker_need_to_shown' =>
+                        $request->input('is_worker_need_to_shown', false),
+                    'is_emp_group_task_need_to_shown' =>
+                        $request->input('is_emp_group_task_need_to_shown', false),
+                    'is_day_grand_rpt_need_shown' =>
+                        $request->input('is_day_grand_rpt_need_shown', false),
+                    'is_need_pink_box_shown' =>
+                        $request->input('is_need_pink_box_shown', false),
+                    'is_need_order_status_shown' =>
+                        $request->input('is_need_order_status_shown', false),
+                    'is_need_role_wise_cash_rpt_shown' =>
+                        $request->input('is_need_role_wise_cash_rpt_shown', false),
+                    'is_need_to_retailer_shown' =>
+                        $request->input('is_need_to_retailer_shown', false),
+                    'is_need_grosswgt_print_shown' =>
+                        $request->input('is_need_grosswgt_print_shown', false),
+                    'is_cus_fitem_pur_out_shown' =>
+                        $request->input('is_cus_fitem_pur_out_shown', false),
+                    'is_cus_fitem_pur_in_shown' =>
+                        $request->input('is_cus_fitem_pur_in_shown', false),
+                    'is_need_show_order_display_in_head_login' =>
+                        $request->input('is_need_show_order_display_in_head_login', false),
+                    'is_metal_stock_shown' =>
+                        $request->input('is_metal_stock_shown', false),
 
                     'added_at' =>
                         now(),
@@ -832,6 +1034,73 @@ class UserDetailController extends Controller
 
                     'is_otp_verified' =>
                         'sometimes|boolean',
+
+            'is_remainder_shown' =>
+                'sometimes|boolean',
+            'is_delivery_item_shown' =>
+                'sometimes|boolean',
+            'is_polish_needed' =>
+                'sometimes|boolean',
+            'is_wa_delivery_stock_needed' =>
+                'sometimes|boolean',
+            'is_polish_chk_need_shown' =>
+                'sometimes|boolean',
+            'is_delivery_chk_need_shown' =>
+                'sometimes|boolean',
+            'is_cashamt_thermal_shown' =>
+                'sometimes|boolean',
+            'is_customer_touch_need_shown' =>
+                'sometimes|boolean',
+            'is_complete_history_need_shown' =>
+                'sometimes|boolean',
+            'is_create_order_need_to_shown' =>
+                'sometimes|boolean',
+            'is_cash_mngmt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_freeze_entry_need_to_shown' =>
+                'sometimes|boolean',
+            'is_admin_login_otp_need_to_shown' =>
+                'sometimes|boolean',
+            'is_customer_cmts_need_to_shown' =>
+                'sometimes|boolean',
+            'is_outside_need_to_shown' =>
+                'sometimes|boolean',
+            'is_tally_need_to_shown' =>
+                'sometimes|boolean',
+            'is_die_num_search_need_to_shown' =>
+                'sometimes|boolean',
+            'is_con_box_rpt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_box_tot_rpt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_ob_cb_rpt_need_to_shown' =>
+                'sometimes|boolean',
+            'is_gallery_need_to_shown' =>
+                'sometimes|boolean',
+            'is_worker_need_to_shown' =>
+                'sometimes|boolean',
+            'is_emp_group_task_need_to_shown' =>
+                'sometimes|boolean',
+            'is_day_grand_rpt_need_shown' =>
+                'sometimes|boolean',
+            'is_need_pink_box_shown' =>
+                'sometimes|boolean',
+            'is_need_order_status_shown' =>
+                'sometimes|boolean',
+            'is_need_role_wise_cash_rpt_shown' =>
+                'sometimes|boolean',
+            'is_need_to_retailer_shown' =>
+                'sometimes|boolean',
+            'is_need_grosswgt_print_shown' =>
+                'sometimes|boolean',
+            'is_cus_fitem_pur_out_shown' =>
+                'sometimes|boolean',
+            'is_cus_fitem_pur_in_shown' =>
+                'sometimes|boolean',
+            'is_need_show_order_display_in_head_login' =>
+                'sometimes|boolean',
+            'is_metal_stock_shown' =>
+                'sometimes|boolean',
                 ]
             );
 
@@ -897,6 +1166,39 @@ class UserDetailController extends Controller
                     'is_cash_cal_enabled',
                     'is_wastage_cal_enabled',
                     'is_otp_verified',
+                    'is_remainder_shown',
+                    'is_delivery_item_shown',
+                    'is_polish_needed',
+                    'is_wa_delivery_stock_needed',
+                    'is_polish_chk_need_shown',
+                    'is_delivery_chk_need_shown',
+                    'is_cashamt_thermal_shown',
+                    'is_customer_touch_need_shown',
+                    'is_complete_history_need_shown',
+                    'is_create_order_need_to_shown',
+                    'is_cash_mngmt_need_to_shown',
+                    'is_freeze_entry_need_to_shown',
+                    'is_admin_login_otp_need_to_shown',
+                    'is_customer_cmts_need_to_shown',
+                    'is_outside_need_to_shown',
+                    'is_tally_need_to_shown',
+                    'is_die_num_search_need_to_shown',
+                    'is_con_box_rpt_need_to_shown',
+                    'is_box_tot_rpt_need_to_shown',
+                    'is_ob_cb_rpt_need_to_shown',
+                    'is_gallery_need_to_shown',
+                    'is_worker_need_to_shown',
+                    'is_emp_group_task_need_to_shown',
+                    'is_day_grand_rpt_need_shown',
+                    'is_need_pink_box_shown',
+                    'is_need_order_status_shown',
+                    'is_need_role_wise_cash_rpt_shown',
+                    'is_need_to_retailer_shown',
+                    'is_need_grosswgt_print_shown',
+                    'is_cus_fitem_pur_out_shown',
+                    'is_cus_fitem_pur_in_shown',
+                    'is_need_show_order_display_in_head_login',
+                    'is_metal_stock_shown',
                 ];
 
 
@@ -918,7 +1220,40 @@ class UserDetailController extends Controller
                                     'is_gold_cal_enabled',
                                     'is_cash_cal_enabled',
                                     'is_wastage_cal_enabled',
-                                    'is_otp_verified'
+                                    'is_otp_verified',
+                                    'is_remainder_shown',
+                                    'is_delivery_item_shown',
+                                    'is_polish_needed',
+                                    'is_wa_delivery_stock_needed',
+                                    'is_polish_chk_need_shown',
+                                    'is_delivery_chk_need_shown',
+                                    'is_cashamt_thermal_shown',
+                                    'is_customer_touch_need_shown',
+                                    'is_complete_history_need_shown',
+                                    'is_create_order_need_to_shown',
+                                    'is_cash_mngmt_need_to_shown',
+                                    'is_freeze_entry_need_to_shown',
+                                    'is_admin_login_otp_need_to_shown',
+                                    'is_customer_cmts_need_to_shown',
+                                    'is_outside_need_to_shown',
+                                    'is_tally_need_to_shown',
+                                    'is_die_num_search_need_to_shown',
+                                    'is_con_box_rpt_need_to_shown',
+                                    'is_box_tot_rpt_need_to_shown',
+                                    'is_ob_cb_rpt_need_to_shown',
+                                    'is_gallery_need_to_shown',
+                                    'is_worker_need_to_shown',
+                                    'is_emp_group_task_need_to_shown',
+                                    'is_day_grand_rpt_need_shown',
+                                    'is_need_pink_box_shown',
+                                    'is_need_order_status_shown',
+                                    'is_need_role_wise_cash_rpt_shown',
+                                    'is_need_to_retailer_shown',
+                                    'is_need_grosswgt_print_shown',
+                                    'is_cus_fitem_pur_out_shown',
+                                    'is_cus_fitem_pur_in_shown',
+                                    'is_need_show_order_display_in_head_login',
+                                    'is_metal_stock_shown',
                                 ]
                             )
                         ) {
