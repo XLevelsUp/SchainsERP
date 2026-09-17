@@ -33,6 +33,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
 
         Route::apiResource('user-details', UserDetailController::class);
+        Route::apiResource('orders', \App\Http\Controllers\Api\OrderController::class);
         Route::apiResource('items', ItemController::class);
         Route::apiResource('fitem-boxes', FitemBoxController::class);
         Route::apiResource('roles', RoleController::class);
