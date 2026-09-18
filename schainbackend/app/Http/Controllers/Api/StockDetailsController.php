@@ -584,9 +584,10 @@ class StockDetailsController extends Controller
                 ], 400);
             }
 
-            // Validate that the requested item is actually a "metal"
+            // Validate that the requested item is mapped as a metal popup item
             $item = Item::find($itemId);
-            if (!$item || strtolower($item->item_name) !== 'metal') {
+            $metalItemIds = \App\Models\SystemSetting::get('metal_popup_items', []);
+            if (!$item || !in_array($item->item_id, $metalItemIds)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Selected item is not valid for metal selection'

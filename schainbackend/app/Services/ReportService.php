@@ -800,11 +800,11 @@ class ReportService
         
         $itemId = $params['item_id'] ?? null;
         if (!$itemId) {
-            $metalItem = \App\Models\Item::whereRaw('LOWER(item_name) = ?', ['metal'])->first();
-            if (!$metalItem) {
-                throw new \Exception('Metal item not found. Please provide an item_id or ensure a Metal item exists in the database.');
+            $metalItemIds = \App\Models\SystemSetting::get('live_metal_report_items', []);
+            if (empty($metalItemIds)) {
+                throw new \Exception('No items mapped for Live Metal Report. Please configure live_metal_report_items in settings or provide an item_id.');
             }
-            $itemId = $metalItem->item_id;
+            $itemId = $metalItemIds[0];
         }
 
         $query = StockDetails::with(['givenBy'])

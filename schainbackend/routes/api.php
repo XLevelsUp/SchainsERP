@@ -81,6 +81,11 @@ Route::prefix('v1')->group(function () {
         Route::post('cash-txn-details/auto-entry', [CashTxnDetailController::class, 'autoEntry']);
         Route::post('cash-to-gold', [CashToGoldController::class, 'store']);
         Route::post('gold-to-cash', [GoldToCashController::class, 'store']);
+        
+        // System Settings
+        Route::apiResource('settings', \App\Http\Controllers\Api\SystemSettingController::class)->parameters([
+            'settings' => 'key'
+        ]);
     });
 });
 
