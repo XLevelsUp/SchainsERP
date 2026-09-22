@@ -61,12 +61,15 @@ import type {
 | waste_id/to_waste_id are never sent — they must exist in wastage_details
 | and no endpoint lists that table (same gap StockOutPanel documents).
 |
-| KNOWN BACKEND GAP: the date/time below is validated but never applied.
-| AutoEntryRequest validates items.*.added_at, yet executeAutoTransfer only
-| reads a TOP-LEVEL $data['added_at'] which has no validation rule, so
-| $request->validated() strips it and every row is stamped now(). We send
-| the per-row value anyway so the screen is correct the moment that is
-| fixed. Tracked in PENDING_WORK.md.
+| Backdating works as of PR #42, which added the missing top-level added_at
+| rule to AutoEntryRequest. Before that the key was stripped by validated()
+| and every entry landed on now().
+|
+| One caveat survives: executeAutoTransfer reads a single top-level
+| $data['added_at'] and stamps every row it writes with it — items.*.added_at
+| is validated but never read. So one date covers the whole entry. The
+| payload builder sends the first row's value and the notice below warns when
+| the rows disagree, rather than quietly discarding the others.
 |--------------------------------------------------------------------------
 */
 
@@ -179,6 +182,14 @@ const isSaving = ref(false)
 const fieldErrors = ref<Record<string, string>>({})
 
 const meta = computed(() => TYPE_META[form.type])
+
+// The service stamps the whole entry with one timestamp (see the header
+// note), so differing row dates cannot all be honoured. Say so rather than
+// letting the operator believe rows 2+ kept their own date.
+const hasMixedDates = computed(() => {
+  const first = rows.value[0]?.added_at
+  return rows.value.length > 1 && rows.value.some((row) => row.added_at !== first)
+})
 
 const users = ref<UserDetailListItem[]>([])
 const items = ref<Item[]>([])
@@ -454,6 +465,14 @@ onMounted(loadLookups)
           </BaseButton>
         </div>
         <p v-if="fieldErrors.items" class="mb-2 text-sm text-red-600">{{ fieldErrors.items }}</p>
+
+        <p
+          v-if="hasMixedDates"
+          class="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        >
+          Rows have different dates. This entry is stamped with the first row's date and time —
+          the backend applies one timestamp to the whole entry.
+        </p>
 
         <div
           v-for="(row, index) in rows"

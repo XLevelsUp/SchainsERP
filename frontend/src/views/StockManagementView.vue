@@ -21,6 +21,7 @@ import ItemConversionModal from '@/components/stock/ItemConversionModal.vue'
 import GmsOutModal from '@/components/stock/GmsOutModal.vue'
 import GmsInModal from '@/components/stock/GmsInModal.vue'
 import NumericWastageInModal from '@/components/stock/NumericWastageInModal.vue'
+import CashOutModal from '@/components/stock/CashOutModal.vue'
 import type { Item, UserDetailListItem } from '@/types'
 
 /*
@@ -39,16 +40,19 @@ import type { Item, UserDetailListItem } from '@/types'
 | had no frontend before at all: Item Change, Item Conversion, and
 | Numeric Wastage Out.
 |
-| Known gaps (backend, not fixed here — see project rules):
-|  - Item Change / Item Conversion need stock_in_id (an existing stock
-|    lot); no endpoint lists a user's lots yet, so it's a plain numeric
-|    input for now.
-|  - POST /v1/stock/hide (route added in PR #31, "postHide" controller
-|    method) is BROKEN: it type-hints HideStockRequest, but that class
-|    doesn't exist anywhere in schainbackend — every call 500s with
-|    "Class HideStockRequest not found". Do NOT wire a "Hide" action to
-|    this endpoint until backend adds the missing FormRequest. Flagged
-|    to the backend team; re-check on next pull.
+| Both of the long-standing gaps here closed in PR #42 — re-verified
+| against the backend source on 2026-09-15 rather than trusted:
+|  - Item Change / Item Conversion can now attach a real stock_in_id for
+|    ANY item, not just Metal, via GET /stock-details/available-lots. Both
+|    modals open the shared lot picker; see ItemChangeModal's comment.
+|  - POST /v1/stock/hide is reachable and HideStockRequest now exists
+|    (app/Http/Requests/HideStockRequest.php, rules: stock_ids array of
+|    ids that must exist). Wired to the selection checkboxes in
+|    TransactionHistoryPanel. The earlier note here said the class was
+|    missing and every call 500'd; that was true when written and is not
+|    any more.
+|  - POST /v1/stock/cash-out likewise went from "implemented with no
+|    route" to routed — CashOutModal below.
 |
 | "Add User" / "Add Retailer" (header actions) both open AddUserModal —
 | there's no separate Retailer entity in the backend, just a user that
@@ -188,6 +192,7 @@ type ActiveModal =
   | 'gms-out'
   | 'gms-in'
   | 'numeric-wastage-in'
+  | 'cash-out'
   | null
 
 const activeModal = ref<ActiveModal>(null)
@@ -225,6 +230,13 @@ function handleStockChanged() {
 function handleModalSaved() {
   activeModal.value = null
   handleStockChanged()
+}
+
+// Cash Out writes a cash_txn_details row, not stock, so the stock panels
+// have nothing new to show — only the cash figure in the summary moves.
+function handleCashOutSaved() {
+  activeModal.value = null
+  headStockPanelRef.value?.refresh()
 }
 
 function handleClearAll() {
@@ -328,6 +340,13 @@ async function handleSubmitAll() {
             @click="handleAddNumericWastageOutRow"
           >
             Numeric Wastage Out
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-slate-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
+            @click="openModal('cash-out')"
+          >
+            Cash Out
           </button>
         </div>
         <StockOutPanel
@@ -475,5 +494,6 @@ async function handleSubmitAll() {
       @close="closeModal"
       @saved="handleModalSaved"
     />
+    <CashOutModal v-if="activeModal === 'cash-out'" :users="users" @close="closeModal" @saved="handleCashOutSaved" />
   </div>
 </template>

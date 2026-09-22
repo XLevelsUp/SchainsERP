@@ -26,3 +26,12 @@ export interface AuthSession {
   user: AuthUser
   token: string
 }
+
+// Mirrors the `data` envelope of AuthController::me() (PR #38).
+//
+// The same four fields login returns, plus `is_active`. Login now rejects a
+// deactivated account outright (403), but the flag can flip while a session
+// is already open, so it comes back here too.
+export interface AuthMeResult extends AuthUser {
+  is_active: boolean
+}

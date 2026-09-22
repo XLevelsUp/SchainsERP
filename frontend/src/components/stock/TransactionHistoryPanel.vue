@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ChevronLeft, ChevronRight, Printer } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Printer, EyeOff } from 'lucide-vue-next'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 import { stockHistoryApi } from '@/lib/stockHistoryApi'
+import { stockApi } from '@/lib/stockApi'
 import { ApiError } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 import type { Item, StockHistoryRow, StockHistoryTotals } from '@/types'
 
 /*
@@ -23,12 +26,25 @@ import type { Item, StockHistoryRow, StockHistoryTotals } from '@/types'
 | single-transaction thermal print for cash entries) — it triggers a plain
 | browser print for now, same stand-in as HeadStockSummaryPanel's print
 | button, until/unless a real print endpoint is requested.
+|
+| Hide (POST /stock/hide) lives here because this is the only screen that
+| lists stock_ids. It is NOT a delete: the rows stay in the ledger and keep
+| affecting balances, they just stop being listed by getHistory and
+| getAvailableMetals, both of which filter is_hided.
+|
+| Two things about it the operator has to be told before confirming, because
+| neither is reversible from this app:
+|   - hideStocks also hides the PARENT lot of any row that has a stock_in_id,
+|     so hiding one child can take a whole lot out of the metal picker.
+|   - there is no unhide endpoint. Nothing in the API sets is_hided back to
+|     false, so this is one-way until the backend adds one.
 |--------------------------------------------------------------------------
 */
 
 const props = defineProps<{ items: Item[]; employeeId?: number | null }>()
 
 const auth = useAuthStore()
+const toast = useToastStore()
 
 const PER_PAGE = 10
 
@@ -74,6 +90,10 @@ async function load() {
   if (!auth.user) return
   isLoading.value = true
   loadError.value = ''
+  // A selection only ever refers to rows currently on screen. Dropping it on
+  // every load stops a filter or page change from carrying hidden-away ids
+  // into the next Hide.
+  selectedIds.value = new Set()
   try {
     const result = await stockHistoryApi.list({
       // Report from the picked user's perspective when one is selected — the
@@ -114,6 +134,54 @@ function prevPage() {
 function nextPage() {
   if (page.value < lastPage.value) page.value += 1
 }
+/*
+| Hide selection. Keyed by stock id rather than row index so it survives a
+| re-sort, and cleared on every load so a selection can never outlive the
+| page it was made on.
+*/
+const selectedIds = ref<Set<number>>(new Set())
+const isHiding = ref(false)
+const confirmingHide = ref(false)
+
+const selectedCount = computed(() => selectedIds.value.size)
+const allOnPageSelected = computed(
+  () => rows.value.length > 0 && rows.value.every((row) => selectedIds.value.has(row.id)),
+)
+
+function toggleRow(id: number) {
+  // Reassigned rather than mutated — a Set mutation is not reactive.
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function toggleAllOnPage() {
+  const next = new Set(selectedIds.value)
+  if (allOnPageSelected.value) rows.value.forEach((row) => next.delete(row.id))
+  else rows.value.forEach((row) => next.add(row.id))
+  selectedIds.value = next
+}
+
+async function confirmHide() {
+  if (isHiding.value || selectedIds.value.size === 0) return
+  isHiding.value = true
+  try {
+    await stockApi.postHideStocks([...selectedIds.value])
+    toast.show(`Hid ${selectedIds.value.size} transaction(s).`, 'success')
+    confirmingHide.value = false
+    selectedIds.value = new Set()
+    await load()
+  } catch (err) {
+    toast.show(
+      err instanceof ApiError ? err.message : 'Failed to hide the selected transactions.',
+      'error',
+    )
+  } finally {
+    isHiding.value = false
+  }
+}
+
 function printPanel() {
   window.print()
 }
@@ -125,14 +193,44 @@ defineExpose({ refresh: load })
   <BaseCard :padded="false">
     <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
       <h2 class="text-sm font-semibold text-slate-900">Transaction History</h2>
-      <button
-        type="button"
-        class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-        aria-label="Print transaction history"
-        @click="printPanel"
-      >
-        <Printer class="h-4 w-4" />
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          v-if="selectedCount > 0"
+          type="button"
+          class="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+          @click="confirmingHide = true"
+        >
+          <EyeOff class="h-3.5 w-3.5" /> Hide {{ selectedCount }} selected
+        </button>
+        <button
+          type="button"
+          class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          aria-label="Print transaction history"
+          @click="printPanel"
+        >
+          <Printer class="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+
+    <div
+      v-if="confirmingHide"
+      class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900"
+    >
+      <p class="font-medium">Hide {{ selectedCount }} transaction(s)?</p>
+      <p class="mt-1">
+        They stay in the ledger and keep affecting balances — they just stop appearing in this
+        history and in the metal picker. Any selected row drawn from a parent lot hides that lot
+        too. <strong>There is no way to un-hide from this app.</strong>
+      </p>
+      <div class="mt-2 flex items-center gap-2">
+        <BaseButton variant="secondary" :disabled="isHiding" @click="confirmingHide = false">
+          Cancel
+        </BaseButton>
+        <BaseButton :disabled="isHiding" @click="confirmHide">
+          {{ isHiding ? 'Hiding…' : 'Hide them' }}
+        </BaseButton>
+      </div>
     </div>
 
     <div class="grid gap-2 border-b border-slate-200 px-4 py-3 sm:grid-cols-4">
@@ -161,7 +259,7 @@ defineExpose({ refresh: load })
         <table class="min-w-full text-sm">
           <thead class="bg-slate-50">
             <tr class="border-b border-slate-200 font-semibold text-slate-900">
-              <td colspan="4" class="px-4 py-2">Total</td>
+              <td colspan="5" class="px-4 py-2">Total</td>
               <td class="px-3 py-2 text-right tabular-nums">{{ formatNumber(totals.grams) }}</td>
               <td class="px-3 py-2 text-right tabular-nums">{{ formatNumber(totals.pcs) }}</td>
               <td class="px-3 py-2"></td>
@@ -170,6 +268,16 @@ defineExpose({ refresh: load })
               <td colspan="3" class="px-4 py-2"></td>
             </tr>
             <tr class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+              <th scope="col" class="w-8 px-3 py-2 text-left">
+                <input
+                  type="checkbox"
+                  class="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                  aria-label="Select all on this page"
+                  :checked="allOnPageSelected"
+                  :disabled="rows.length === 0"
+                  @change="toggleAllOnPage"
+                />
+              </th>
               <th scope="col" class="px-4 py-2 text-left">Sno</th>
               <th scope="col" class="px-3 py-2 text-left">ID</th>
               <th scope="col" class="px-3 py-2 text-left">Item</th>
@@ -186,11 +294,25 @@ defineExpose({ refresh: load })
           </thead>
           <tbody class="divide-y divide-slate-100">
             <tr v-if="rows.length === 0">
-              <td colspan="12" class="px-4 py-8 text-center text-slate-500">
+              <td colspan="13" class="px-4 py-8 text-center text-slate-500">
                 No transactions recorded yet.
               </td>
             </tr>
-            <tr v-for="(row, index) in rows" :key="row.id" class="hover:bg-slate-50">
+            <tr
+              v-for="(row, index) in rows"
+              :key="row.id"
+              class="hover:bg-slate-50"
+              :class="selectedIds.has(row.id) ? 'bg-brand-50/60' : ''"
+            >
+              <td class="px-3 py-2">
+                <input
+                  type="checkbox"
+                  class="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                  :aria-label="`Select transaction ${row.id}`"
+                  :checked="selectedIds.has(row.id)"
+                  @change="toggleRow(row.id)"
+                />
+              </td>
               <td class="px-4 py-2 text-slate-500">{{ (page - 1) * PER_PAGE + index + 1 }}</td>
               <td class="px-3 py-2 text-slate-500">{{ row.id }}</td>
               <td class="px-3 py-2 text-slate-700">{{ row.item_name || '—' }}</td>

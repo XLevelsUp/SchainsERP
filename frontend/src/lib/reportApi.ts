@@ -28,6 +28,9 @@ function buildQuery(params: CashTransactionReportQuery): string {
 
 function buildLiveMetalQuery(params: LiveMetalBalanceQuery): string {
   const qs = new URLSearchParams()
+  // Always sent by this app — the backend's default is item_id 2, which is
+  // not the Metal item in this dataset. See types/liveMetalBalance.ts.
+  if (params.item_id !== undefined) qs.set('item_id', String(params.item_id))
   if (params.date) qs.set('date', params.date)
   if (params.time) qs.set('time', params.time)
   if (params.per_page !== undefined) qs.set('per_page', String(params.per_page))

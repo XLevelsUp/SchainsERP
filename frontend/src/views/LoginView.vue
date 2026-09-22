@@ -23,6 +23,10 @@ const errors = reactive({
 })
 
 const formError = ref('')
+// A deactivated account (403, added in PR #38) is not a typo the operator can
+// correct by trying again, so it reads as a notice rather than a form error.
+// Anything else — wrong credentials, server down — stays a plain error.
+const isAccountDisabled = ref(false)
 const isSubmitting = ref(false)
 
 function validate(): boolean {
@@ -50,6 +54,7 @@ function safeRedirect(value: unknown): string {
 
 async function handleSubmit() {
   formError.value = ''
+  isAccountDisabled.value = false
   if (!validate()) return
   // Guard against a double submit racing two logins against each other.
   if (isSubmitting.value) return
@@ -66,6 +71,7 @@ async function handleSubmit() {
     router.push(safeRedirect(route.query.redirect))
   } catch (err) {
     formError.value = err instanceof ApiError ? err.message : 'Sign in failed.'
+    isAccountDisabled.value = err instanceof ApiError && err.status === 403
   } finally {
     isSubmitting.value = false
   }
@@ -86,7 +92,12 @@ async function handleSubmit() {
 
     <div
       v-if="formError"
-      class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+      class="mb-4 rounded-lg border px-4 py-3 text-sm"
+      :class="
+        isAccountDisabled
+          ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-red-200 bg-red-50 text-red-700'
+      "
     >
       {{ formError }}
     </div>

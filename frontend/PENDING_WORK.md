@@ -3,12 +3,69 @@
 Living tracker for the frontend team. Updated as items land — tick things off
 here rather than opening a new doc.
 
-**Last updated:** 2026-09-11
-**Backend baseline:** `a55b7cc` (PR #37 — phone book, one day action, token TTLs)
+**Last updated:** 2026-09-16
+**Backend baseline:** `2e11345` (PR #42 — routes for hide/cash-out/me/available-lots)
 
 Every claim below was verified against backend source at that commit, not
 against the API doc. Where the two disagree, the source wins and the
 discrepancy is listed in [§3](#3-api-doc-corrections).
+
+### PR #38–#42 pass — 2026-09-16
+
+> #### 🔴 READ FIRST — two unauthenticated routes are live in production
+>
+> PR #38 added `GET /run-seeders` and `GET /run-migrations` to
+> `routes/web.php`, outside every middleware group. PR #41 patched them but
+> left them public. They are reachable **right now** on
+> `https://api.lensnstories.com`.
+>
+> `/run-seeders` runs `DatabaseSeeder`, which since PR #40 calls
+> `MassTestDataSeeder` — 20 stock-IN plus 20 stock-OUT transactions with
+> `rand()` gram amounts, pushed through the real `StockInService` /
+> `StockOutService`. So each hit inserts 40 fabricated gold movements into
+> the live ledger and shifts `grams_grand_total` / `purity_grand_total` on
+> the affected users.
+>
+> The file's own comment says *"These are safe — seeders use
+> firstOrCreate/updateOrCreate so no data is ever deleted or overwritten."*
+> Nothing is deleted; that is not the risk. The risk is insertion.
+>
+> They are **GET** routes, so a crawler, a browser prefetch, or an
+> `<img src>` on any page fires them. No CSRF token applies to GET. Both
+> handlers also return `$e->getTraceAsString()` on failure.
+>
+> **Deliberately not probed from here** — a single request would have run
+> the seeders against production. Existence is from source, not a live hit.
+>
+> **Worse than the ledger risk:** `UserDetailSeeder` creates `head_admin`
+> (role_id 3, **HEAD**) and three others, all with `Hash::make('password')`.
+> Checked against the live Render database on 2026-09-16 — **all four exist
+> in production already, along with `demo_head`, and all five accept the
+> password `password`.** Two of them are HEAD role. That is an open door
+> right now, independently of the route.
+>
+> **Asks, in order: delete both routes; then rotate or delete those five
+> accounts.** Neither is frontend-fixable. Full detail at [#28](#28).
+
+Backend changes across the five PRs, verified against source:
+
+| PR | Change |
+|---|---|
+| #38 | `is_active` blocked at login (**403**) · `GET /me` added · per-table seeders · the two web routes above |
+| #39 | Postgres sequence reset before seeding |
+| #40 | `no_of_pcs` on `stock_in_details` · `getAvailableStockLots` · `MassTestDataSeeder` · removed 8 leftover duplicate oauth migrations |
+| #41 | Patched the web routes |
+| #42 | Registered `/me`, `available-lots`, `hide`, `cash-out` · top-level `added_at` rule on Auto Entry · `item_id` parameterised on Live Metal Balance |
+
+**All four newly-routed methods exist** (`AuthController::me`,
+`StockDetailsController::getAvailableStockLots`, `postHide`, `postCash`),
+and `HideStockRequest`/`CashOutRequest` both exist too. This is the first
+pull in a while with no route pointing at a missing class.
+
+**Six asks closed by these PRs: #3, #4, #5, #6, #7, #8.** #17 is closed for
+our screens but not properly fixed — see its entry. Frontends for all of it
+shipped in the same pass ([§1](#1-frontend-work)), and five new asks came
+out of reading the code — [#28–#32](#28).
 
 ### PR #37 pass — 2026-09-11
 
@@ -180,10 +237,51 @@ Practical consequences for us:
 | Stock user picker hides the signed-in operator | `components/stock/UserPickerPanel.vue` |
 | One Day Action report (PR #37) | `views/OneDayActionView.vue`, `types/oneDayAction.ts`, `lib/reportApi.ts` |
 | Phone Book — read-only directory (PR #37) | `views/PhoneBookView.vue`, `types/phoneBook.ts`, `lib/phoneBookApi.ts` |
+| Session validation on boot — `GET /me`, refreshes the cached user, signs out a deactivated one (PR #38) | `lib/authApi.ts`, `stores/auth.ts` (`validateSession`), `main.ts` |
+| Deactivated-account 403 reads as a notice, not a retryable form error (PR #38) | `views/LoginView.vue` |
+| Auto Entry backdating actually applies — top-level `added_at` now sent (PR #42) | `lib/stockApi.ts` (`toAutoEntryPayload`), `views/StockAutoEntryView.vue` |
+| Live Metal Balance reports the real Metal item — resolved by name, always sent (PR #42) | `views/LiveMetalBalanceView.vue`, `lib/reportApi.ts`, `types/liveMetalBalance.ts` |
+| Lot picking for **any** item in Item Change and Item Conversion (PR #42) | `lib/availableLotsApi.ts`, `types/availableLot.ts`, `components/stock/MetalPickerModal.vue` (`source` prop), `ItemChangeModal.vue`, `ItemConversionModal.vue` |
+| Hide transactions — row selection + confirm (PR #42) | `components/stock/TransactionHistoryPanel.vue`, `lib/stockApi.ts` (`postHideStocks`) |
+| Cash Out (PR #42) | `components/stock/CashOutModal.vue`, `types/cashOut.ts`, `lib/stockApi.ts` (`postCashOut`) |
 
-**Every endpoint shipped in PRs #29–#32 now has a frontend**, and PR #37's
-two new endpoints have one as of 2026-09-11. What remains below is cleanup,
-deferred polish, and work blocked on backend gaps.
+**Every endpoint shipped in PRs #29–#32 now has a frontend**, PR #37's two
+new endpoints have one as of 2026-09-11, and everything PRs #38–#42 exposed
+has one as of 2026-09-16. What remains below is cleanup, deferred polish,
+and work blocked on backend gaps.
+
+Notes on the PR #38–#42 screens, all of them consequences of the backend
+contract rather than choices:
+
+- **Auto Entry takes ONE date for the whole entry.**
+  `executeAutoTransfer` reads a single top-level `$data['added_at']` and
+  stamps every row with it; `items.*.added_at` is validated and never read.
+  The payload builder sends the first row's value, and the view shows an
+  amber notice when rows disagree instead of silently dropping the rest.
+- **Live Metal Balance never omits `item_id`.** The parameter is optional
+  to the backend but its default is `2`, which is "Gold Necklace" in this
+  dataset. The view resolves the item named `Metal` by name — the rule
+  `getAvailableMetals` already uses — and refuses to query at all if no
+  such item exists, rather than reporting the wrong one ([#17](#17)).
+- **The lot picker is one component, two endpoints.** `MetalPickerModal`
+  gained a `source` prop: `'metal'` (default, unchanged, still what Stock
+  In/Out and both GMS screens use) or `'lots'`. `availableLotsApi`
+  normalises the new response onto the existing row shape so nothing
+  downstream forks. Auto-opening on item select stays Metal-only —
+  non-metal rows use the explicit "Pick lots…" button, since the lot is
+  optional and a modal that opens itself on every item choice would add a
+  step for operators who do not need one.
+- **Item Conversion does not copy alloys when a multi-lot pick splits a
+  row.** Each alloy line carries its own grams, so duplicating them across
+  rows would multiply the alloy quantity silently. Extra rows start with no
+  alloys and a toast says so.
+- **Hide is presented as one-way.** No endpoint sets `is_hided` back to
+  false ([#30](#30)), and `hideStocks` also hides the parent lot of any row
+  with a `stock_in_id`. Both facts are in the confirm step, because neither
+  is recoverable from this app.
+- **Cash Out has no sender picker and no date field.** `createCashOut`
+  takes the sender from `$addedBy` and the row is stamped by the database.
+  The form states both rather than offering inputs the backend ignores.
 
 Two deliberate limits on the PR #37 screens, both visible on-screen as
 amber banners rather than hidden:
@@ -235,12 +333,14 @@ amber banners rather than hidden:
       morning sees a normal dashboard and only discovers the expiry when
       they open a module.
 
-      Passport access tokens are JWTs, so reading the `exp` claim in
-      `lib/authSession.ts` at boot would close this with no backend change
-      and no `/me` endpoint. That would also partially cover the "session
-      validation on boot" item below, which is otherwise blocked on ask #7.
-      Alternative: ask the backend to return `expires_at` alongside the
-      token, which is cleaner but not in our control.
+      *Updated 2026-09-16 — largely closed by the boot validation below.*
+      `validateSession()` now fires a real `GET /me` on every boot, so an
+      expired token is detected before the operator touches a module rather
+      than on their first click. What is left is narrower: a token that
+      expires **while** a tab sits open on the static dashboard is still
+      only noticed on the next call. Reading the JWT `exp` claim and setting
+      a timer would close that remainder; low value, since the 401 path is
+      clean. Keep or drop as a judgement call.
 
 - [ ] **Re-enable the two Cash Transactions report filters.** The comment in
       `types/cashTransactionReport.ts` says `cash_main_category_id` and
@@ -271,23 +371,23 @@ amber banners rather than hidden:
       methods confirmed at the line numbers above (unchanged). The
       `apiResource` line moved 61 → **62**; corrected inline.
 
-- [ ] **Multi-tab session sync.** Signing out in one tab leaves other tabs
-      holding a stale in-memory token until their next request 401s and
-      bounces them. A `storage` event listener in `lib/authSession.ts` would
-      tighten it. Deliberately deferred — the 401 path already degrades
-      correctly.
+- [x] ~~**Multi-tab session sync.**~~ **DONE.** `lib/authSession.ts` now
+      carries a `storage` listener plus a `sessionChangedHandler`, and
+      `main.ts` acts on it — a sign-out in one tab sends the others to
+      `/login`, a sign-in is adopted rather than left stale.
 
-      *Re-verified 2026-09-08 — still pending, still deliberate.*
-      `lib/authSession.ts` has no `addEventListener` and no `storage`
-      handler. Unblocked whenever we decide it is worth doing.
+- [x] ~~**Session validation on boot.**~~ **DONE 2026-09-16**, unblocked by
+      `GET /me` in PR #38 (ask [#7](#7) closed). `stores/auth.ts` gained
+      `validateSession()`, fired from `main.ts` after mount.
 
-- [ ] **Session validation on boot.** Blocked on a backend `/me` endpoint —
-      see [§2](#2-flagged-to-backend).
-
-      *Re-verified 2026-09-08 — still pending, still blocked.* Backend ask
-      #7 is unchanged: no `/me` route and no `me()`/`user()` method on
-      `AuthController`. The standing note at `stores/auth.ts:14` stays
-      accurate.
+      Three deliberate properties: it is **not** awaited before mount, so
+      the app renders at the same speed it did before; it **never** clears
+      a session on its own, because a 500 or an offline laptop must not sign
+      an operator out (a genuinely dead token 401s, and `lib/api.ts:86`
+      already handles that path); and it **does** sign out when `/me`
+      reports `is_active: false`, which is the only way the app learns that
+      an account was deactivated mid-session — login blocks those, but a
+      token already issued keeps working.
 
 ---
 
@@ -320,21 +420,30 @@ table exists.
 
 ### Test credentials
 
-`demo_head` / `password` (user_id 999, role_id 3) — verified working.
+**Rewritten 2026-09-16 — PR #38's `UserDetailSeeder` replaced all of this.**
+Four accounts are now seeded, every one of them with the password
+`password`, and all four verified present on the live Render database:
 
-`head_admin` (user_id 1, role_id 1) and `employee_one` (user_id 2) have
-password hashes that match neither `password` nor the other obvious
-candidates, so they cannot be logged into. `head_admin` is the only
-role_id 1 account, and `AutoEntryService` treats role_id 1 as "head" for
-its weight adjustment — worth resetting those two hashes before testing
-that path.
+| Username | user_id | role_id | Role |
+|---|---|---|---|
+| `head_admin` | 1 | 3 | HEAD |
+| `employee_one` | 2 | 2 | EMPLOYEE |
+| `customer_one` | 3 | 1 | CUSTOMER |
+| `retailer_one` | 4 | 4 | PURCHASE |
+| `demo_head` | 999 | 3 | HEAD (from `HeadUserSeeder`) |
 
-> **2026-09-08:** that last sentence turned out to be the visible corner of
-> a real backend bug, now written up properly as ask
-> [#21](#21) — `demo_head` is role_id **3**, both head/admin checks in the
-> code test for **1**, and `RoleSeeder` says 1 is `CUSTOMER`. Resetting the
-> hashes is still worth doing, but it is a workaround for the numbering
-> mismatch rather than a fix.
+Two earlier claims here are now wrong and have been removed: `head_admin`
+is role_id **3**, not 1, and its hash *does* match `password` — the old
+"cannot be logged into" note no longer applies.
+
+Convenient locally. **Not acceptable in production** — these are live on
+the public API right now; see ask [#28](#28).
+
+`AutoEntryService`'s head check still tests `role_id == 1`, which
+`RoleSeeder` calls `CUSTOMER`, so `customer_one` is the only seeded account
+that satisfies it. That is ask [#21](#21), and PR #38 made it sharper rather
+than fixing it: there is now a properly-seeded HEAD account (role_id 3) that
+the head check will not recognise.
 
 ### Seed data gaps
 
@@ -425,68 +534,96 @@ that path.
    correct side, so it does not widen the bug, but it does mean the two
    stragglers are now outnumbered five to two.
 
-3. **`AuthController::login` does not check `is_active`.** A deactivated user
-   can still authenticate and receive a working token.
+3. ~~**`AuthController::login` does not check `is_active`.**~~
+   **✅ FIXED in PR #38.** `AuthController:80-87` now returns **403** with
+   *"Your account has been deactivated. Please contact your administrator."*
+   before issuing a token.
 
-   *Re-verified 2026-09-08 — still pending, unchanged.* `is_active` does not
-   appear anywhere in `AuthController.php`.
+   Frontend done 2026-09-16: `LoginView` renders a 403 as an amber notice
+   rather than the red form error used for bad credentials — the operator's
+   password was right and retyping it will not help.
 
-4. **Auto Entry silently discards the transaction date.**
-   `AutoEntryRequest` validates `items.*.added_at`
-   (`date_format:Y-m-d H:i:s`), but `AutoEntryService::executeAutoTransfer`
-   reads a **top-level** `$data['added_at']` — which has no validation rule,
-   so `$request->validated()` strips it before the service ever sees it.
-   Net effect: the per-row date is validated and then ignored, the top-level
-   one can never arrive, and **every auto entry is stamped `now()`**. The
-   API doc's §29 claim that `added_at` sets the entry time is wrong in
-   practice. Backdating an auto entry is impossible today.
-   Either add a top-level `added_at` rule, or read the per-item value inside
-   the loop the way every other stock service does.
-   `StockAutoEntryView` sends the per-row value regardless, so the screen is
-   correct the moment this is fixed.
+   **Residual, worth knowing:** this only blocks *new* logins. A token
+   issued before the account was deactivated keeps working until it expires
+   (24h, per PR #37). `validateSession()` closes most of that by checking
+   `is_active` from `/me` on boot, but a tab already open is unaffected.
+   Revoking the tokens on deactivation is the backend-side fix; until then
+   **deleting the `user_details` row is the only immediate revocation.**
 
-   *Re-verified 2026-09-08 — still pending, unchanged.* Both halves of the
-   mismatch are still exactly as described: `AutoEntryRequest:136` validates
-   `'items.*.added_at'`, while `AutoEntryService:23` reads
-   `$data['added_at']` (top level) and falls back to `now()`, feeding lines
-   80 and 183. Every auto entry is still stamped `now()`.
+4. ~~**Auto Entry silently discards the transaction date.**~~
+   **✅ FIXED in PR #42**, via the first of the two options this ask
+   offered: `AutoEntryRequest:24` now carries
+   `'added_at' => ['nullable', 'date_format:Y-m-d H:i:s']` at the top level,
+   so `validated()` stops stripping the key that `AutoEntryService:23`
+   always read. Backdating works.
+
+   Frontend done 2026-09-16. Note the earlier claim here — *"`StockAutoEntryView`
+   sends the per-row value regardless, so the screen is correct the moment
+   this is fixed"* — **was wrong**, and would have left the bug looking
+   unfixed. `toAutoEntryPayload` sent `added_at` only inside `items[]`,
+   which the service never reads. It now sends a top-level value too.
+
+   **Residual by design:** the service applies ONE timestamp to every row it
+   writes (`$addedAt` feeds lines 80 and 183) and never reads
+   `items.*.added_at`, which remains validated-but-ignored. Per-row dates
+   are therefore not achievable without a backend change. The payload sends
+   the first row's value and the view shows a notice when rows disagree.
+   Not re-raising it as an ask — one date per entry is defensible — but the
+   API doc's §29 should stop implying otherwise.
 
 ### Missing routes for code that already exists
 
-5. **`StockDetailsController::postHide`** (line 209) and its
-   `HideStockRequest` are implemented, but the route is commented out at
-   `routes/api.php:91`. Nothing can reach it.
+5. ~~**`StockDetailsController::postHide`** route commented out.~~
+   **✅ FIXED in PR #42.** `routes/api.php:97` is now live:
+   `Route::post('hide', [StockDetailsController::class, 'postHide'])`.
+   `HideStockRequest` exists (`stock_ids` — required array, each an integer
+   that must exist in `stock_details`).
 
-   *Re-verified 2026-09-08 — still pending.* Method still at line 209; the
-   commented route drifted **88 → 91** (corrected inline) and still reads
-   `// Route::post('hide', [StockDetailsController::class, 'postHide']);`.
+   This also retires a stale warning: `StockManagementView`'s header used to
+   say the class was missing and every call 500'd. That was true when
+   written; it is not now, and the comment has been corrected.
 
-6. **`StockDetailsController::postCash`** (line 231) and its `CashOutRequest`
-   are implemented with **no route at all**.
+   Frontend done 2026-09-16 — selection checkboxes in
+   `TransactionHistoryPanel` with a confirm step. See [#30](#30) for the
+   one-way-ness, which is the reason the confirm exists.
 
-   *Re-verified 2026-09-08 — still pending, unchanged.* Method at line 231;
-   `grep postCash routes/api.php` returns nothing.
+6. ~~**`StockDetailsController::postCash`** had no route.~~
+   **✅ FIXED in PR #42.** `routes/api.php:98` registers
+   `POST v1/stock/cash-out`. `CashOutRequest`: `given_to` (required, must
+   exist), `amount` (required, numeric, `gt:0`), `remarks` (nullable, max
+   5000).
+
+   Frontend done 2026-09-16 — `CashOutModal`. Two contract facts shaped it:
+   the sender is `$addedBy`, never a field, so this records only "I handed
+   cash over"; and `payment_method` is hardcoded `CASH_ON_HAND`, so it is
+   not a general cash-transfer screen.
 
 ### Missing endpoints
 
-7. **No `/me` or token-validation endpoint.** A token that expired while the
-   tab was closed can only be discovered by firing a real request and
-   handling the 401. Frontend handles that gracefully today, but a cheap
-   validation endpoint would let the app verify a restored session on boot.
+7. ~~**No `/me` or token-validation endpoint.**~~
+   **✅ FIXED in PR #38.** `GET /api/v1/me` (`routes/api.php:33` →
+   `AuthController::me`, line 145) returns `user_id`, `name`, `user_name`,
+   `role_id` and `is_active`.
 
-   *Re-verified 2026-09-08 — still pending, unchanged.* No `me` route in
-   `routes/api.php`; no `me()` or `user()` method on `AuthController`.
-   This is the sole blocker on frontend pending item 4.
+   Frontend done 2026-09-16 — see the boot-validation item in
+   [§1](#1-frontend-work). The extra `is_active` in the response turned out
+   to matter more than the token check: it is the only way the app learns an
+   account was deactivated after its token was issued.
 
-8. **No lot-listing endpoint for non-metal items.** `available-metals` covers
-   items literally named "Metal" only. Item Change and Item Conversion can
-   therefore only attach a `stock_in_id` for metal rows; every other item
-   posts `null` and loses the parent-lot draw-down and OB/CB snapshot. A
-   generic "list stock lots for a user + item" endpoint would close this.
+8. ~~**No lot-listing endpoint for non-metal items.**~~
+   **✅ FIXED in PR #42.** `GET /stock-details/available-lots`
+   (`routes/api.php:65` → `getAvailableStockLots`, line 613) takes
+   `user_id` + `item_id` (both required, 422 otherwise), optional
+   `page_size` (default 50), and returns a paginated list of parent IN lots
+   with `balance > 0`. No name check on the item.
 
-   *Re-verified 2026-09-08 — still pending, unchanged.*
-   `stock-details/available-metals` (`routes/api.php:59`) remains the only
-   lot-listing route; no `stock-lots`-style endpoint exists.
+   Frontend done 2026-09-16 — Item Change and Item Conversion now attach a
+   real `stock_in_id` for any item, so the parent-lot draw-down and the
+   OB/CB snapshot stop landing as 0 on non-metal rows.
+
+   **Two caveats, both raised as new asks:** its `date`+`time` branch does
+   not run on PostgreSQL ([#28](#28)), and unlike every other lot query it
+   does not filter `is_hided` ([#29](#29)).
 
 9. **`user_details` display flags are readable but not writable.** The
    ~30 `is_*_shown` / `is_*_need_to_shown` columns come back on
@@ -619,6 +756,30 @@ that path.
     "§22 needs `MetalStockSeeder`"). Worth the backend team seeding a real
     Metal item rather than leaving it to manual setup.
 
+    **Update 2026-09-16 — half fixed, and the remaining half is the one
+    this entry argued was mandatory.** PR #42 turned the hardcoded value
+    into a parameter: `ReportService:791` now reads
+    `$itemId = $params['item_id'] ?? 2`, and `ReportController:159` passes
+    `$request->all()` straight through, so `?item_id=` works.
+
+    **But the default is still `2`, and the lookup-by-name was not done.**
+    Any caller that omits `item_id` still gets the wrong item — silently,
+    with a "Metal Live Balance" heading over it. Verified against the live
+    Render database on 2026-09-16: **item 2 is "Gold Necklace", item 4 is
+    "Metal"** (`ItemSeeder`, added in PR #38, now creates both, so the
+    "no seeder creates Metal" note above is itself out of date — ids 1 and 3
+    no longer exist at all).
+
+    Closed *for our screens* rather than fixed: `LiveMetalBalanceView`
+    resolves the Metal item by name via the existing `isMetalItem` helper
+    and always sends `item_id`, and refuses to query when no such item
+    exists rather than falling back to the wrong one. The on-screen banner
+    about this bug is gone.
+
+    **Still an ask** for anyone else calling this endpoint: make the default
+    a name lookup, or make `item_id` required. A silent wrong answer is a
+    worse default than a 422.
+
 18. **The `date`+`time` branch will throw a SQL error on this database.** It
     builds raw SQL via `selectRaw`/`havingRaw` using `IFNULL(...)` and
     backtick-quoted identifiers (`` `stock_details` ``) — MySQL syntax. Every
@@ -632,6 +793,21 @@ that path.
     statement, `ReportService:817` — one `selectRaw` carrying both
     `IFNULL(...)` and `` `stock_details` ``. It is the only MySQL-ism left
     in the file, so this is a one-line fix.
+
+    *Re-verified 2026-09-16 — STILL OPEN after PRs #38–#42, now at
+    `ReportService:820`.* Executed against the live Render database rather
+    than read:
+
+    ```
+    FAILS : live-metal-balance date+time branch
+            SQLSTATE[42601]: Syntax error: 7 ERROR: syntax error at or near "`"
+    ```
+
+    Galling detail: `getAvailableStockLots`, written in the very same PR
+    window, gets this right — it uses `COALESCE` and no backticks. So the
+    correct form of this query now exists in the codebase, twenty lines
+    away, and could be copied. (That newer query has its own, different
+    Postgres problem — [#28](#28).)
 
 <a id="19"></a>
 
@@ -804,6 +980,129 @@ that path.
     `role.role_name`. `PhoneBookResource` returns none of those four —
     only `user_id`, `name`, `phone_no`, `profile_image`, `is_active` and
     the (null) role object.
+
+### New in PRs #38–#42 — 2026-09-16
+
+<a id="28"></a>
+
+28. 🔴 **`GET /run-seeders` and `GET /run-migrations` are public — and the
+    seeders create HEAD accounts with a known password.** The headline item
+    — see also the [PR #38–#42 pass](#pr-38-42-pass--2026-09-16) at the top.
+    Added in PR #38's `routes/web.php`, patched but still unauthenticated in
+    PR #41.
+
+    Three separate problems, in descending order of severity:
+
+    **a. Account creation.** `UserDetailSeeder` (PR #38) creates
+    `head_admin` (role_id **3**, HEAD), `employee_one`, `customer_one` and
+    `retailer_one`, every one of them `Hash::make('password')`. It uses
+    `firstOrCreate` keyed on `user_name`, so it does not overwrite an
+    existing account — but on any database lacking those usernames, one
+    unauthenticated GET mints a HEAD login with the password `password`.
+
+    **Verified against the live Render database, 2026-09-16 — all four
+    already exist in production:**
+
+    ```
+      1 head_admin    role_id=3  weak_password=true
+      2 employee_one  role_id=2  weak_password=true
+      3 customer_one  role_id=1  weak_password=true
+      4 retailer_one  role_id=4  weak_password=true
+    999 demo_head     role_id=3  weak_password=true
+    ```
+
+    Five accounts on a publicly reachable API, all with the password
+    `password`, two of them HEAD. **This is an open door today**, quite
+    apart from the route that can reopen it. Deleting the accounts is not
+    sufficient while the route stands — anyone can recreate them.
+
+    **b. Ledger pollution.** `/run-seeders` runs `DatabaseSeeder`, which
+    since PR #40 calls `MassTestDataSeeder`: 20 stock-IN + 20 stock-OUT with
+    `rand()` gram amounts, through the real `StockInService`/
+    `StockOutService`, moving `grams_grand_total` and `purity_grand_total`.
+    Each hit adds another 40. `stock_details` was **0 rows** at time of
+    check, so this has not fired in production yet.
+
+    **c. Information disclosure.** Both handlers return
+    `$e->getTraceAsString()` on failure.
+
+    They are **GET** routes, so a crawler, a prefetch or an `<img src>`
+    triggers them; no CSRF protection applies. Not probed from here — one
+    request would have run them.
+
+    **Asks, in order: delete both routes; then rotate or delete the five
+    weak-password accounts.** Highest-priority item on this list by a wide
+    margin.
+
+<a id="29"></a>
+
+29. **`getAvailableStockLots`' `date`+`time` branch does not run on
+    PostgreSQL.** Same class of bug as [#18](#18), different cause. It
+    builds `havingRaw('grams - used_grams > 0')` where `used_grams` is a
+    SELECT-list alias. Postgres resolves output names in `ORDER BY` and
+    `GROUP BY` but **not** in `WHERE` or `HAVING`, and a bare `HAVING` with
+    no `GROUP BY` additionally requires aggregate expressions.
+
+    Executed against the live Render database on 2026-09-16:
+
+    ```
+    FAILS : available-lots date+time branch
+            SQLSTATE[42703]: Undefined column: 7 ERROR: column "used_grams" does not exist
+    ```
+
+    Credit where due: the `selectRaw` in this method uses `COALESCE` and no
+    backticks, so it is already Postgres-correct — only the `HAVING` is
+    wrong. Moving that predicate into a subquery or a CTE would fix it.
+
+    Frontend impact: none today. `availableLotsApi` exposes no date/time
+    parameters, and `types/availableLot.ts` records why. The live branch
+    works and is all we use.
+
+<a id="30"></a>
+
+30. **There is no way to un-hide stock.** `StockOutService::hideStocks`
+    sets `is_hided = true`; nothing anywhere sets it back to false
+    (`grep is_hided app/` — the only writes are lines 833 and 840 of that
+    method, both `true`). `getHistory` and `getAvailableMetals` filter on
+    it, so a mistaken hide removes rows from Transaction History and the
+    metal picker with no route back short of direct SQL.
+
+    Compounding it: `hideStocks` also hides the **parent lot** of any row
+    carrying a `stock_in_id`, so hiding one child transaction can pull a
+    whole lot out of the picker — a larger blast radius than the operator
+    selected.
+
+    An `unhide` route taking the same `stock_ids` payload would close this.
+    Until then the frontend treats Hide as irreversible and says so in a
+    confirm step, which is friction that only exists because of this gap.
+
+<a id="31"></a>
+
+31. **`getAvailableStockLots` does not filter `is_hided`.** Every other lot
+    query does — `getAvailableMetals` (`StockDetailsController:551`) and
+    `getHistory` (`ReportService:48`) both carry `->where('is_hided', 0)`.
+    The new one filters `stock_type = IN`, `stock_in_id IS NULL` and
+    `balance > 0`, but not this.
+
+    Net effect: a lot hidden through `POST /stock/hide` disappears from the
+    metal picker and from history, yet still appears in the generic lot
+    picker. Same lot, two screens, opposite answers. One `where` closes it.
+
+<a id="32"></a>
+
+32. **The testing doc does not cover any of PRs #38–#42.** The
+    2026-09-11 update added sections 36–52, but nothing since. Missing
+    entirely: `GET /me`, `available-lots`, `/stock/hide`, `/stock/cash-out`,
+    and the login 403 for deactivated accounts.
+
+    Worse than absent in one place: **§40 Live Metal Balance lists its query
+    parameters and `item_id` is not among them** — the single most important
+    new parameter on that endpoint, and the one whose omission silently
+    returns the wrong item ([#17](#17)). Anyone integrating from the doc
+    will get Gold Necklace figures under a Metal heading.
+
+    Everything the frontend needed for these five endpoints came from the
+    request classes and controllers, not the doc.
 
 ---
 

@@ -1,4 +1,5 @@
 import { api, type ApiResponse } from './api'
+import type { CashOutFormValues, CashOutResult } from '@/types'
 import type {
   StockOutFormValues,
   StockOutResult,
@@ -203,9 +204,19 @@ function toAutoEntryItemPayload(item: AutoEntryItemInput) {
   return base
 }
 
+// AutoEntryService::executeAutoTransfer reads ONE top-level $data['added_at']
+// and stamps every row it writes with it — it never looks at items.*.added_at.
+// Until PR #42 that key had no validation rule, so validated() stripped it and
+// every entry landed on now(); the rule exists now, so sending it here is what
+// finally makes backdating work (PENDING_WORK.md ask #4).
+//
+// One date covers the whole entry by the service's design, so the first row's
+// value is the one that can take effect. The view warns when rows disagree
+// rather than silently picking for the operator.
 function toAutoEntryPayload(form: AutoEntryFormValues) {
   return {
     type: form.type,
+    added_at: form.items[0]?.added_at || null,
     ...toAutoEntryPartyPayload(form),
     items: form.items.map(toAutoEntryItemPayload),
   }
@@ -343,6 +354,38 @@ export const stockApi = {
       .post<ApiResponse<AutoEntryResultRow[]>>(
         `${RESOURCE}/auto-entry`,
         toAutoEntryPayload(form),
+        { 'X-User-ID': String(actingUserId) },
+      )
+      .then((r) => r.data),
+
+  // POST /stock/hide — routed in PR #42; the controller method and its
+  // HideStockRequest had been sitting unreachable since PR #31.
+  //
+  // StockOutService::hideStocks sets is_hided on each row AND on its parent
+  // lot when stock_in_id is set, so hiding a child hides the lot it came
+  // from. getHistory and getAvailableMetals both filter is_hided, so hidden
+  // rows leave Transaction History and the metal picker. Not a delete — the
+  // row stays in the ledger and still moves balances.
+  postHideStocks: (stockIds: number[]) =>
+    api.post<ApiResponse<null>>(`${RESOURCE}/hide`, { stock_ids: stockIds }),
+
+  // POST /stock/cash-out — routed in PR #42, method implemented in PR #31
+  // with no route at all until now.
+  //
+  // Despite living under /stock this writes a cash_txn_details row, not
+  // stock: an EXPENSE from the acting user to given_to, always
+  // CASH_ON_HAND, moving rak_cash_balance on both. The sender is the
+  // X-User-ID/token user, never a field — there is no way to record a
+  // transfer on someone else's behalf here.
+  postCashOut: (payload: CashOutFormValues, actingUserId: number) =>
+    api
+      .post<ApiResponse<CashOutResult>>(
+        `${RESOURCE}/cash-out`,
+        {
+          given_to: payload.given_to,
+          amount: payload.amount,
+          remarks: payload.remarks || null,
+        },
         { 'X-User-ID': String(actingUserId) },
       )
       .then((r) => r.data),

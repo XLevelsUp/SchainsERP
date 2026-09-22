@@ -11,11 +11,10 @@ import type { AuthSession, AuthUser } from '@/types'
 | The token is what actually grants access, so isAuthenticated is derived
 | from it rather than from the user object.
 |
-| There is no session-validation call on boot: the backend exposes no /me
-| (or equivalent) endpoint, so a token that expired while the tab was closed
-| is only discovered on the first real request. api.ts turns that 401 into a
-| clean bounce to /login, which is the best available behaviour until the
-| backend adds one — flagged as a backend follow-up.
+| PR #38 added GET /me, so a restored session is now verified on boot
+| (validateSession below) instead of waiting for the first real request to
+| 401. The 401 path still exists and is still the safety net — validation is
+| best-effort and never blocks the app from rendering.
 |--------------------------------------------------------------------------
 */
 
@@ -64,6 +63,39 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Verifies a session restored from localStorage against the server, and
+  // refreshes the cached user with whatever the server currently holds (a
+  // rename or a role change made elsewhere lands here).
+  //
+  // Deliberately best-effort:
+  //  - A dead token 401s, and api.ts has already cleared the session and
+  //    fired the unauthorized handler by the time this catch runs. Nothing
+  //    left to do here.
+  //  - Any other failure (offline, a 500, the server asleep on Render's free
+  //    tier) must NOT sign the operator out. They keep the session they had
+  //    and the first real request decides.
+  async function validateSession() {
+    if (!token.value) return
+
+    try {
+      const me = await authApi.me()
+
+      // is_active can flip while a session is open. Login blocks deactivated
+      // accounts (403) but an already-issued token keeps working, so this is
+      // the only place the app finds out.
+      if (!me.is_active) {
+        await logout()
+        return
+      }
+
+      const next = { user_id: me.user_id, name: me.name, user_name: me.user_name, role_id: me.role_id }
+      user.value = next
+      saveSession({ user: next, token: token.value })
+    } catch {
+      // See above — never clears the session on its own.
+    }
+  }
+
   // Adopts a session another tab wrote. The storage write already happened
   // in that tab and authSession has already updated its mirror, so this only
   // brings the reactive refs in line — calling saveSession/clearSession here
@@ -81,6 +113,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     clear,
+    validateSession,
     adoptExternalSession,
   }
 })

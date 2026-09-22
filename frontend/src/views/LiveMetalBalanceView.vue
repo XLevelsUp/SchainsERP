@@ -9,6 +9,8 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { reportApi } from '@/lib/reportApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
+import { itemsApi } from '@/lib/itemsApi'
+import { isMetalItem } from '@/lib/metalItem'
 import { userOptionLabel } from '@/lib/userLabel'
 import { formatDateTime } from '@/lib/date'
 import { ApiError } from '@/lib/api'
@@ -23,10 +25,11 @@ import type { DataTableColumn } from '@/types/table'
 | instruction: build the screen against the intended contract, flag the
 | bugs on-screen rather than waiting. Tracked in PENDING_WORK.md #17-20.
 |
-|   #17 "Metal" is hardcoded to item_id 2 (actually "Gold Chain" in this
-|       app's data — item_id 4 is Metal). Every balance shown here is
-|       really Gold Chain, mislabeled. Permanent banner below, not a
-|       dismissible one — it's true of every result, not an edge case.
+|   #17 CLOSED for this screen by PR #42, which turned the hardcoded item
+|       into an `item_id` parameter. The default is still wrong (2, "Gold
+|       Necklace" here), so this screen resolves the real Metal item by name
+|       — the same rule getAvailableMetals applies — and always sends it.
+|       Never call this endpoint without item_id.
 |   #18 The "as of" date+time path runs MySQL-only raw SQL against this
 |       app's Postgres database and 500s. Not blocked client-side — the
 |       real error is shown, annotated as a known bug rather than hidden
@@ -48,6 +51,12 @@ const users = ref<UserDetailListItem[]>([])
 const userOptions = computed(() =>
   users.value.map((u) => ({ value: u.id, label: userOptionLabel(u) })),
 )
+
+// Resolved by name, not hardcoded: the ids differ between environments and
+// the backend's own default (2) is wrong here. Null means the items list has
+// no "Metal" row at all, which makes the report meaningless rather than
+// merely wrong — so the screen says so instead of querying the default.
+const metalItemId = ref<number | null>(null)
 
 const EMPTY_SUMMARY: LiveMetalBalanceSummary = { total_grams: 0, total_purity: 0 }
 const summary = ref<LiveMetalBalanceSummary>({ ...EMPTY_SUMMARY })
@@ -82,12 +91,30 @@ async function loadUsers() {
   }
 }
 
+// Fatal to this screen, unlike loadUsers: without the id the report would
+// silently fall back to the backend's wrong default. runSearch refuses to
+// run until this resolves.
+async function loadMetalItem() {
+  try {
+    const items = await itemsApi.list()
+    metalItemId.value = items.find(isMetalItem)?.item_id ?? null
+  } catch {
+    metalItemId.value = null
+  }
+}
+
 async function runSearch(targetPage = 1) {
   if (isLoading.value) return
+  if (metalItemId.value === null) {
+    loadError.value =
+      'No item named "Metal" exists in the items list, so there is nothing to report on. Create one on the Items screen.'
+    return
+  }
   isLoading.value = true
   loadError.value = ''
   try {
     const result = await reportApi.getLiveMetalBalance({
+      item_id: metalItemId.value,
       date: filters.as_of_date || undefined,
       time: filters.as_of_time || undefined,
       user_id: filters.view_as_user_id ?? undefined,
@@ -127,8 +154,10 @@ function nextPage() {
   if (page.value < lastPage.value) runSearch(page.value + 1)
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadUsers()
+  // Awaited — runSearch needs the resolved item id, not the default.
+  await loadMetalItem()
   runSearch(1)
 })
 </script>
@@ -149,11 +178,10 @@ onMounted(() => {
     <div class="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
       <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
       <p>
-        <strong>Known backend bug (PENDING_WORK.md #17):</strong> this report is hardcoded to
-        item_id 2, which is "Gold Chain" in this app's data, not "Metal" (item_id 4). Every
-        balance below is really a Gold Chain balance mislabeled as Metal — do not rely on these
-        numbers until the backend corrects the item id. The "View as" override further down also
-        currently has no effect server-side (#19).
+        <strong>Two known backend limits.</strong> The "As of date/time" filter below fails
+        server-side — its query is written in MySQL syntax and this app runs on PostgreSQL
+        (PENDING_WORK.md #18). The "View as" override has no effect either: the backend's admin
+        check is unreachable against this role schema (#19). Live balances are accurate.
       </p>
     </div>
 

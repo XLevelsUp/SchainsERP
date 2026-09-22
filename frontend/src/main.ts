@@ -58,3 +58,9 @@ setSessionChangedHandler((session) => {
 })
 
 app.mount('#app')
+
+// Verify a session restored from localStorage against GET /me. Fired after
+// mount, not awaited before it: the app renders immediately either way, and
+// a dead token takes the normal 401 path above. A live one just refreshes
+// the cached user in place.
+useAuthStore().validateSession()

@@ -37,15 +37,19 @@ import type { Item, ItemChangeItemInput, MetalPickerSelection } from '@/types'
 | It's still worth sending one where we can: with a lot the service
 | deducts that lot's balance, completes it at zero, and records real
 | OB/CB purity against it; without one those snapshot fields land as 0.
-| Selecting the item literally named "Metal" as the From item therefore
-| opens MetalPickerModal (GET /stock-details/available-metals) scoped to
-| `userId` — createItemChange sets both given_by and given_to to that same
-| user, which matches the endpoint's own `where('given_to', ...)` query.
-| Saving there replaces the triggering row with one row per lot taken,
-| carrying stock_in_id and the lot's touch. Same pattern as GmsOutModal.
+| Selecting a From item therefore opens MetalPickerModal scoped to `userId`
+| — createItemChange sets both given_by and given_to to that same user,
+| which matches both endpoints' own `where('given_to', ...)` query. Saving
+| there replaces the triggering row with one row per lot taken, carrying
+| stock_in_id and the lot's touch. Same pattern as GmsOutModal.
 |
-| Non-metal items have no lot-lookup endpoint, so those rows post with a
-| null stock_in_id — accepted by the backend, just without the lot link.
+| Which endpoint backs the picker depends on the item:
+|   Metal      -> /stock-details/available-metals (unchanged)
+|   Everything -> /stock-details/available-lots, added in PR #42
+| Before that endpoint existed, non-metal rows had no way to obtain a lot
+| and always posted stock_in_id: null, losing the draw-down and the OB/CB
+| snapshot (PENDING_WORK.md ask #8). Both remain optional — a row with no
+| lot still submits, exactly as before.
 |--------------------------------------------------------------------------
 */
 
@@ -84,9 +88,20 @@ function removeRow(index: number) {
 
 const metalPickerRowIndex = ref<number | null>(null)
 
+// Which endpoint the picker should query for a given row. Metal keeps the
+// endpoint it has always used; everything else goes to the generic one.
+function lotSourceFor(itemId: number | null): 'metal' | 'lots' {
+  return isMetalItem(props.items.find((i) => i.item_id === itemId)) ? 'metal' : 'lots'
+}
+
 // Opening the picker is the only side effect of choosing a From item —
 // from_touch is deliberately left alone so the operator's typed value (or
 // the 100 default) still stands, exactly as before.
+//
+// Auto-opening stays limited to Metal. Non-metal items can now be picked
+// too, but via the explicit "Pick lots…" button: a modal that opened itself
+// on every item choice would put a step in front of an operator who does
+// not need one, and the lot is optional for the submission either way.
 function onFromItemSelect(row: ItemChangeItemInput, index: number, itemId: number | null) {
   row.from_item_id = itemId
   // The lot no longer belongs to whatever item was just picked.
@@ -224,7 +239,7 @@ async function handleSubmit() {
                 @update:model-value="(v) => onFromItemSelect(row, index, v as number | null)"
               />
               <button
-                v-if="isMetalItem(items.find((i) => i.item_id === row.from_item_id))"
+                v-if="row.from_item_id !== null"
                 type="button"
                 class="mt-1 flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
                 @click="metalPickerRowIndex = index"
@@ -335,6 +350,7 @@ async function handleSubmit() {
       :item-id="rows[metalPickerRowIndex]!.from_item_id!"
       :user-id="userId"
       :required="rows[metalPickerRowIndex]!.grams ?? 0"
+      :source="lotSourceFor(rows[metalPickerRowIndex]!.from_item_id)"
       @close="metalPickerRowIndex = null"
       @confirm="handleMetalConfirm"
     />

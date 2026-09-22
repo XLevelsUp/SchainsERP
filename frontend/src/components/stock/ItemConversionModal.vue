@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Plus, Trash } from 'lucide-vue-next'
+import { Plus, Trash, Layers, X } from 'lucide-vue-next'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import MetalPickerModal from '@/components/stock/MetalPickerModal.vue'
 import { stockApi } from '@/lib/stockApi'
 import { ApiError } from '@/lib/api'
+import { isMetalItem } from '@/lib/metalItem'
 import { nowDateTimeInputValue, toBackendDateTime } from '@/lib/date'
 import { useToastStore } from '@/stores/toast'
-import type { Item, ItemConversionAlloyInput, ItemConversionItemInput } from '@/types'
+import type {
+  Item,
+  ItemConversionAlloyInput,
+  ItemConversionItemInput,
+  MetalPickerSelection,
+} from '@/types'
 
 /*
 |--------------------------------------------------------------------------
@@ -24,8 +31,17 @@ import type { Item, ItemConversionAlloyInput, ItemConversionItemInput } from '@/
 | same as the panel it replaces. actingUserId sent as userId too
 | (X-User-ID header) — not changed here.
 |
-| Unlike Item Change, stock_in_id is nullable in ItemConversionRequest.php
-| so it's always sent null with no backend-gap warning needed.
+| stock_in_id is nullable in ItemConversionRequest.php and used to be sent
+| as null always, because no endpoint could list lots for a non-metal item.
+| PR #42 added /stock-details/available-lots, so a lot can now be attached
+| here the same way Item Change does it — Metal rows keep using
+| /available-metals, everything else uses the generic endpoint. Still
+| optional: a row with no lot submits exactly as it did before.
+|
+| Alloys are NOT copied when a multi-lot selection splits one row into
+| several. Each alloy line carries its own grams, so duplicating them
+| across rows would multiply the alloy quantity silently — the extra rows
+| start with no alloys and a toast says so.
 |
 | Alloys: the grid version only exposed one alloy per row for space, but
 | ItemConversionRequest accepts an array — this modal has room, so it
@@ -68,6 +84,62 @@ function addRow() {
 }
 function removeRow(index: number) {
   rows.value.splice(index, 1)
+  if (lotPickerRowIndex.value === index) lotPickerRowIndex.value = null
+}
+
+const lotPickerRowIndex = ref<number | null>(null)
+
+// Metal keeps the endpoint it has always used; every other item goes to the
+// generic one added in PR #42.
+function lotSourceFor(itemId: number | null): 'metal' | 'lots' {
+  return isMetalItem(props.items.find((i) => i.item_id === itemId)) ? 'metal' : 'lots'
+}
+
+// Changing the source item invalidates any lot already attached to the row —
+// the lot belongs to the item it was drawn from.
+function onSourceItemSelect(row: ItemConversionItemInput, itemId: number | null) {
+  row.source_item_id = itemId
+  row.stock_in_id = null
+}
+
+function handleLotConfirm(selection: MetalPickerSelection[]) {
+  const index = lotPickerRowIndex.value
+  lotPickerRowIndex.value = null
+  if (index === null) return
+
+  const source = rows.value[index]
+  if (!source || selection.length === 0) return
+
+  // First lot lands on the row the operator opened the picker from, keeping
+  // its alloys. grams and touch come from the lot itself.
+  const [first, ...extra] = selection as [MetalPickerSelection, ...MetalPickerSelection[]]
+  source.stock_in_id = first.id
+  source.source_grams = first.taken
+  source.source_touch = first.touch
+
+  if (extra.length === 0) return
+
+  rows.value.splice(
+    index + 1,
+    0,
+    ...extra.map((lot) => ({
+      ...makeEmptyRow(),
+      stock_in_id: lot.id,
+      source_item_id: source.source_item_id,
+      target_item_id: source.target_item_id,
+      source_grams: lot.taken,
+      source_touch: lot.touch,
+      target_touch: source.target_touch,
+      remarks: source.remarks,
+      item_remarks: source.item_remarks,
+      added_at: source.added_at,
+    })),
+  )
+
+  toast.show(
+    `Added ${extra.length} more row(s) for the other lots. Add their alloys before saving.`,
+    'info',
+  )
 }
 function addAlloyRow(row: ItemConversionItemInput) {
   row.alloys.push(makeEmptyAlloy())
@@ -189,16 +261,40 @@ async function handleSubmit() {
         <div v-for="(row, index) in rows" :key="index" class="mb-3 rounded-lg border border-slate-200 p-3">
           <div class="grid items-end gap-3 sm:grid-cols-3">
             <BaseInput :id="`added_at_${index}`" v-model="row.added_at" label="Date-Time" type="datetime-local" size="sm" />
-            <BaseSelect
-              :id="`source_item_${index}`"
-              :model-value="row.source_item_id"
-              label="Source item"
-              size="sm"
-              placeholder="Select item…"
-              :options="itemOptions"
-              :error="fieldErrors[`${index}.source_item_id`]"
-              @update:model-value="(v) => (row.source_item_id = v as number | null)"
-            />
+            <div>
+              <BaseSelect
+                :id="`source_item_${index}`"
+                :model-value="row.source_item_id"
+                label="Source item"
+                size="sm"
+                placeholder="Select item…"
+                :options="itemOptions"
+                :error="fieldErrors[`${index}.source_item_id`]"
+                @update:model-value="(v) => onSourceItemSelect(row, v as number | null)"
+              />
+              <button
+                v-if="row.source_item_id !== null"
+                type="button"
+                class="mt-1 flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+                @click="lotPickerRowIndex = index"
+              >
+                <Layers class="h-3 w-3" /> Pick lots…
+              </button>
+              <span
+                v-if="row.stock_in_id !== null"
+                class="mt-1 inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-600"
+              >
+                Lot #{{ row.stock_in_id }}
+                <button
+                  type="button"
+                  class="text-slate-400 hover:text-red-600"
+                  aria-label="Unlink stock lot"
+                  @click="row.stock_in_id = null"
+                >
+                  <X class="h-3 w-3" />
+                </button>
+              </span>
+            </div>
             <BaseSelect
               :id="`target_item_${index}`"
               :model-value="row.target_item_id"
@@ -339,5 +435,15 @@ async function handleSubmit() {
         </BaseButton>
       </div>
     </form>
+
+    <MetalPickerModal
+      v-if="lotPickerRowIndex !== null && userId !== null"
+      :item-id="rows[lotPickerRowIndex]!.source_item_id!"
+      :user-id="userId"
+      :required="rows[lotPickerRowIndex]!.source_grams ?? 0"
+      :source="lotSourceFor(rows[lotPickerRowIndex]!.source_item_id)"
+      @close="lotPickerRowIndex = null"
+      @confirm="handleLotConfirm"
+    />
   </BaseModal>
 </template>

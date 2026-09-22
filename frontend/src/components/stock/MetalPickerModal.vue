@@ -4,6 +4,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import { availableMetalsApi } from '@/lib/availableMetalsApi'
+import { availableLotsApi } from '@/lib/availableLotsApi'
 import { ApiError } from '@/lib/api'
 import type { AvailableMetalRow, MetalPickerSelection } from '@/types'
 
@@ -25,10 +26,28 @@ import type { AvailableMetalRow, MetalPickerSelection } from '@/types'
 | seeds from the row's Grams (if any) but stays editable, Taken sums the
 | Taken column live, Remaining = Required - Taken. Only rows with Taken >
 | 0 are returned on Save.
+|
+| `source` picks which endpoint backs the list:
+|   'metal' (default) — GET /stock-details/available-metals, unchanged, and
+|       still what every Stock In/Out and GMS screen uses.
+|   'lots'            — GET /stock-details/available-lots (PR #42), which
+|       has no "must be named Metal" check. Item Change and Item Conversion
+|       use it so non-metal rows can carry a stock_in_id too.
+| Both are normalised to AvailableMetalRow, so everything below this line —
+| and every consumer's confirm handler — is identical either way.
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ itemId: number; userId: number; required?: number }>()
+const props = withDefaults(
+  defineProps<{
+    itemId: number
+    userId: number
+    required?: number
+    source?: 'metal' | 'lots'
+    title?: string
+  }>(),
+  { source: 'metal' },
+)
 const emit = defineEmits<{ close: []; confirm: [rows: MetalPickerSelection[]] }>()
 
 const rows = ref<AvailableMetalRow[]>([])
@@ -41,13 +60,21 @@ async function load() {
   isLoading.value = true
   loadError.value = ''
   try {
-    const data = await availableMetalsApi.list({ item_id: props.itemId, user_id: props.userId })
+    const data =
+      props.source === 'lots'
+        ? await availableLotsApi.list({ item_id: props.itemId, user_id: props.userId })
+        : await availableMetalsApi.list({ item_id: props.itemId, user_id: props.userId })
     rows.value = data
     for (const row of data) {
       taken[row.id] = null
     }
   } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to load available metal stock.'
+    loadError.value =
+      err instanceof ApiError
+        ? err.message
+        : props.source === 'lots'
+          ? 'Failed to load available stock lots.'
+          : 'Failed to load available metal stock.'
   } finally {
     isLoading.value = false
   }
@@ -74,7 +101,11 @@ function fmt(n: number): string {
 </script>
 
 <template>
-  <BaseModal title="Metal Entry" max-width="max-w-3xl" @close="emit('close')">
+  <BaseModal
+    :title="props.title ?? (props.source === 'lots' ? 'Select Stock Lot' : 'Metal Entry')"
+    max-width="max-w-3xl"
+    @close="emit('close')"
+  >
     <div class="grid grid-cols-3 gap-4">
       <BaseInput
         :model-value="String(requiredGrams)"
