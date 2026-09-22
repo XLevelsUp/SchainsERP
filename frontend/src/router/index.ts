@@ -117,6 +117,16 @@ const router = createRouter({
           component: () => import('@/views/PhoneBookView.vue'),
         },
         {
+          path: 'system-settings',
+          name: 'system-settings',
+          component: () => import('@/views/SystemSettingsView.vue'),
+        },
+        {
+          path: 'orders',
+          name: 'orders',
+          component: () => import('@/views/OrdersView.vue'),
+        },
+        {
           path: 'metal-picker-test',
           name: 'metal-picker-test',
           component: () => import('@/views/MetalPickerTestView.vue'),

@@ -22,6 +22,8 @@ import {
   BookUser,
   FlaskConical,
   MoreHorizontal,
+  SlidersHorizontal,
+  ClipboardList,
 } from 'lucide-vue-next'
 import type { NavItem } from '@/types/nav'
 
@@ -38,6 +40,7 @@ export const navItems: NavItem[] = [
     children: [
       { type: 'link', label: 'Items', to: '/items', icon: Gem },
       { type: 'link', label: 'Fitem Boxes', to: '/fitem-boxes', icon: Package },
+      { type: 'link', label: 'System Settings', to: '/system-settings', icon: SlidersHorizontal },
     ],
   },
   {
@@ -69,6 +72,7 @@ export const navItems: NavItem[] = [
       { type: 'link', label: 'Consolidated Report', to: '/consolidated-report', icon: ChartBar },
       { type: 'link', label: 'ID Wise', to: '/id-wise-report', icon: ArrowUpDown },
       { type: 'link', label: 'One Day Action', to: '/one-day-action', icon: CalendarClock },
+      { type: 'link', label: 'Orders', to: '/orders', icon: ClipboardList },
       { type: 'link', label: 'Pages', to: '/pages', icon: FileText },
     ],
   },

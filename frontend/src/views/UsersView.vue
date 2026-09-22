@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Search, Plus, Pencil, Trash2, X, RefreshCw, Trash } from 'lucide-vue-next'
+import { Search, Plus, Pencil, Trash2, X, RefreshCw, Trash, ChevronDown } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -14,6 +14,12 @@ import { itemsApi } from '@/lib/itemsApi'
 import { rolesApi } from '@/lib/rolesApi'
 import { userOptionLabel } from '@/lib/userLabel'
 import { ApiError } from '@/lib/api'
+import {
+  emptyUserFeatureFlags,
+  USER_FEATURE_FLAG_GROUPS,
+  USER_FEATURE_FLAG_KEYS,
+} from '@/lib/userFeatureFlags'
+import type { UserFeatureFlagGroup } from '@/lib/userFeatureFlags'
 import { useToastStore } from '@/stores/toast'
 import type {
   DataTableColumn,
@@ -103,6 +109,7 @@ function makeEmptyForm(): UserDetailFormValues {
     is_active: true,
     is_delete: false,
     is_billable: false,
+    ...emptyUserFeatureFlags(),
     item_mappings: [],
     head_mappings: [],
     cash_head_mappings: [],
@@ -115,6 +122,25 @@ const form = reactive<UserDetailFormValues>(makeEmptyForm())
 const formError = ref('')
 const isSaving = ref(false)
 const isLoadingEditUser = ref(false)
+
+// ----- feature flag helpers (declared after `form`, which they all read) --
+
+// Collapsed by default: the flags are an occasional administrative concern,
+// while name/role/mappings are the everyday path through this form.
+const showFeatureFlags = ref(false)
+
+const enabledFlagCount = computed(() => USER_FEATURE_FLAG_KEYS.filter((k) => form[k]).length)
+
+function isGroupAllOn(group: UserFeatureFlagGroup): boolean {
+  return group.flags.every((f) => form[f.key])
+}
+
+// One click to set or clear a whole group — with 40 toggles, doing this by
+// hand is where mistakes come from.
+function toggleGroup(group: UserFeatureFlagGroup) {
+  const next = !isGroupAllOn(group)
+  for (const flag of group.flags) form[flag.key] = next
+}
 
 function resetForm(values: UserDetailFormValues) {
   Object.assign(form, values)
@@ -158,6 +184,17 @@ async function openEditForm(row: UserDetailListItem) {
       is_active: user.is_active,
       is_delete: user.is_delete,
       is_billable: user.is_billable,
+      // Feature flags come back from show() on the full model. Start from the
+      // all-false defaults and overlay whatever the response carries, so a
+      // column the API omits stays false rather than becoming undefined and
+      // failing the Record<..., boolean> contract.
+      ...emptyUserFeatureFlags(),
+      ...Object.fromEntries(
+        USER_FEATURE_FLAG_KEYS.filter((k) => typeof user[k] === 'boolean').map((k) => [
+          k,
+          user[k] as boolean,
+        ]),
+      ),
       // Note: backend show() does not return mappings, so they start empty on edit.
     })
   } catch (err) {
@@ -499,6 +536,65 @@ async function handleDelete(user: UserDetailListItem) {
           <BaseCheckbox v-model="form.is_active" label="Active" />
           <BaseCheckbox v-model="form.is_billable" label="Billable" />
           <BaseCheckbox v-model="form.is_delete" label="Marked deleted" />
+        </section>
+
+        <!--
+          Feature flags. 40 booleans, grouped rather than listed flat — see
+          lib/userFeatureFlags.ts for why these 40 and not the 44 columns.
+          Collapsed by default so the everyday path (name, role, mappings) is
+          not buried under a wall of checkboxes.
+        -->
+        <section class="border-t border-slate-200 pt-4">
+          <button
+            type="button"
+            class="flex w-full items-center justify-between text-left"
+            @click="showFeatureFlags = !showFeatureFlags"
+          >
+            <span>
+              <span class="text-sm font-semibold text-slate-900">Permissions &amp; features</span>
+              <span class="ml-2 text-xs text-slate-500">
+                {{ enabledFlagCount }} of {{ USER_FEATURE_FLAG_KEYS.length }} enabled
+              </span>
+            </span>
+            <ChevronDown
+              class="h-4 w-4 text-slate-400 transition-transform"
+              :class="showFeatureFlags ? 'rotate-180' : ''"
+            />
+          </button>
+
+          <div v-if="showFeatureFlags" class="mt-4 flex flex-col gap-5">
+            <p class="text-xs text-slate-500">
+              Controls which screens and options this user sees. These are stored per user on
+              <code>user_details</code>; the app does not gate navigation on them yet, so today
+              they record intent for the legacy screens.
+            </p>
+
+            <div
+              v-for="group in USER_FEATURE_FLAG_GROUPS"
+              :key="group.title"
+              class="rounded-lg border border-slate-200 p-3"
+            >
+              <div class="mb-2 flex items-baseline justify-between gap-3">
+                <h4 class="text-sm font-medium text-slate-900">{{ group.title }}</h4>
+                <button
+                  type="button"
+                  class="text-xs font-medium text-brand-600 hover:text-brand-700"
+                  @click="toggleGroup(group)"
+                >
+                  {{ isGroupAllOn(group) ? 'Clear all' : 'Select all' }}
+                </button>
+              </div>
+              <p class="mb-3 text-xs text-slate-500">{{ group.description }}</p>
+              <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <BaseCheckbox
+                  v-for="flag in group.flags"
+                  :key="flag.key"
+                  v-model="form[flag.key]"
+                  :label="flag.label"
+                />
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Item mappings -->

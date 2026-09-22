@@ -1,4 +1,5 @@
 import { api, type ApiResponse } from './api'
+import { downloadFile } from './download'
 import type {
   ConsolidatedQuery,
   ConsolidatedResult,
@@ -33,6 +34,21 @@ export const stockReportsApi = {
     api
       .get<ApiResponse<ConsolidatedResult>>(`${RESOURCE}/consolidated${buildQuery(query)}`)
       .then((r) => r.data),
+
+  // CSV counterparts of the two reports above. Same query parameters, same
+  // filtering — the controllers set `is_export` themselves, which makes
+  // ReportService skip pagination and return every matching row, so page_no
+  // and page_size are pointless here and callers should omit them.
+  //
+  // These do NOT go through `api`: the response is a streamed CSV, not a
+  // JSON envelope. See lib/download.ts for why a plain link cannot work.
+  exportItemsObcb: (query: Omit<ItemsObcbQuery, 'page_no' | 'page_size'>) =>
+    downloadFile(`${RESOURCE}/items-obcb/export${buildQuery(query)}`, 'history_items_obcb.csv'),
+
+  // One file containing both sides; the controller writes the OUT rows then
+  // the IN rows into a single CSV.
+  exportConsolidated: (query: Omit<ConsolidatedQuery, 'page_no_out' | 'page_no_in' | 'page_size'>) =>
+    downloadFile(`${RESOURCE}/consolidated/export${buildQuery(query)}`, 'consolidated_report.csv'),
 
   // Lot lineage for one stock row: the parent lot it belongs to, every
   // child transaction drawn from that lot, and a received/consumed/balance

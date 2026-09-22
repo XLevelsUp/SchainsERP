@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { RefreshCw, Pencil, X } from 'lucide-vue-next'
+import { RefreshCw, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { customerTouchMappingsApi } from '@/lib/customerTouchMappingsApi'
 import { customerTouchApi } from '@/lib/customerTouchApi'
@@ -28,17 +29,22 @@ import type {
 | Which customer touches each user is authorised for. Replaces the legacy
 | Yii2 customer-touch-user-mappings index/update screens.
 |
-| Read + edit only, by design of the API rather than by choice here:
-| CustomerTouchUserMappingController implements index() and update() and
-| nothing else, and routes/api.php registers only GET and PUT/PATCH. There
-| is no store and no destroy, so this screen offers no "New mapping" or
-| delete action — flagged to backend in PENDING_WORK.md. Mappings have to
-| be created directly in the database until those routes exist.
+| Full CRUD as of PR #43–#45, which added store() and destroy(). This screen
+| was read + edit only before that, purely because the routes did not exist.
 |
-| Relations only come back on the list endpoint. update() returns the bare
-| model, so a save merges the returned scalars into the row already held
-| rather than replacing it — otherwise the user/touch names would blank out
-| until the next refresh.
+| One inline card serves both create and edit rather than a separate modal,
+| matching the rest of this screen and keeping the operator on one surface.
+| `formMode` decides which; `editingId` is null in create mode.
+|
+| Relations come back from index() AND store(), but NOT from update(). So a
+| create can push the returned row straight into the table with its names
+| intact, while an edit merges the returned scalars into the row already
+| held — otherwise the user/touch names would blank out until the next
+| refresh.
+|
+| Delete is a hard delete server-side. The inline "Active" checkbox is the
+| reversible option and stays the one to reach for; ConfirmPopover guards
+| the destructive one, same as ItemsView and the other CRUD screens.
 |
 | The user filter is server-side (?user_id=), matching the endpoint. The
 | touch filter is client-side: the endpoint has no customer_touch_id param.
@@ -177,9 +183,10 @@ async function toggleActive(row: CustomerTouchUserMapping) {
 }
 
 // ---------------------------------------------------------------------------
-// Edit form (reassign the user or the touch)
+// Create / edit form — one card, two modes
 // ---------------------------------------------------------------------------
 
+const formMode = ref<'create' | 'edit' | null>(null)
 const editingId = ref<number | null>(null)
 const editForm = reactive({
   user_id: null as number | null,
@@ -193,7 +200,19 @@ const editingRow = computed(() =>
   editingId.value === null ? null : (mappings.value.find((m) => m.id === editingId.value) ?? null),
 )
 
+function openCreate() {
+  formMode.value = 'create'
+  editingId.value = null
+  // Pre-fill from the user filter when one is set — the operator has
+  // already said which user they are working on.
+  editForm.user_id = filters.user_id
+  editForm.customer_touch_id = null
+  editForm.is_active = true
+  editError.value = ''
+}
+
 function openEdit(row: CustomerTouchUserMapping) {
+  formMode.value = 'edit'
   editingId.value = row.id
   editForm.user_id = row.user_id
   editForm.customer_touch_id = row.customer_touch_id
@@ -202,46 +221,105 @@ function openEdit(row: CustomerTouchUserMapping) {
 }
 
 function closeEdit() {
+  formMode.value = null
   editingId.value = null
   editError.value = ''
 }
 
-async function saveEdit() {
-  const row = editingRow.value
-  if (!row || isSavingEdit.value) return
+// Both modes need the same two selections; returns null when valid.
+function validateForm(): string | null {
+  if (editForm.user_id === null) return 'Select a user.'
+  if (editForm.customer_touch_id === null) return 'Select a customer touch.'
+  return null
+}
 
-  if (editForm.user_id === null) {
-    editError.value = 'Select a user.'
-    return
+// store() and update() report a duplicate (user_id, customer_touch_id) pair
+// differently — update() surfaces a 422 bag, store() catches \Exception and
+// returns a 500 carrying the raw driver text. Normalise both so the operator
+// gets the same sentence either way.
+function formErrorFrom(err: unknown, fallback: string): string {
+  if (!(err instanceof ApiError)) return fallback
+  const detail = err.errors ? (Object.values(err.errors)[0]?.[0] ?? err.message) : err.message
+  if (/unique|duplicate/i.test(detail)) {
+    return 'That user is already mapped to this customer touch.'
   }
-  if (editForm.customer_touch_id === null) {
-    editError.value = 'Select a customer touch.'
+  return detail
+}
+
+async function saveEdit() {
+  if (isSavingEdit.value) return
+
+  const invalid = validateForm()
+  if (invalid) {
+    editError.value = invalid
     return
   }
 
   isSavingEdit.value = true
   editError.value = ''
   try {
-    const result = await customerTouchMappingsApi.update(row.id, {
-      user_id: editForm.user_id,
-      customer_touch_id: editForm.customer_touch_id,
-      is_active: editForm.is_active,
-    })
-    applyUpdate(row, result)
-    // The row's cached relations now describe the OLD user/touch, so drop
-    // them and let the name lookups take over until the next refresh.
-    row.user = null
-    row.customer_touch = null
-    closeEdit()
-    toast.show('Mapping updated.', 'success')
-  } catch (err) {
-    if (err instanceof ApiError) {
-      editError.value = err.errors ? (Object.values(err.errors)[0]?.[0] ?? err.message) : err.message
+    if (formMode.value === 'create') {
+      const created = await customerTouchMappingsApi.create({
+        user_id: editForm.user_id!,
+        customer_touch_id: editForm.customer_touch_id!,
+        is_active: editForm.is_active,
+      })
+      // store() eager-loads the relations, so this row renders its names
+      // without a refetch. Prepend — the table is newest-first by id.
+      mappings.value = [created, ...mappings.value]
+      closeEdit()
+      toast.show('Mapping created.', 'success')
     } else {
-      editError.value = 'Failed to update the mapping.'
+      const row = editingRow.value
+      if (!row) return
+      const result = await customerTouchMappingsApi.update(row.id, {
+        user_id: editForm.user_id!,
+        customer_touch_id: editForm.customer_touch_id!,
+        is_active: editForm.is_active,
+      })
+      applyUpdate(row, result)
+      // The row's cached relations now describe the OLD user/touch, so drop
+      // them and let the name lookups take over until the next refresh.
+      row.user = null
+      row.customer_touch = null
+      closeEdit()
+      toast.show('Mapping updated.', 'success')
     }
+  } catch (err) {
+    editError.value = formErrorFrom(
+      err,
+      formMode.value === 'create'
+        ? 'Failed to create the mapping.'
+        : 'Failed to update the mapping.',
+    )
   } finally {
     isSavingEdit.value = false
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Delete
+// ---------------------------------------------------------------------------
+
+const deletingId = ref<number | null>(null)
+
+async function handleDelete(row: CustomerTouchUserMapping) {
+  if (deletingId.value !== null) return
+  deletingId.value = row.id
+  const label = userLabelFor(row)
+  try {
+    await customerTouchMappingsApi.remove(row.id)
+    mappings.value = mappings.value.filter((m) => m.id !== row.id)
+    // Editing the row that just vanished would post to a dead id.
+    if (editingId.value === row.id) closeEdit()
+    toast.show(`Mapping for ${label} deleted.`, 'success')
+  } catch (err) {
+    toast.show(
+      err instanceof ApiError ? err.message : 'Failed to delete the mapping.',
+      'error',
+    )
+  } finally {
+    deletingId.value = null
   }
 }
 
@@ -268,6 +346,7 @@ onMounted(async () => {
         <BaseButton variant="secondary" :icon="RefreshCw" :disabled="isLoading" @click="loadMappings">
           Refresh
         </BaseButton>
+        <BaseButton :icon="Plus" @click="openCreate">New mapping</BaseButton>
       </template>
     </PageHeader>
 
@@ -307,9 +386,11 @@ onMounted(async () => {
       {{ loadError }}
     </p>
 
-    <BaseCard v-if="editingRow" class="mb-4">
+    <BaseCard v-if="formMode" class="mb-4">
       <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-slate-900">Edit mapping #{{ editingRow.id }}</h2>
+        <h2 class="text-sm font-semibold text-slate-900">
+          {{ formMode === 'create' ? 'New mapping' : `Edit mapping #${editingRow?.id}` }}
+        </h2>
         <button
           type="button"
           class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
@@ -351,7 +432,13 @@ onMounted(async () => {
             Cancel
           </BaseButton>
           <BaseButton type="submit" :disabled="isSavingEdit">
-            {{ isSavingEdit ? 'Saving…' : 'Save mapping' }}
+            {{
+              isSavingEdit
+                ? 'Saving…'
+                : formMode === 'create'
+                  ? 'Create mapping'
+                  : 'Save mapping'
+            }}
           </BaseButton>
         </div>
       </form>
@@ -385,7 +472,7 @@ onMounted(async () => {
         <span class="whitespace-nowrap text-slate-500">{{ formatDateTime(row.updated_at) }}</span>
       </template>
       <template #id="{ row }">
-        <div class="flex justify-end">
+        <div class="flex justify-end gap-1">
           <button
             type="button"
             class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
@@ -394,13 +481,29 @@ onMounted(async () => {
           >
             <Pencil class="h-4 w-4" />
           </button>
+          <ConfirmPopover
+            :message="`Delete the mapping for ${userLabelFor(row)}? To keep it but switch it off, use the Active checkbox instead.`"
+            @confirm="handleDelete(row)"
+          >
+            <template #default="{ toggle }">
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                aria-label="Delete mapping"
+                :disabled="deletingId === row.id"
+                @click="toggle"
+              >
+                <Trash2 class="h-4 w-4" />
+              </button>
+            </template>
+          </ConfirmPopover>
         </div>
       </template>
     </DataTable>
 
     <p class="mt-3 text-xs text-slate-500">
-      Mappings can be listed and edited here, but not created or deleted — the backend exposes
-      only index and update for this resource. See <code>PENDING_WORK.md</code>.
+      Delete removes the mapping permanently. To suspend a mapping without losing it, clear its
+      Active checkbox instead.
     </p>
   </div>
 </template>

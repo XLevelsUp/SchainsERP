@@ -3,12 +3,70 @@
 Living tracker for the frontend team. Updated as items land — tick things off
 here rather than opening a new doc.
 
-**Last updated:** 2026-09-16
-**Backend baseline:** `2e11345` (PR #42 — routes for hide/cash-out/me/available-lots)
+**Last updated:** 2026-09-22
+**Backend baseline:** `07b01b5` (PR #45 — settings, orders, report exports)
 
 Every claim below was verified against backend source at that commit, not
 against the API doc. Where the two disagree, the source wins and the
 discrepancy is listed in [§3](#3-api-doc-corrections).
+
+### PR #43–#45 pass — 2026-09-22
+
+Three merges since the last baseline: **#43** (`067fe04`), **#44** (`cac57a2`),
+**#45** (`07b01b5`). Verified against backend source and against the **live
+Render database**, which the local `.env` currently points at.
+
+> #### 🔴 The two unauthenticated routes are STILL LIVE
+>
+> `GET /run-seeders` and `GET /run-migrations` in `routes/web.php` are
+> **unchanged** by these three PRs — `git diff 2e11345..HEAD -- routes/web.php`
+> is empty. `DatabaseSeeder` still calls `MassTestDataSeeder` (line 40), so
+> `/run-seeders` still inserts 40 fabricated gold movements into the live
+> ledger per hit. The only change in this batch was making its `item_id`
+> dynamic (`Item::first()` instead of a hardcoded `1`) — the risk is
+> identical. See the PR #38–#42 section below for the full write-up. Still
+> not probed from here, for the same reason.
+
+**Good news first: the route table is clean.** `php artisan route:list`
+resolves all **117** `api/v1` routes with no missing controller or method —
+the recurring "route references a class that doesn't exist" failure is *not*
+present in this batch. Every new route was checked individually too
+(`OrderController`, `SystemSettingController`, `CustomerTouchUserMappingController@store/@destroy`,
+`StockDetailsController@exportHistoryItemsObcb/@exportConsolidatedReport`),
+and all resolve. Both new migrations are `Ran` on the live database.
+
+Six new routes:
+
+| Route | Controller | Frontend today |
+|---|---|---|
+| `apiResource('orders')` — 5 routes | `OrderController` → `OrderDetail` | **none** |
+| `apiResource('settings')`, keyed by `{key}` — 5 routes | `SystemSettingController` | **none** |
+| `POST customer-touch-user-mappings` | `@store` | **none** — closes ask #11 |
+| `DELETE customer-touch-user-mappings/{id}` | `@destroy` | **none** — closes ask #11 |
+| `GET stock/reports/items-obcb/export` | `@exportHistoryItemsObcb` | **none** |
+| `GET stock/reports/consolidated/export` | `@exportConsolidatedReport` | **none** |
+
+Also changed, without new routes:
+
+- **`UserDetailController` (+339 lines)** — `update()`/`store()` now validate
+  **45 distinct `is_*` per-user feature flags** (`is_create_order_shown`,
+  `is_cash_mngmt_need_to_shown`, `is_ob_cb_rpt_need_to_shown`, …). Checked
+  each against the live `user_details` table: **44 of 45 have a column**, and
+  the 45th (`is_primary`) is not a user flag at all — it is a nested
+  `item_mappings.*.is_primary` field, and `users_items_mappings` does have
+  that column. **No mismatch.** `index()` now also returns
+  `role => $user->role->role`.
+- **`ReportController::getLiveMetalBalance`** — ask #19 partially fixed, and
+  it introduced a new privilege bug. See [#19](#19).
+- **`AuthController`** — docblock only (Sanctum→Passport wording, `role_id`
+  example corrected to a string). No behaviour change.
+- **`ReportService`** — added an `is_export` branch that skips pagination and
+  returns every row. Set by the two export endpoints.
+
+**Net for us:** nothing that shipped in these three PRs has any frontend yet.
+Full UI breakdown in [§1 Pending](#pending).
+
+---
 
 ### PR #38–#42 pass — 2026-09-16
 
@@ -233,6 +291,11 @@ Practical consequences for us:
 | Consolidated report | `views/ConsolidatedReportView.vue` |
 | Customer Touch Mappings — list, filter, inline active toggle, reassign | `views/CustomerTouchMappingsView.vue`, `lib/customerTouchMappingsApi.ts` |
 | Stock Auto Entry — 4 transaction types, NORMAL/GMS/FITEM rows, live previews | `views/StockAutoEntryView.vue`, `types/stockAutoEntry.ts`, `lib/stockApi.ts` |
+| Customer Touch Mappings — create + delete (closes backend ask #11) | `views/CustomerTouchMappingsView.vue`, `lib/customerTouchMappingsApi.ts` |
+| Server-side CSV export on Items OB&CB + Consolidated | `lib/download.ts`, `lib/stockReportsApi.ts`, both report views |
+| System Settings — CRUD keyed by `setting_key`, JSON value editor | `views/SystemSettingsView.vue`, `lib/systemSettingsApi.ts`, `types/systemSetting.ts` |
+| Orders — CRUD with client-side validation the API lacks | `views/OrdersView.vue`, `lib/ordersApi.ts`, `types/order.ts` |
+| Per-user feature flags — 40 toggles, grouped, on the user form | `views/UsersView.vue`, `lib/userFeatureFlags.ts`, `types/userDetail.ts` |
 | Clearable date filters — inline × on every filter date/time input | `components/ui/BaseInput.vue` (`clearable` prop), 7 filter screens |
 | Stock user picker hides the signed-in operator | `components/stock/UserPickerPanel.vue` |
 | One Day Action report (PR #37) | `views/OneDayActionView.vue`, `types/oneDayAction.ts`, `lib/reportApi.ts` |
@@ -301,6 +364,106 @@ amber banners rather than hidden:
   `UserDetailController` and sets real credentials.
 
 ### Pending
+
+#### New work from PRs #43–#45 (added 2026-09-22)
+
+Ordered by effort-to-value. All four are **unblocked** — the routes resolve
+and both migrations are applied on the live database.
+
+- [x] **Customer touch mappings: add create + delete.** ✅ Built 2026-09-22. *Smallest win — it
+      finishes a screen we already shipped, and it was our own longest-standing
+      backend ask (#11).* `lib/customerTouchMappingsApi.ts` currently exposes
+      only `list` and `update`; add `create(payload)` → `POST
+      customer-touch-user-mappings` (`user_id`, `customer_touch_id`, optional
+      `is_active`, returns 201 with `user`/`customerTouch` already loaded) and
+      `remove(id)` → `DELETE customer-touch-user-mappings/{id}`. Then add a
+      "New mapping" button + modal and a per-row delete to
+      `CustomerTouchMappingsView`. Reuse `BaseSelect` for both pickers.
+      Note the asymmetry: `store()` eager-loads the relations but `update()`
+      still does not (ask #12), so keep the existing merge/fallback on update
+      and skip it on create.
+
+      This also clears the [§1b seed-data gap](#seed-data-gaps) — mappings no
+      longer have to be inserted by hand to make the screen testable.
+
+- [x] **CSV export buttons on the two stock reports.** ✅ Built 2026-09-22.
+      `GET stock/reports/items-obcb/export` and
+      `GET stock/reports/consolidated/export` take the *same* query filters as
+      their JSON siblings, set `is_export` internally to skip pagination, and
+      `streamDownload()` a CSV (`history_items_obcb.csv`, and out+in rows for
+      the consolidated one).
+
+      ⚠️ **These do not fit `lib/api.ts`.** `request()` parses JSON and would
+      choke on a CSV body, and the response is a file, not an envelope. They
+      also sit behind `auth:api`, so a plain `<a href>` or `window.open` will
+      **401** — the bearer token cannot ride along on a naive navigation, and
+      per [§2b](#2b-what-we-changed-in-schainbackend-2026-09-07) sandboxed
+      contexts block script-driven downloads too. Build one shared helper
+      (`lib/download.ts`) that does `fetch` with the `Authorization` header,
+      reads `res.blob()`, and triggers a temporary object-URL anchor. Do not
+      bolt this onto `request()`.
+
+- [x] **System Settings screen.** ✅ Built 2026-09-22. `apiResource('settings')` is full CRUD,
+      **keyed by `setting_key`, not by id** — `show`/`update`/`destroy` all do
+      `where('setting_key', $key)->firstOrFail()`, and the route is declared
+      `->parameters(['settings' => 'key'])`. The model casts `setting_value`
+      to `array` and `store()` validates it `required|array`, so **a bare
+      string or number will be rejected** — the editor has to produce
+      JSON, and the UI should validate that before submitting rather than
+      surfacing a raw 422.
+
+      Table is `id` / `setting_key` (unique) / `setting_value` (json) /
+      `description` (nullable) / timestamps. No seeded rows yet, so the screen
+      needs a real empty state.
+
+- [x] **Orders screen.** ✅ Built 2026-09-22, with the status vocabulary flagged on-screen as unconfirmed.
+      `apiResource('orders')` → `OrderController` → `OrderDetail`
+      (`order_details`: `order_id`, `customer_id`, `item_id`, `grams`,
+      `status` default `PENDING`, `added_at`).
+
+      Flagging rather than guessing, because the controller is thin in ways
+      that matter: every method is `$request->all()` straight into
+      `create()`/`update()` on a `$guarded = []` model — **no validation, no
+      `FormRequest`, no status enum, no `customer_id`/`item_id` existence
+      check**. So the frontend is the only thing standing between a typo and a
+      bad row. Decide the allowed `status` values with the backend team before
+      building the picker; right now any string is accepted.
+
+      Worth connecting to two existing items: `HeadStockSummaryPanel` already
+      renders an **"Active Orders"** row that has always read 0 because no
+      orders table existed, and `user_details` carries
+      `is_create_order_shown` / `is_need_order_status_shown` flags (below).
+
+- [x] **Per-user feature flags — editing (phase 1).** ✅ Built 2026-09-22. Gating nav on them (phase 2) is still open, see ask #33.
+      `UserDetailController` now validates and stores 44 `is_*` booleans per
+      user — `is_create_order_shown`, `is_cash_mngmt_need_to_shown`,
+      `is_ob_cb_rpt_need_to_shown`, `is_gallery_need_to_shown` and so on —
+      each one plainly a nav/feature visibility toggle for the legacy screen.
+
+      Two separate pieces of work, and they should be sequenced:
+      1. **Editing them** — a permissions tab on the user form. Mechanical,
+         but 44 checkboxes needs grouping to be usable.
+      2. **Honouring them** — gating `lib/nav.ts` and route guards on the
+         signed-in user's flags. This is the larger and riskier change.
+
+      **Not blocked, but read this before starting (verified 2026-09-22).**
+      `UserDetail::toArray()` exposes all 44 `is_*` keys — the model hides
+      only `password_hash`, `report_password` and `otp` — so
+      `GET user-details/{id}` and `index()` *do* return the flags, and (1) is
+      buildable today.
+
+      For (2), the catch is that **`GET /me` does not return them.**
+      `AuthController::me` hand-picks exactly five fields — `user_id`, `name`,
+      `user_name`, `role_id`, `is_active` — so gating nav on the signed-in
+      user's flags means a second call to `user-details/{user_id}` after
+      login, then caching the result in the auth store. That works, but it is
+      an extra round trip on every cold boot.
+
+      Worth asking the backend team to widen `/me` instead (it is a five-line
+      change in one method), rather than us building the workaround and then
+      unpicking it later. Ask logged as [#33](#33).
+
+#### Carried over
 
 - [ ] **F-Items IN/OUT screen.** `POST /api/v1/fitems` has existed since
       before PR #37 but was only documented in the 2026-09-11 doc update
@@ -653,19 +816,24 @@ the head check will not recognise.
     `OrderDetail` across `app/`, `routes/` and `database/`, excluding the
     model file itself, returns **0 hits**.
 
-11. **Customer touch mappings cannot be created or deleted.**
-    `CustomerTouchUserMappingController` implements `index()` and `update()`
-    only, and `routes/api.php` registers only `GET` and `PUT`/`PATCH`. There
-    is no `store` and no `destroy`, so new mappings have to be inserted
-    straight into `customer_touch_user_mappings` by hand and stale ones can
-    only be deactivated, never removed. `CustomerTouchMappingsView` therefore
-    offers no "New mapping" or delete action. Adding those two routes would
-    make the screen complete.
+11. ~~**Customer touch mappings cannot be created or deleted.**~~
+    **✅ FIXED BY BACKEND in PR #43–#45 (confirmed 2026-09-22).**
 
-    *Re-verified 2026-09-08 — still pending, unchanged.*
-    `CustomerTouchUserMappingController` still declares exactly two public
-    methods, `index()` (17) and `update()` (48). `routes/api.php:40-42`
-    still registers only `GET`, `PUT` and `PATCH`.
+    `CustomerTouchUserMappingController` now declares `index()`, `store()`,
+    `update()` and `destroy()`, and `routes/api.php` registers
+    `POST customer-touch-user-mappings` and
+    `DELETE customer-touch-user-mappings/{id}` alongside the existing verbs.
+    All four resolve in `route:list`.
+
+    `store()` validates `user_id` (required int), `customer_touch_id`
+    (required int) and `is_active` (boolean, defaults to `1`), and — unlike
+    `update()`, see #12 — it *does* `load(['user','customerTouch'])` before
+    returning, so the created row comes back with the display names already
+    populated. Returns 201.
+
+    **The work is now ours.** `lib/customerTouchMappingsApi.ts` still exposes
+    only `list` and `update`; `CustomerTouchMappingsView` still has no "New
+    mapping" or delete action. See [§1 Pending](#pending).
 
 12. **`update()` on that controller drops the eager-loaded relations.**
     `index()` returns each mapping `with(['user', 'customerTouch'])`, but
@@ -828,6 +996,32 @@ the head check will not recognise.
     `$table->string('role', 50)` with no `role_name` anywhere in `app/`.
     The cross-reference to ask #2 was wrong (that ask is about `X-User-ID`,
     not role numbering) and now points at the new ask #21.
+
+    **Update 2026-09-22 (PR #43–#45) — half fixed, and a privilege bug
+    introduced.** `ReportController::getLiveMetalBalance` now reads:
+
+    ```php
+    if ($actingUser && ($actingUser->role_id == 1
+        || in_array(strtoupper(optional($actingUser->role)->role), ['ADMIN', 'HEAD']))) {
+        if ($request->filled('view_as'))      { $targetUserId = (int) $request->query('view_as'); }
+        elseif ($request->filled('user_id'))  { $targetUserId = (int) $request->query('user_id'); }
+    }
+    ```
+
+    - ✅ **`role_name` → `role` is fixed**, so the override can finally
+      activate. Verified against the live `roles` table: `3 => HEAD` exists,
+      so a head user now genuinely gets the override.
+    - ⚠️ **`'ADMIN'` is dead.** The live `roles` table holds exactly
+      `1 CUSTOMER, 2 EMPLOYEE, 3 HEAD, 4 PURCHASE, 5 SALARY`. There is no
+      ADMIN row, so only the `HEAD` arm can ever match.
+    - 🔴 **`role_id == 1` is still there, and now it is reachable.** While
+      both halves were broken this was inert. Now that the second half works,
+      the first half grants the override to **role_id 1 — which is
+      `CUSTOMER`**. A customer can pass `?view_as=` or `?user_id=` and read
+      any other user's live metal balance. That line should simply be
+      deleted; the role-name check already covers the intended case.
+    - 🆕 **New undocumented parameter `view_as`**, taking precedence over
+      `user_id`. Not in the API doc. Frontend should prefer `view_as`.
 
 20. Minor: `LiveMetalSeeder.php` has a duplicate `'added_by' => 1,` key in
     its first insert array. Harmless (PHP keeps the last value) but sloppy.
@@ -1103,6 +1297,45 @@ the head check will not recognise.
 
     Everything the frontend needed for these five endpoints came from the
     request classes and controllers, not the doc.
+
+### New in PRs #43–#45 — 2026-09-22
+
+<a id="33"></a>
+
+33. **`GET /me` does not return the per-user feature flags.**
+    `AuthController::me` hand-picks five fields — `user_id`, `name`,
+    `user_name`, `role_id`, `is_active`. Meanwhile PR #43–#45 added 44
+    `is_*_shown` / `is_*_needed` visibility flags to `user_details`, and
+    `UserDetail::toArray()` already exposes all of them (only
+    `password_hash`, `report_password`, `otp` are hidden).
+
+    To gate navigation on those flags we need them on the signed-in user.
+    Today that means a second request to `user-details/{user_id}` right after
+    login on every cold boot. Returning the full model from `/me` — or the
+    five fields plus the `is_*` set — removes that round trip entirely.
+    Please also include `role` (the name), which `index()` now returns but
+    `/me` still does not.
+
+<a id="34"></a>
+
+34. **`OrderController` has no validation whatsoever.** Every method pipes
+    `$request->all()` into a `$guarded = []` model:
+    `OrderDetail::create($request->all())` in `store()`, `$order->update($request->all())`
+    in `update()`. There is no `FormRequest`, no `status` enum, and no
+    existence check on `customer_id` or `item_id` — so an order can be
+    created against a customer or item that does not exist, with any string
+    at all as its status.
+
+    We will validate in the UI, but that only protects our own screen; the
+    endpoint stays open to anything else that calls it. Please confirm the
+    intended `status` values so our picker matches the backend's expectation
+    rather than inventing a vocabulary.
+
+<a id="35"></a>
+
+35. **`role_id == 1` in the live-metal override now grants CUSTOMER access.**
+    Full detail in [#19](#19) — flagged separately here because it changed
+    from inert to exploitable in this batch, and it is a one-line deletion.
 
 ---
 

@@ -25,7 +25,11 @@ export class ApiError extends Error {
 // Vercel, Laravel on Render — so VITE_API_BASE_URL supplies the absolute
 // origin, e.g. https://api.lensnstories.com/api/v1. Trailing slashes are
 // trimmed so a value with or without one builds the same URL.
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/+$/, '')
+//
+// Exported because lib/download.ts builds the same URLs without going through
+// request(): the report export endpoints stream a CSV body, which request()
+// would try to parse as JSON. One definition, two consumers.
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/+$/, '')
 
 interface ErrorBody {
   message?: string
@@ -46,7 +50,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   let response: Response
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
+    response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),

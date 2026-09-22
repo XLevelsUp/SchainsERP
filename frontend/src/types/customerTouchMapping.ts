@@ -1,13 +1,17 @@
 import type { CustomerTouch } from './customerTouch'
 
-// GET /customer-touch-user-mappings, PUT|PATCH /customer-touch-user-mappings/{id}
-// (PR #32, CustomerTouchUserMappingController). Many-to-many link between
+// GET|POST /customer-touch-user-mappings,
+// PUT|PATCH|DELETE /customer-touch-user-mappings/{id}
+// (CustomerTouchUserMappingController). Many-to-many link between
 // user_details and customer_touch, table customer_touch_user_mappings.
 //
-// The controller exposes ONLY index and update — there is no store and no
-// destroy route, so mappings can be listed and edited but not created or
-// removed through the API. Flagged to backend; the UI reflects it rather
-// than pretending otherwise.
+// store() and destroy() landed in PR #43–#45; before that this resource was
+// read + update only and the screen had no create or delete action.
+//
+// Note the asymmetry between the two writes: store() calls
+// load(['user','customerTouch']) before returning, so a created row arrives
+// with its relations populated. update() does not — see the comment on the
+// optional relation fields below.
 
 // The nested `user` is the raw UserDetail model as Eloquent serialises it,
 // NOT the enriched shape GET /user-details/{id} returns. Only the fields
@@ -28,12 +32,20 @@ export interface CustomerTouchUserMapping {
   // serialise as ISO-8601.
   added_at: string
   updated_at: string
-  // Eager-loaded by index() only. Eloquent snake-cases relation keys on
-  // serialisation, so the `customerTouch` relation arrives as
+  // Eager-loaded by index() and store(). Eloquent snake-cases relation keys
+  // on serialisation, so the `customerTouch` relation arrives as
   // `customer_touch`. update() returns the bare model, so both are absent
-  // from that response — hence optional.
+  // from that one response — hence optional.
   user?: CustomerTouchMappingUser | null
   customer_touch?: CustomerTouch | null
+}
+
+// POST body. user_id and customer_touch_id are `required|integer`
+// server-side; is_active is `boolean` and defaults to 1 when omitted.
+export interface CustomerTouchMappingCreate {
+  user_id: number
+  customer_touch_id: number
+  is_active?: boolean
 }
 
 // Every field is `sometimes` server-side, so a partial payload is valid and

@@ -125,7 +125,10 @@ function formatNumber(value: number | string | null) {
 
 // Sends exactly one of user_id / retailer_id — the key is what tells the
 // backend which party a bare id refers to.
-function currentQuery(pageOut: number, pageIn: number): ConsolidatedQuery {
+// Filters only, no paging — shared by the paged search and the CSV export.
+// The export endpoint sets `is_export` itself, which makes ReportService
+// return every matching row, so the three paging keys are meaningless there.
+function filterQuery(): Omit<ConsolidatedQuery, 'page_size' | 'page_no_out' | 'page_no_in'> {
   const query: ConsolidatedQuery = {
     item_id: filters.item_id ?? undefined,
     from_date: filters.from_date || undefined,
@@ -136,15 +139,38 @@ function currentQuery(pageOut: number, pageIn: number): ConsolidatedQuery {
     from_time: filters.from_date ? filters.from_time || undefined : undefined,
     to_date: filters.to_date || undefined,
     to_time: filters.to_date ? filters.to_time || undefined : undefined,
-    page_size: PAGE_SIZE,
-    page_no_out: pageOut,
-    page_no_in: pageIn,
   }
   if (filters.party_id !== null) {
     if (filters.party_role === 'retailer') query.retailer_id = filters.party_id
     else query.user_id = filters.party_id
   }
   return query
+}
+
+function currentQuery(pageOut: number, pageIn: number): ConsolidatedQuery {
+  return {
+    ...filterQuery(),
+    page_size: PAGE_SIZE,
+    page_no_out: pageOut,
+    page_no_in: pageIn,
+  }
+}
+
+// One CSV containing both sections — the controller writes the OUT rows and
+// then the IN rows into the same file, rather than producing two downloads.
+const isExporting = ref(false)
+
+async function exportCsv() {
+  if (isExporting.value) return
+  isExporting.value = true
+  loadError.value = ''
+  try {
+    await stockReportsApi.exportConsolidated(filterQuery())
+  } catch (err) {
+    loadError.value = err instanceof ApiError ? err.message : 'Failed to export the report.'
+  } finally {
+    isExporting.value = false
+  }
 }
 
 async function loadLookups() {
@@ -296,6 +322,14 @@ onMounted(() => {
         <div class="flex items-center gap-2">
           <BaseButton variant="secondary" type="button" :disabled="isLoading" @click="clearFilters">
             Clear
+          </BaseButton>
+          <BaseButton
+            variant="secondary"
+            type="button"
+            :disabled="isExporting || isLoading"
+            @click="exportCsv"
+          >
+            {{ isExporting ? 'Exporting…' : 'Export CSV' }}
           </BaseButton>
           <BaseButton type="button" :disabled="isLoading" @click="runSearch">
             {{ isLoading ? 'Loading…' : 'Search' }}

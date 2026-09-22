@@ -35,8 +35,12 @@ import type { DataTableColumn } from '@/types/table'
 | Transactions report — total_count comes back with every page, so there is
 | enough to know when to stop.
 |
-| Export is a client-side CSV of what is currently loaded; there is no
-| backend export endpoint.
+| Export now calls the backend's own endpoint
+| (GET /stock/reports/items-obcb/export, added in PR #43–#45) instead of
+| serialising the loaded rows in the browser. That matters: the old version
+| could only ever export the pages already fetched, so "Export CSV" after a
+| search returning 4,000 rows produced a 50-row file. The server applies the
+| same filters with pagination switched off and streams the lot.
 |--------------------------------------------------------------------------
 */
 
@@ -119,7 +123,12 @@ function flowClass(type: string): string {
 
 // employee_id is only sent once a party is picked; omitting it reports from
 // the head's own perspective, which is the endpoint's default branch.
-function currentQuery(page: number) {
+//
+// Filters only, no paging — shared by the paged search and the CSV export.
+// The export endpoint sets `is_export` server-side, which makes
+// ReportService skip pagination entirely, so sending page_size/page_no there
+// would be noise.
+function filterQuery() {
   return {
     employee_id:
       filters.party_id !== null ? `${filters.party_role}_${filters.party_id}` : undefined,
@@ -134,8 +143,32 @@ function currentQuery(page: number) {
     to_date: filters.to_date || undefined,
     to_time: filters.to_date ? filters.to_time || undefined : undefined,
     type: filters.type ?? undefined,
+  }
+}
+
+function currentQuery(page: number) {
+  return {
+    ...filterQuery(),
     page_size: PAGE_SIZE,
     page_no: page,
+  }
+}
+
+// The CSV covers every matching row, not just the pages loaded so far —
+// worth saying out loud in the UI, because the button sits under a table
+// that may be showing 50 of 4,000.
+const isExporting = ref(false)
+
+async function exportCsv() {
+  if (isExporting.value) return
+  isExporting.value = true
+  loadError.value = ''
+  try {
+    await stockReportsApi.exportItemsObcb(filterQuery())
+  } catch (err) {
+    loadError.value = err instanceof ApiError ? err.message : 'Failed to export the report.'
+  } finally {
+    isExporting.value = false
   }
 }
 
@@ -196,60 +229,6 @@ function clearFilters() {
   filters.to_time = ''
   filters.type = null
   runSearch()
-}
-
-function exportCsv() {
-  const header = [
-    'Stock ID',
-    'Date',
-    'Item',
-    'To Item',
-    'Flow',
-    'Entry',
-    'Given By',
-    'Given To',
-    'Grams',
-    'Touch',
-    'Purity',
-    'OB Grams',
-    'CB Grams',
-    'OB Purity',
-    'CB Purity',
-    'Remarks',
-  ]
-  const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
-  const lines = [
-    header.join(','),
-    ...rows.value.map((r) =>
-      [
-        r.stock_id,
-        r.added_at,
-        r.item_name,
-        r.to_item_name ?? '',
-        r.stock_type,
-        r.entry_type,
-        r.given_by_name,
-        r.given_to_name,
-        r.grams,
-        r.touch,
-        r.purity,
-        r.ob_grams,
-        r.cb_grams,
-        r.ob_purity,
-        r.cb_purity,
-        r.remarks ?? '',
-      ]
-        .map(escape)
-        .join(','),
-    ),
-  ]
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `items-obcb-${new Date().toISOString().slice(0, 10)}.csv`
-  link.click()
-  URL.revokeObjectURL(url)
 }
 
 onMounted(() => {
@@ -327,10 +306,10 @@ onMounted(() => {
         <BaseButton
           variant="secondary"
           type="button"
-          :disabled="rows.length === 0"
+          :disabled="isExporting || isLoading"
           @click="exportCsv"
         >
-          Export CSV
+          {{ isExporting ? 'Exporting…' : 'Export CSV' }}
         </BaseButton>
         <BaseButton type="button" :disabled="isLoading" @click="runSearch">
           {{ isLoading ? 'Loading…' : 'Search' }}

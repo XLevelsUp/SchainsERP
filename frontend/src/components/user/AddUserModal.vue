@@ -7,6 +7,7 @@ import BaseSelect from '@/components/ui/BaseSelect.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { rolesApi } from '@/lib/rolesApi'
 import { ApiError } from '@/lib/api'
+import { emptyUserFeatureFlags } from '@/lib/userFeatureFlags'
 import { useToastStore } from '@/stores/toast'
 import type { CategoryName, Role, UserDetailFormValues } from '@/types'
 
@@ -63,6 +64,7 @@ function makeEmptyForm(): UserDetailFormValues {
     is_active: true,
     is_delete: false,
     is_billable: false,
+    ...emptyUserFeatureFlags(),
     item_mappings: [],
     head_mappings: [],
     cash_head_mappings: [],
