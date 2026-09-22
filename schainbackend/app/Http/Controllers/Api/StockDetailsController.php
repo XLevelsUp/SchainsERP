@@ -29,6 +29,74 @@ use App\Http\Resources\AvailableMetalResource;
 
 class StockDetailsController extends Controller
 {
+
+    public function exportHistoryItemsObcb(Request $request)
+    {
+        try {
+            $headId = $request->query('head_id') ?? $this->getActingUserId($request);
+            $filters = $request->all();
+            $filters['is_export'] = true;
+            $result = $this->reportService->getItemsObcbReport($filters, $headId);
+
+            $records = $result['details']['records'] ?? [];
+
+            return response()->streamDownload(function () use ($records) {
+                $file = fopen('php://output', 'w');
+                if (count($records) > 0) {
+                    fputcsv($file, array_keys((array)$records[0]));
+                    foreach ($records as $row) {
+                        fputcsv($file, (array)$row);
+                    }
+                }
+                fclose($file);
+            }, 'history_items_obcb.csv');
+
+        } catch (\Throwable $e) {
+            Log::error('StockDetailsController::exportHistoryItemsObcb failed', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Export failed.'], 500);
+        }
+    }
+
+    public function exportConsolidatedReport(Request $request)
+    {
+        try {
+            $headId = $request->query('head_id') ?? $this->getActingUserId($request);
+            $filters = $request->all();
+            $filters['is_export'] = true;
+            $result = $this->reportService->getConsolidatedReport($filters, $headId);
+
+            $outRecords = $result['out_details']['records'] ?? [];
+            $inRecords = $result['in_details']['records'] ?? [];
+
+            return response()->streamDownload(function () use ($outRecords, $inRecords) {
+                $file = fopen('php://output', 'w');
+                
+                if (count($outRecords) > 0) {
+                    fputcsv($file, ['TYPE']);
+                    fputcsv($file, ['OUT_RECORDS']);
+                    fputcsv($file, array_keys((array)$outRecords[0]));
+                    foreach ($outRecords as $row) {
+                        fputcsv($file, (array)$row);
+                    }
+                }
+
+                if (count($inRecords) > 0) {
+                    fputcsv($file, []);
+                    fputcsv($file, ['TYPE']);
+                    fputcsv($file, ['IN_RECORDS']);
+                    fputcsv($file, array_keys((array)$inRecords[0]));
+                    foreach ($inRecords as $row) {
+                        fputcsv($file, (array)$row);
+                    }
+                }
+                fclose($file);
+            }, 'consolidated_report.csv');
+
+        } catch (\Throwable $e) {
+            Log::error('StockDetailsController::exportConsolidatedReport failed', ['error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'message' => 'Export failed.'], 500);
+        }
+    }
     /**
      * ============================================================
      * GET STOCK HISTORY (For Cash Dashboard Bottom Table)
@@ -366,7 +434,7 @@ class StockDetailsController extends Controller
                 'stock_id' => 'required|integer'
             ]);
 
-            $headId = $this->getActingUserId($request);
+            $headId = $request->query('head_id') ?? $this->getActingUserId($request);
             $result = $this->reportService->getIdWiseStockReport($request->input('stock_id'), $headId);
 
             return response()->json([
@@ -402,7 +470,7 @@ class StockDetailsController extends Controller
     public function getHistoryItemsObcb(Request $request): JsonResponse
     {
         try {
-            $headId = $this->getActingUserId($request);
+            $headId = $request->query('head_id') ?? $this->getActingUserId($request);
             $result = $this->reportService->getItemsObcbReport($request->all(), $headId);
 
             return response()->json([
@@ -423,7 +491,7 @@ class StockDetailsController extends Controller
     public function getConsolidatedReport(Request $request): JsonResponse
     {
         try {
-            $headId = $this->getActingUserId($request);
+            $headId = $request->query('head_id') ?? $this->getActingUserId($request);
             $result = $this->reportService->getConsolidatedReport($request->all(), $headId);
 
             return response()->json([
@@ -516,9 +584,10 @@ class StockDetailsController extends Controller
                 ], 400);
             }
 
-            // Validate that the requested item is actually a "metal"
+            // Validate that the requested item is mapped as a metal popup item
             $item = Item::find($itemId);
-            if (!$item || strtolower($item->item_name) !== 'metal') {
+            $metalItemIds = \App\Models\SystemSetting::get('metal_popup_items', []);
+            if (!$item || !in_array($item->item_id, $metalItemIds)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Selected item is not valid for metal selection'
@@ -689,3 +758,5 @@ class StockDetailsController extends Controller
         }
     }
 }
+
+

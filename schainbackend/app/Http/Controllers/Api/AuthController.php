@@ -13,7 +13,7 @@ class AuthController extends Controller
      * @OA\Post(
      *     path="/api/v1/login",
      *     summary="User Login",
-     *     description="Authenticate user and return a Sanctum Bearer Token",
+     *     description="Authenticate user and return a Passport Bearer Token",
      *     operationId="authLogin",
      *     tags={"Authentication"},
      *     @OA\RequestBody(
@@ -38,7 +38,7 @@ class AuthController extends Controller
      *                     @OA\Property(property="user_id", type="integer", example=1),
      *                     @OA\Property(property="name", type="string", example="Admin User"),
      *                     @OA\Property(property="user_name", type="string", example="admin"),
-     *                     @OA\Property(property="role_id", type="integer", example=1)
+     *                     @OA\Property(property="role_id", type="string", example="ADMIN")
      *                 ),
      *                 @OA\Property(property="token", type="string", example="1|Vb9..."),
      *                 @OA\Property(property="token_type", type="string", example="Bearer")
@@ -85,7 +85,7 @@ class AuthController extends Controller
             ], 403);
         }
 
-        // Generate Sanctum Token
+        // Generate Passport Token
         $token = $user->createToken('auth_token')->accessToken;
 
         // Login successful - Secure Response

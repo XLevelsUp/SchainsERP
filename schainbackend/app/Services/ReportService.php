@@ -189,15 +189,20 @@ class ReportService
         $outTotalCount = $outQuery->count();
         $inTotalCount = $inQuery->count();
 
-        $outRecords = $outQuery->orderBy('stock_id', 'desc')
-            ->skip(($pageNoOut - 1) * $pageSize)
-            ->take($pageSize)
-            ->get();
-
-        $inRecords = $inQuery->orderBy('stock_id', 'desc')
-            ->skip(($pageNoIn - 1) * $pageSize)
-            ->take($pageSize)
-            ->get();
+        if (isset($filters['is_export']) && $filters['is_export']) {
+            $outRecords = $outQuery->orderBy('stock_id', 'desc')->get();
+            $inRecords = $inQuery->orderBy('stock_id', 'desc')->get();
+        } else {
+            $outRecords = $outQuery->orderBy('stock_id', 'desc')
+                ->skip(($pageNoOut - 1) * $pageSize)
+                ->take($pageSize)
+                ->get();
+    
+            $inRecords = $inQuery->orderBy('stock_id', 'desc')
+                ->skip(($pageNoIn - 1) * $pageSize)
+                ->take($pageSize)
+                ->get();
+        }
 
         // DB-level Aggregation Function (Memory efficient for large datasets)
         $calculateTotals = function ($query, $isOut) use ($userId, $retailerId) {
@@ -454,10 +459,14 @@ class ReportService
         $totalCount = $query->count();
 
         // 5. Pagination & Fetch
-        $records = $query->orderBy('stock_id', 'desc')
-            ->skip(($pageNo - 1) * $pageSize)
-            ->take($pageSize)
-            ->get();
+        if (isset($filters['is_export']) && $filters['is_export']) {
+            $records = $query->orderBy('stock_id', 'desc')->get();
+        } else {
+            $records = $query->orderBy('stock_id', 'desc')
+                ->skip(($pageNo - 1) * $pageSize)
+                ->take($pageSize)
+                ->get();
+        }
 
         // 6. Map balances chronologically using JSON snapshots
         $formattedRecords = $records->map(function ($stock) use ($userId, $retailerId, $headId) {
@@ -788,7 +797,15 @@ class ReportService
         $date = $params['date'] ?? null;
         $time = $params['time'] ?? null;
         $pageSize = $params['per_page'] ?? 50;
-        $itemId = $params['item_id'] ?? 4; // Default to 4 if not passed
+        
+        $itemId = $params['item_id'] ?? null;
+        if (!$itemId) {
+            $metalItemIds = \App\Models\SystemSetting::get('live_metal_report_items', []);
+            if (empty($metalItemIds)) {
+                throw new \Exception('No items mapped for Live Metal Report. Please configure live_metal_report_items in settings or provide an item_id.');
+            }
+            $itemId = $metalItemIds[0];
+        }
 
         $query = StockDetails::with(['givenBy'])
             ->where('given_to', $targetUserId)

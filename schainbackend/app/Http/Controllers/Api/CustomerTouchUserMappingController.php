@@ -61,6 +61,7 @@ class CustomerTouchUserMappingController extends Controller
             }
 
             $mapping->save();
+            $mapping->load(['user', 'customerTouch']);
 
             return response()->json([
                 'success' => true,
@@ -95,6 +96,7 @@ class CustomerTouchUserMappingController extends Controller
                 'customer_touch_id' => $request->customer_touch_id,
                 'is_active' => $request->is_active ?? 1
             ]);
+            $mapping->load(['user', 'customerTouch']);
 
             return response()->json([
                 'success' => true,
