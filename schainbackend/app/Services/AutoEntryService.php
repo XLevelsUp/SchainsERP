@@ -130,8 +130,8 @@ class AutoEntryService extends BaseStockService
                 }
 
                 // Determine role-based weight adjustments
-                $isSenderHead = ($givenBy->role_id == 1);
-                $isReceiverHead = ($givenTo->role_id == 1);
+                $isSenderHead = in_array(strtoupper(optional($givenBy->role)->role), ['HEAD']);
+                $isReceiverHead = in_array(strtoupper(optional($givenTo->role)->role), ['HEAD']);
 
                 $givenbygrams = $isSenderHead ? $grams : $this->add($grams, $wasteValue);
                 $giventograms = $isReceiverHead ? $grams : $this->add($grams, $toWasteValue);
@@ -147,20 +147,22 @@ class AutoEntryService extends BaseStockService
                 ];
 
                 // Create Stock Detail OUT row
+                $itemAddedAt = isset($itemData['added_at']) ? \Illuminate\Support\Carbon::parse($itemData['added_at']) : $addedAt;
+
                 $stock = StockDetails::create([
-                    'item_id' => $fromItemId,
-                    'given_by' => $givenBy->user_id,
-                    'given_to' => $givenTo->user_id,
-                    'type' => $rowType,
                     'entry_type' => $type,
                     'stock_type' => 'OUT',
+                    'given_by' => $givenBy->user_id,
+                    'given_to' => $givenTo->user_id,
+                    'item_id' => $fromItemId,
+                    'to_item_id' => $toItemId,
                     'grams' => $grams,
                     'touch' => $touch,
                     'purity' => $purity,
-                    'to_item_id' => $toItemId,
                     'to_touch' => $toTouch,
                     'to_purity' => $toPurity,
-                    'remarks' => $remarks ?? "Auto Entry transfer",
+                    'type' => $rowType,
+                    'remarks' => $remarks,
                     'item_remarks' => $itemRemarks,
                     'waste_id' => $wasteId,
                     'waste_total' => $wasteTotal,
@@ -180,9 +182,9 @@ class AutoEntryService extends BaseStockService
                     'given_to_item_grams_op' => $obSnapshot['given_to_details']['ob']['item_details']['ob_grams'] ?? 0,
                     'given_by_item_purity_op' => $obSnapshot['given_by_details']['ob']['item_details']['ob_purity'] ?? 0,
                     'given_to_item_purity_op' => $obSnapshot['given_to_details']['ob']['item_details']['ob_purity'] ?? 0,
-                    'added_at' => $addedAt,
-                    'created_at' => $addedAt,
-                    'updated_at' => $addedAt,
+                    'added_at' => $itemAddedAt,
+                    'created_at' => $itemAddedAt,
+                    'updated_at' => $itemAddedAt,
                 ]);
 
                 // Create auxiliary history records

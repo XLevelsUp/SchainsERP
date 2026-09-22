@@ -531,14 +531,19 @@ class StockDetailsController extends Controller
                     ->where('is_freezed', 0)
                     ->whereIn('remarks', ['PURCHASE_GOLD', 'SALE_GOLD', 'GOLD_TO_CASH', 'CASH_TO_GOLD', 'IN_CASH_CONVERTER', 'OUT_CASH_CONVERTER']);
 
-                if ($cashUserId && $headId) {
-                    // Get transactions where these two users are involved (either direction)
+                if ($headId) {
                     $query->where(function ($q) use ($headId, $cashUserId) {
-                        $q->where(function ($q1) use ($headId, $cashUserId) {
-                            $q1->where('given_to', $headId)->where('given_by', $cashUserId);
-                        })->orWhere(function ($q2) use ($headId, $cashUserId) {
-                            $q2->where('given_by', $headId)->where('given_to', $cashUserId);
-                        });
+                        if ($cashUserId) {
+                            // Get transactions where these two users are involved (either direction)
+                            $q->where(function ($q1) use ($headId, $cashUserId) {
+                                $q1->where('given_to', $headId)->where('given_by', $cashUserId);
+                            })->orWhere(function ($q2) use ($headId, $cashUserId) {
+                                $q2->where('given_by', $headId)->where('given_to', $cashUserId);
+                            });
+                        } else {
+                            // Only head_id provided, return all their transactions
+                            $q->where('given_to', $headId)->orWhere('given_by', $headId);
+                        }
                     });
                 }
 

@@ -76,7 +76,7 @@ class StockTestDataSeeder extends Seeder
                 'phone_no' => '9876543201',
                 'remarks' => 'Head admin user',
                 'proff' => 'Head',
-                'role_id' => 1,
+                'role_id' => 3,
                 'mailing_name' => 'Head Admin Mailing',
                 'category_name' => 'BOTH',
                 'system_id' => 'SYS_HEAD',
