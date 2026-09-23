@@ -1,20 +1,20 @@
 // GET /report/live-metal-balance — ReportController::getLiveMetalBalance ->
 // ReportService::getLiveMetalBalanceReport (PR #35).
 //
-// KNOWN BACKEND BUGS (see PENDING_WORK.md) — this endpoint is wired up and
-// used as-built rather than held back, per standing instruction:
-//   #17 FIXED FRONTEND-SIDE by PR #42. The item is a parameter now, but it
-//       still DEFAULTS to item_id 2 ("Gold Necklace" in this dataset, not
-//       "Metal"). So item_id is not optional in practice — this app always
-//       resolves the real Metal item by name and sends it. Omitting it
-//       silently reports the wrong item.
-//   #18 STILL OPEN. The date+time ("as of") query path uses MySQL-only raw
-//       SQL (IFNULL, backticks) against a Postgres database and 500s.
-//       Verified against the live database 2026-09-15.
-//   #19 STILL OPEN. The `user_id` admin-override param can never activate —
-//       the backend's admin check is unreachable against this role schema.
-// The frontend surfaces the two open ones on-screen rather than hiding them.
-
+// KNOWN BACKEND BUGS (see PENDING_WORK.md) — all three now closed:
+//   #17 Default item. Fixed frontend-side by PR #42 (this app always
+//       resolves the real Metal item by name and sends item_id explicitly,
+//       so it never hits the backend's default). PR #46 changed what that
+//       default even means — the hardcoded `2` is gone, replaced by an
+//       optional `live_metal_report_items` System Setting, 422 if neither
+//       item_id nor that setting is present — but since this screen never
+//       omits item_id, that change has no effect here.
+//   #18 FIXED in PR #46 (2026-09-22, backend commit 60b3816). The "as of"
+//       query's raw SQL is now Postgres-safe (COALESCE, no backticks).
+//   #19 FIXED in PR #46. `role_id == 1` (which meant CUSTOMER, not admin)
+//       was removed from the override check — it only tests
+//       `role->role == 'HEAD'` now, which resolves correctly. The
+//       signed-in user needs the HEAD role for "view as" to take effect.
 export interface LiveMetalBalanceRecord {
   stock_id: number
   balance: number
@@ -44,15 +44,16 @@ export interface LiveMetalBalanceResult {
 
 export interface LiveMetalBalanceQuery {
   // Which item to report on (PR #42). Optional to the backend but never
-  // omitted here — its default is the wrong item. See bug #17 above.
+  // omitted here — see #17 above for why.
   item_id?: number
   // "As of" reconstruction — both required together or the endpoint just
-  // returns the live (balance > 0) view. See bug #18 above.
+  // returns the live (balance > 0) view. Works against Postgres since #18.
   date?: string
   time?: string
   per_page?: number
   page?: number
-  // Admin override — see bug #19 above. Sent when provided; currently has
-  // no effect against any real user in this dataset.
+  // Admin override — works for a signed-in HEAD user since #19. The backend
+  // also accepts `view_as`, which takes precedence over `user_id` when both
+  // are sent; this app only ever sends one or the other, so it is moot here.
   user_id?: number
 }

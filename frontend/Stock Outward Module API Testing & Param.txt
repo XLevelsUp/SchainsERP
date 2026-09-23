@@ -2338,4 +2338,218 @@ json
     }
 }
 
+User Details - Store (Create User)
+Creates a new user detail record along with 33 display UI flags.
+
+URL: POST /api/v1/user-details
+Headers:
+Content-Type: application/json
+Authorization: Bearer <token>
+Request Body Example (JSON):
+json
+
+{
+    "name": "Test User",
+    "user_name": "test_user_1",
+    "password": "password123",
+    "phone_no": "9998887776",
+    "role_id": 2,
+    "category_name": "BOTH",
+    "is_remainder_shown": true,
+    "is_delivery_item_shown": true,
+    "is_polish_needed": false,
+    "is_wa_delivery_stock_needed": false,
+    "is_polish_chk_need_shown": true,
+    "is_delivery_chk_need_shown": false,
+    "is_cashamt_thermal_shown": true,
+    "is_customer_touch_need_shown": false,
+    "is_complete_history_need_shown": true,
+    "is_create_order_need_to_shown": false,
+    "is_cash_mngmt_need_to_shown": true,
+    "is_freeze_entry_need_to_shown": false,
+    "is_admin_login_otp_need_to_shown": false,
+    "is_customer_cmts_need_to_shown": true,
+    "is_outside_need_to_shown": false,
+    "is_tally_need_to_shown": false,
+    "is_die_num_search_need_to_shown": false,
+    "is_con_box_rpt_need_to_shown": false,
+    "is_box_tot_rpt_need_to_shown": false,
+    "is_ob_cb_rpt_need_to_shown": false,
+    "is_gallery_need_to_shown": false,
+    "is_worker_need_to_shown": false,
+    "is_emp_group_task_need_to_shown": false,
+    "is_day_grand_rpt_need_shown": false,
+    "is_need_pink_box_shown": false,
+    "is_need_order_status_shown": false,
+    "is_need_role_wise_cash_rpt_shown": false,
+    "is_need_to_retailer_shown": false,
+    "is_need_grosswgt_print_shown": false,
+    "is_cus_fitem_pur_out_shown": false,
+    "is_cus_fitem_pur_in_shown": false,
+    "is_need_show_order_display_in_head_login": false,
+    "is_metal_stock_shown": false
+}
+User Details - Update
+Updates an existing user detail record including updating the 33 display UI flags.
+
+URL: PUT /api/v1/user-details/{id}
+Headers:
+Content-Type: application/json
+Authorization: Bearer <token>
+Request Body Example (JSON):
+json
+
+{
+    "name": "Updated Test User",
+    "is_remainder_shown": false,
+    "is_delivery_item_shown": false,
+    "is_create_order_need_to_shown": true
+}
+Customer Touch User Mappings - Store
+Creates a new mapping between a user and a customer touch configuration.
+
+URL: POST /api/v1/customer-touch-user-mappings
+Headers:
+Content-Type: application/json
+Authorization: Bearer <token>
+Request Body Example (JSON):
+json
+
+{
+    "user_id": 1,
+    "customer_touch_id": 1,
+    "is_active": true
+}
+Customer Touch User Mappings - Destroy
+Deletes an existing mapping.
+
+URL: DELETE /api/v1/customer-touch-user-mappings/{id}
+Headers:
+Authorization: Bearer <token>
+
+
+
+
+Customer Delivery Orders - Destroy
+Deletes an existing customer delivery order.
+
+URL: DELETE /api/v1/orders/{id}
+Headers:
+Authorization: Bearer <token>
+Consolidated Report Export (CSV)
+Downloads the full, unpaginated Consolidated Report dataset as a CSV file respecting all provided filters.
+
+URL: GET /api/v1/stock/reports/consolidated/export
+Query Parameters (Same as grid filters):
+from_date (string) - YYYY-MM-DD
+to_date (string) - YYYY-MM-DD
+user_id (integer, optional)
+head_id (integer, optional) - Admin override
+item_id (integer, optional)
+Headers:
+Accept: text/csv
+Authorization: Bearer <token>
+Response: A file stream attachment (consolidated_report.csv)
+History Items OBCB Export (CSV)
+Downloads the full, unpaginated History Items OBCB dataset as a CSV file respecting all provided filters.
+
+URL: GET /api/v1/stock/reports/items-obcb/export
+Query Parameters (Same as grid filters):
+from_date (string) - YYYY-MM-DD
+to_date (string) - YYYY-MM-DD
+item_id (integer, optional)
+employee_id (integer/string, optional)
+head_id (integer, optional) - Admin override
+Headers:
+Accept: text/csv
+Authorization: Bearer <token>
+Response: A file stream attachment (history_items_obcb.csv)
+
+
+29. System Settings Module (Dynamic UI Configurations)
+The System Settings API provides a generic key-value store specifically designed to dynamically configure UI components without hardcoding logic (such as popups, dropdowns, and specific report parameters). The API stores JSON arrays against a unique key.
+
+A. List All Settings
+Retrieves a list of all current system configurations.
+
+URL: GET /api/v1/settings
+Headers: Authorization: Bearer <token>
+Response Example (200 OK):
+json
+
+{
+    "success": true,
+    "message": "System settings retrieved successfully",
+    "data": [
+        {
+            "id": 1,
+            "setting_key": "metal_popup_items",
+            "setting_value": [4, 5],
+            "description": "Item IDs that should appear in the Metal popup.",
+            "created_at": "2026-09-18T10:00:00.000000Z",
+            "updated_at": "2026-09-18T10:00:00.000000Z"
+        }
+    ]
+}
+B. Create a New Setting Mapping
+Creates a new setting key and its associated mapping array.
+
+URL: POST /api/v1/settings
+Headers: Authorization: Bearer <token>, Content-Type: application/json
+Request Body:
+json
+
+{
+    "setting_key": "live_metal_report_items",
+    "setting_value": [1],
+    "description": "The root item ID that represents Metal for the Live Report."
+}
+Response Example (201 Created):
+json
+
+{
+    "success": true,
+    "message": "System setting created successfully",
+    "data": {
+        "id": 2,
+        "setting_key": "live_metal_report_items",
+        "setting_value": [1],
+        "description": "The root item ID that represents Metal for the Live Report.",
+        "created_at": "...",
+        "updated_at": "..."
+    }
+}
+C. Update an Existing Setting
+Updates the value array or description for a specific setting key.
+
+URL: PUT /api/v1/settings/{setting_key} (e.g. /api/v1/settings/metal_popup_items)
+Headers: Authorization: Bearer <token>, Content-Type: application/json
+Request Body:
+json
+
+{
+    "setting_value": [4, 5, 8],
+    "description": "Updated item IDs for metal popups"
+}
+Response Example (200 OK):
+json
+
+{
+    "success": true,
+    "message": "System setting updated successfully",
+    "data": { ... }
+}
+D. Delete a Setting
+Removes a configuration entirely.
+
+URL: DELETE /api/v1/settings/{setting_key}
+Headers: Authorization: Bearer <token>
+Response Example (200 OK):
+json
+
+{
+    "success": true,
+    "message": "System setting deleted successfully"
+}
+
 

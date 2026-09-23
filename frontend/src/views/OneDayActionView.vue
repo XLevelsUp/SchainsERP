@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { RefreshCw, TriangleAlert } from 'lucide-vue-next'
+import { RefreshCw } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -11,8 +11,9 @@ import { reportApi } from '@/lib/reportApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { itemsApi } from '@/lib/itemsApi'
 import { userOptionLabel } from '@/lib/userLabel'
-import { todayDateInputValue } from '@/lib/date'
+import { todayDateInputValue, formatDateTime } from '@/lib/date'
 import { ApiError } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth'
 import type { Item, OneDayActionRow, UserDetailListItem } from '@/types'
 import type { DataTableColumn } from '@/types/table'
 
@@ -23,36 +24,31 @@ import type { DataTableColumn } from '@/types/table'
 | One day's stock movements and cash transactions in a single feed, the
 | replacement for the legacy Yii2 "One Day Action" screen.
 |
-| Three properties of the endpoint shape this view, all flagged to the
-| backend rather than worked around silently:
+| PR #46 (2026-09-22) fixed the three shape quirks this view used to work
+| around (PENDING_WORK.md #23-25) — see types/oneDayAction.ts for the full
+| before/after. What that leaves for this view:
 |
-| 1. Cash amounts arrive in the `grams` field (ReportService reuses the
-|    column on purpose). Totalling that column across mixed rows would add
-|    rupees to grams, so the summary splits by record_type and the table
-|    formats the same column two ways. #24.
+| 1. Cash amounts now arrive in their own `amount` field (`grams` is null on
+|    CASH rows), so the summary and the table still split by record_type,
+|    but no longer need to reinterpret one shared column.
+| 2. `added_at` is the standard "YYYY-MM-DD HH:mm:ss" now, so it goes
+|    through the same formatDateTime everything else uses — just guarding
+|    the endpoint's own "-" null sentinel.
+| 3. Pagination runs over the combined, already-sorted dataset, so pages
+|    from `reportApi.getOneDayAction` arrive in final order and can be
+|    appended directly without a client-side re-sort.
 |
-| 2. `added_at` is "DD-MM-YYYY HH:mm:ss" — the only endpoint in the app
-|    that does not use "YYYY-MM-DD HH:mm:ss". `new Date()` returns Invalid
-|    Date for it and lib/date's formatDateTime would pass it through raw,
-|    so parseRowDate below does it explicitly. #25.
-|
-| 3. page_no/page_size are applied to the stock query and the cash query
-|    separately, then the two lists are concatenated. Appending page 2 onto
-|    page 1 still yields the correct *set* of rows, but the merged order is
-|    wrong, so every append re-sorts client-side on the parsed date. The
-|    count line shows the two source totals rather than inventing one
-|    combined total. #23.
-|
-| The report is not scoped to the signed-in head — the service takes a
-| $headId and never uses it — so this shows every user's activity. That is
-| the banner at the top, not something the frontend can filter around:
-| `employee_id` filters `added_by` (who keyed the entry), which answers a
-| different question, hence its "Entered by" label.
+| The report is now scoped to the signed-in head via the X-User-ID header
+| (reportApi.ts) — `employee_id` still filters `added_by` (who keyed the
+| entry, not who the gold or cash moved between), hence its "Entered by"
+| label.
 |--------------------------------------------------------------------------
 */
 
-// The backend's own default. Applied per source, so one "page" can hold up
-// to twice this many rows.
+const auth = useAuthStore()
+
+// The backend's own default, now applied once to the combined dataset
+// rather than once per source.
 const PAGE_SIZE = 500
 
 const flowOptions: { value: 'IN' | 'OUT'; label: string }[] = [
@@ -96,13 +92,13 @@ const rows = ref<OneDayActionRow[]>([])
 const stockCount = ref(0)
 const cashCount = ref(0)
 const pageNo = ref(1)
+const totalPages = ref(1)
 const isLoading = ref(false)
 const isLoadingMore = ref(false)
 const loadError = ref('')
 const hasSearched = ref(false)
 
-const loadedTotal = computed(() => stockCount.value + cashCount.value)
-const hasMore = computed(() => rows.value.length < loadedTotal.value)
+const hasMore = computed(() => pageNo.value < totalPages.value)
 
 const columns: DataTableColumn<OneDayActionRow>[] = [
   { key: 'added_at', label: 'Time' },
@@ -118,34 +114,11 @@ const columns: DataTableColumn<OneDayActionRow>[] = [
   { key: 'remarks', label: 'Remarks' },
 ]
 
-// "DD-MM-YYYY HH:mm:ss" (or "-" when the source timestamp was null).
-// Returns null rather than an Invalid Date so callers can decide.
-function parseRowDate(value: string): Date | null {
-  const match = /^(\d{2})-(\d{2})-(\d{4})[ T](\d{2}):(\d{2}):(\d{2})$/.exec(value ?? '')
-  if (!match) return null
-  const [, dd, mm, yyyy, hh, min, ss] = match
-  const date = new Date(
-    Number(yyyy),
-    Number(mm) - 1,
-    Number(dd),
-    Number(hh),
-    Number(min),
-    Number(ss),
-  )
-  return Number.isNaN(date.getTime()) ? null : date
-}
-
-function pad(value: number) {
-  return String(value).padStart(2, '0')
-}
-
-// The same "DD/MM/YY HH:MM" shape lib/date's formatDateTime produces, so
-// this column reads identically to every other date column in the app.
+// The endpoint's own null sentinel is the literal "-", not an empty string,
+// so formatDateTime (which treats falsy as "no value") needs a guard first.
 function formatRowTime(value: string): string {
-  const date = parseRowDate(value)
-  if (!date) return value || '—'
-  const stamp = `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${pad(date.getFullYear() % 100)}`
-  return `${stamp} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  if (!value || value === '-') return '—'
+  return formatDateTime(value)
 }
 
 function isCash(row: OneDayActionRow) {
@@ -172,8 +145,8 @@ function formatAmount(value: number | string | null): string {
   })
 }
 
-// Split deliberately: `grams` means grams on STOCK rows and rupees on CASH
-// rows, so there is no single total that would mean anything.
+// Split by record_type since STOCK and CASH rows carry different measures
+// (grams vs rupees) in their own fields now.
 const stockGramsTotal = computed(() =>
   rows.value.filter((r) => !isCash(r)).reduce((sum, r) => sum + toNumber(r.grams), 0),
 )
@@ -181,7 +154,7 @@ const stockPurityTotal = computed(() =>
   rows.value.filter((r) => !isCash(r)).reduce((sum, r) => sum + toNumber(r.purity), 0),
 )
 const cashAmountTotal = computed(() =>
-  rows.value.filter(isCash).reduce((sum, r) => sum + toNumber(r.grams), 0),
+  rows.value.filter(isCash).reduce((sum, r) => sum + toNumber(r.amount), 0),
 )
 
 // Same IN/OUT palette as the stock history and cash tables.
@@ -207,20 +180,6 @@ function currentQuery(page: number) {
   }
 }
 
-// Rows arrive sorted within a page, but pages are concatenated per source,
-// so the merged list has to be re-sorted. Undated rows sink to the bottom
-// rather than being dropped.
-function sortByDateDesc(list: OneDayActionRow[]): OneDayActionRow[] {
-  return [...list].sort((a, b) => {
-    const aDate = parseRowDate(a.added_at)
-    const bDate = parseRowDate(b.added_at)
-    if (!aDate && !bDate) return 0
-    if (!aDate) return 1
-    if (!bDate) return -1
-    return bDate.getTime() - aDate.getTime()
-  })
-}
-
 async function loadLookups() {
   try {
     const [usersData, itemsData] = await Promise.all([
@@ -240,10 +199,12 @@ async function runSearch() {
   loadError.value = ''
   pageNo.value = 1
   try {
-    const result = await reportApi.getOneDayAction(currentQuery(1))
-    rows.value = sortByDateDesc(result.transactions)
+    const actingUserId = auth.user?.user_id ?? 1
+    const result = await reportApi.getOneDayAction(currentQuery(1), actingUserId)
+    rows.value = result.records
     stockCount.value = result.total_stock_count
     cashCount.value = result.total_cash_count
+    totalPages.value = result.pagination.total_pages
     hasSearched.value = true
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load the report.'
@@ -258,10 +219,14 @@ async function loadMore() {
   loadError.value = ''
   try {
     const next = pageNo.value + 1
-    const result = await reportApi.getOneDayAction(currentQuery(next))
-    rows.value = sortByDateDesc([...rows.value, ...result.transactions])
+    const actingUserId = auth.user?.user_id ?? 1
+    const result = await reportApi.getOneDayAction(currentQuery(next), actingUserId)
+    // The backend sorts the combined dataset before paginating, so pages
+    // arrive in final order and append directly — no client-side re-sort.
+    rows.value = [...rows.value, ...result.records]
     stockCount.value = result.total_stock_count
     cashCount.value = result.total_cash_count
+    totalPages.value = result.pagination.total_pages
     pageNo.value = next
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load more rows.'
@@ -312,7 +277,7 @@ function exportCsv() {
         r.given_by,
         r.given_to,
         r.item_name,
-        r.grams ?? '',
+        (isCash(r) ? r.amount : r.grams) ?? '',
         r.touch ?? '',
         r.purity ?? '',
         r.waste_total ?? '',
@@ -351,19 +316,6 @@ onMounted(() => {
         </BaseButton>
       </template>
     </PageHeader>
-
-    <div
-      class="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
-    >
-      <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
-      <p>
-        <strong>Known backend gaps (PENDING_WORK.md #22-25):</strong> this report is not scoped to
-        the signed-in head — the service accepts a head id and never uses it, so every user's
-        activity is listed. Cash amounts arrive in the <code>grams</code> field, so grams and
-        rupees are totalled separately below and never combined. Paging is applied to the stock
-        and cash queries separately, which is why the counts are shown per source.
-      </p>
-    </div>
 
     <BaseCard class="mb-4">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -502,7 +454,7 @@ onMounted(() => {
       </template>
       <template #grams="{ row }">
         <span class="block text-right font-medium tabular-nums">
-          {{ isCash(row) ? formatAmount(row.grams) : formatGrams(row.grams) }}
+          {{ isCash(row) ? formatAmount(row.amount) : formatGrams(row.grams) }}
         </span>
       </template>
       <template #touch="{ row }">

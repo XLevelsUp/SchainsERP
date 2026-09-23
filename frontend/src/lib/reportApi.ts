@@ -67,13 +67,16 @@ export const reportApi = {
   // GET /report/one-day-action — one day's stock movements and cash
   // transactions in a single feed (PR #37, testing doc section 47).
   //
-  // Deliberately sends no X-User-ID header. The controller reads one and
-  // hands it to the service as $headId, but the service never references
-  // the parameter, so the report is global no matter what we send
-  // (PENDING_WORK.md #22). Sending it would imply a scoping that does not
-  // exist; when the backend fixes that, this is where the header goes.
-  getOneDayAction: (params: OneDayActionQuery = {}) =>
+  // PR #46 made the report head-scoped: ReportController::getOneDayActionReport
+  // reads `X-User-ID` (defaulting to 1 if absent — it does not fall back to
+  // the bearer token like most other controllers do) and the service now
+  // ANDs `given_by = headId OR given_to = headId` into both queries
+  // (PENDING_WORK.md #22, fixed). `actingUserId` is required so the report
+  // scopes to the signed-in head instead of silently defaulting to user 1.
+  getOneDayAction: (params: OneDayActionQuery, actingUserId: number) =>
     api
-      .get<ApiResponse<OneDayActionResult>>(`${RESOURCE}/one-day-action${buildOneDayActionQuery(params)}`)
+      .get<ApiResponse<OneDayActionResult>>(`${RESOURCE}/one-day-action${buildOneDayActionQuery(params)}`, {
+        'X-User-ID': String(actingUserId),
+      })
       .then((r) => r.data),
 }

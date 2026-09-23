@@ -14,9 +14,13 @@ import type { DataTableColumn } from '@/types/table'
 |--------------------------------------------------------------------------
 | Cash Txn History table — GET /cash-txn-details/in-history|out-history
 |--------------------------------------------------------------------------
-| Scoped to one head/user pair, same as the quick-action modals above it
-| in CashManagementView. `refreshKey` is a plain prop the parent bumps
-| after a save so the just-recorded entry shows up without a manual
+| `userId` is optional as of PR #46 (2026-09-22, backend commit 60b3816):
+| the backend now scopes by `head_id` alone (Out = sender is the head,
+| In = recipient is the head) when `cash_user_id` is omitted, matching the
+| legacy screen's "pick a Head, see everything" behaviour. Passing a
+| `userId` narrows to that one counterparty, same as before
+| (PENDING_WORK.md #36, fixed). `refreshKey` is a plain prop the parent
+| bumps after a save so the just-recorded entry shows up without a manual
 | reload.
 |--------------------------------------------------------------------------
 */
@@ -24,7 +28,7 @@ import type { DataTableColumn } from '@/types/table'
 const props = defineProps<{
   direction: 'in' | 'out'
   headId: number
-  userId: number
+  userId: number | null
   fromDate?: string
   toDate?: string
   refreshKey?: number
@@ -90,7 +94,7 @@ async function load() {
   try {
     const query = {
       head_id: props.headId,
-      cash_user_id: props.userId,
+      cash_user_id: props.userId ?? undefined,
       from_date: props.fromDate || undefined,
       to_date: props.toDate || undefined,
       per_page: PER_PAGE,

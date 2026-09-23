@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { RefreshCw, ChevronLeft, ChevronRight, TriangleAlert } from 'lucide-vue-next'
+import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -21,23 +21,15 @@ import type { DataTableColumn } from '@/types/table'
 |--------------------------------------------------------------------------
 | Live Metal Balance — GET /report/live-metal-balance (PR #35)
 |--------------------------------------------------------------------------
-| Shipped ahead of the backend fixing three known bugs, per standing
-| instruction: build the screen against the intended contract, flag the
-| bugs on-screen rather than waiting. Tracked in PENDING_WORK.md #17-20.
+| Was shipped ahead of the backend fixing three known bugs (PENDING_WORK.md
+| #17-19); all three are now closed by PR #46 (2026-09-22) — see
+| types/liveMetalBalance.ts for what changed in each. Both the "as of"
+| date+time filter and the "view as" admin override are expected to work
+| normally now, so this screen no longer carries a warning banner for them.
 |
-|   #17 CLOSED for this screen by PR #42, which turned the hardcoded item
-|       into an `item_id` parameter. The default is still wrong (2, "Gold
-|       Necklace" here), so this screen resolves the real Metal item by name
-|       — the same rule getAvailableMetals applies — and always sends it.
-|       Never call this endpoint without item_id.
-|   #18 The "as of" date+time path runs MySQL-only raw SQL against this
-|       app's Postgres database and 500s. Not blocked client-side — the
-|       real error is shown, annotated as a known bug rather than hidden
-|       behind a generic failure message.
-|   #19 The "view as" admin override can never activate server-side (the
-|       backend's admin check is unreachable against this role schema).
-|       Sent regardless — it's harmless, and correct the moment backend
-|       fixes it — with an inline note that it currently does nothing.
+|   #17 Item default — moot here regardless of the backend's default,
+|       because this screen always resolves the real Metal item by name
+|       (the same rule getAvailableMetals applies) and sends item_id.
 |--------------------------------------------------------------------------
 */
 
@@ -129,9 +121,7 @@ async function runSearch(targetPage = 1) {
     summary.value = { ...EMPTY_SUMMARY }
     records.value = []
     if (err instanceof ApiError) {
-      loadError.value = isAsOfMode.value
-        ? `${err.message} — this is the known "as of" SQL bug (PENDING_WORK.md #18), not a transient failure.`
-        : err.message
+      loadError.value = err.message
     } else {
       loadError.value = 'Failed to load the report.'
     }
@@ -175,16 +165,6 @@ onMounted(async () => {
       </template>
     </PageHeader>
 
-    <div class="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-      <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
-      <p>
-        <strong>Two known backend limits.</strong> The "As of date/time" filter below fails
-        server-side — its query is written in MySQL syntax and this app runs on PostgreSQL
-        (PENDING_WORK.md #18). The "View as" override has no effect either: the backend's admin
-        check is unreachable against this role schema (#19). Live balances are accurate.
-      </p>
-    </div>
-
     <BaseCard class="mb-4">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <BaseInput v-model="filters.as_of_date" label="As of date" type="date" size="sm" clearable />
@@ -213,9 +193,8 @@ onMounted(async () => {
           </BaseButton>
         </div>
       </div>
-      <p v-if="isAsOfMode" class="mt-2 text-xs text-amber-700">
-        Both date and time are set — this calls the "as of" reconstruction path, which is
-        currently expected to fail (PENDING_WORK.md #18: MySQL-only SQL on a Postgres database).
+      <p v-if="isAsOfMode" class="mt-2 text-xs text-slate-500">
+        Both date and time are set — reconstructing the balance as of that point in time.
       </p>
       <p v-else class="mt-2 text-xs text-slate-500">
         Leave date/time empty for the live balance (rows with balance &gt; 0 right now).

@@ -3,19 +3,26 @@
 // A single day's stock movements and cash transactions merged into one
 // feed, replacing the legacy Yii2 "One Day Action" screen.
 //
-// Two things about this contract drive the whole view and are not
-// negotiable frontend-side:
+// PR #46 (2026-09-22, backend commit 60b3816) rewrote the response contract.
+// What changed, all verified against ReportService::getOneDayActionReport:
 //
-//  1. `grams` carries the *rupee amount* on CASH rows. ReportService says
-//     so in its own comment ("Using grams column to display amount for
-//     consolidated views"). Nothing may total that column across mixed
-//     rows — see OneDayActionView's split totals.
-//  2. `added_at` comes back as "DD-MM-YYYY HH:mm:ss", not the
-//     "YYYY-MM-DD HH:mm:ss" every other endpoint returns, so `new Date()`
-//     cannot parse it and lib/date's formatDateTime passes it through
-//     verbatim. The view parses it explicitly.
-//
-// Both are flagged to the backend (PENDING_WORK.md #24, #25).
+//  1. The endpoint is now scoped to a head. `$headId` (from `X-User-ID`,
+//     defaulting to 1 if the header is absent — see reportApi.ts) is ANDed
+//     into both queries as `given_by = headId OR given_to = headId` /
+//     `sender_id = headId OR recipient_id = headId`. Previously it accepted
+//     the parameter and never used it (PENDING_WORK.md #22, now fixed) —
+//     the caller MUST send X-User-ID now, or every result is scoped to
+//     user 1 instead of the signed-in head.
+//  2. Cash rows now carry the amount in `amount`, not `grams`. `grams` is
+//     `null` on CASH rows and `amount` is `null` on STOCK rows (#24, fixed).
+//  3. `added_at` is "YYYY-MM-DD HH:mm:ss" like every other endpoint, or the
+//     literal "-" when the source timestamp was null. No more bespoke
+//     "DD-MM-YYYY" parsing (#25, fixed).
+//  4. Pagination is now applied to the combined, globally-sorted dataset
+//     instead of per-source-then-concatenated, so `records` arrives in
+//     final order and pages append cleanly (#23, fixed). `total_stock_count`
+//     / `total_cash_count` are unchanged; `page_no`/`page_size` were
+//     replaced by a `pagination` object.
 
 export type OneDayActionRecordType = 'STOCK' | 'CASH'
 
@@ -54,26 +61,33 @@ export interface OneDayActionRow {
   given_to: string
   // Always the literal "CASH" on cash rows.
   item_name: string
-  // Grams on STOCK rows; rupee amount on CASH rows. See the note above.
+  // Grams on STOCK rows, null on CASH rows.
   grams: number | string | null
+  // Rupee amount on CASH rows, null on STOCK rows.
+  amount: number | string | null
   touch: number | string | null
   purity: number | string | null
   waste_total: number | string | null
   waste_value: number | string | null
   remarks: string | null
   added_by: number | null
-  // "DD-MM-YYYY HH:mm:ss", or "-" when the source timestamp was null.
+  // "YYYY-MM-DD HH:mm:ss", or "-" when the source timestamp was null.
   added_at: string
   is_hided: number
 }
 
+export interface OneDayActionPagination {
+  current_page: number
+  per_page: number
+  total_items: number
+  total_pages: number
+}
+
 export interface OneDayActionResult {
-  // Counted per source, not combined: page_no/page_size are applied to the
-  // stock query and the cash query separately and the two result sets are
-  // then concatenated (PENDING_WORK.md #23).
+  // Still counted per source, even though the rows themselves are now one
+  // combined, globally-paginated list.
   total_stock_count: number
   total_cash_count: number
-  page_no: number
-  page_size: number
-  transactions: OneDayActionRow[]
+  records: OneDayActionRow[]
+  pagination: OneDayActionPagination
 }

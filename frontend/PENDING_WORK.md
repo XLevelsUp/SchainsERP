@@ -3,12 +3,83 @@
 Living tracker for the frontend team. Updated as items land — tick things off
 here rather than opening a new doc.
 
-**Last updated:** 2026-09-22
-**Backend baseline:** `07b01b5` (PR #45 — settings, orders, report exports)
+**Last updated:** 2026-09-23
+**Backend baseline:** `515db79` (PR #46 — history head-scoping, role-numbering
+and report fixes)
 
 Every claim below was verified against backend source at that commit, not
 against the API doc. Where the two disagree, the source wins and the
 discrepancy is listed in [§3](#3-api-doc-corrections).
+
+### PR #46 pass — 2026-09-23
+
+One merge since the last baseline: **#46** (`515db79`, backend commit
+`60b3816`). Six files, 93 insertions / 49 deletions — small in size, large in
+effect: it closes **seven** previously-open asks in one pass, more than any
+prior batch. Verified against backend source; not yet re-checked against the
+live Render database (no route or migration changes in this PR, so nothing
+here should differ by environment).
+
+**Closed by this PR**, with frontend now updated to match:
+
+| Ask | What changed | Frontend |
+|---|---|---|
+| [#36](#36) | `cash-txn-details/{in,out}-history`, `/print-report` and `stock-details/cash-transaction-history` now accept `head_id` alone — `cash_user_id` only narrows instead of being silently mandatory. Out keeps `sender_id = head`, In keeps `recipient_id = head`; only the counterparty half became conditional. | `CashManagementView.vue`'s history section now shows on Head alone (`canShowHistory`), matching the legacy screen. `CashTxnHistoryTable.vue` / `StockCashHistoryTable.vue` take `userId: number \| null`. |
+| [#18](#18) | Live Metal Balance's "as of" query is Postgres-safe now (`COALESCE`, no backticks, no more MySQL `IFNULL`/backtick syntax error). | `LiveMetalBalanceView.vue`'s warning banner and the special-cased error message for this path are removed — the filter is expected to work now. |
+| [#19](#19) / [#35](#35) | The `role_id == 1` arm of the live-metal admin override is deleted outright — it granted CUSTOMER-level access, which is what #35 flagged. Only `role->role == 'HEAD'` remains, and (unlike before) it can actually match now that role checks are name-based. | Same view: the "View as" note about it having no effect is removed. |
+| [#22](#22) | `getOneDayActionReport` now ANDs `given_by = headId OR given_to = headId` into both the stock and cash queries — it actually uses the `$headId` parameter for the first time. | **Breaking for us** — see below. |
+| [#23](#23) | Pagination now runs over the *combined, globally-sorted* dataset (`records` + `pagination: {current_page, per_page, total_items, total_pages}`) instead of per-source-then-concatenated (`transactions` + flat `page_no`/`page_size`). | Same — response shape changed, not just behavior. |
+| [#24](#24) | Cash rows carry `amount` now; `grams` is `null` on them (and `amount` is `null` on STOCK rows). No more dual-purpose column. | Row shape changed. |
+| [#25](#25) | `added_at` is `"YYYY-MM-DD HH:mm:ss"` like every other endpoint (or the literal `"-"`), not `"DD-MM-YYYY HH:mm:ss"`. | No more bespoke date parser needed. |
+
+**#22–25 together broke `OneDayActionView.vue` outright**, not just made it
+stale: the view read `result.transactions`, which no longer exists on the
+response, so `sortByDateDesc(result.transactions)` threw on every search.
+Fixed: `types/oneDayAction.ts` (new shape), `lib/reportApi.ts`
+(`getOneDayAction` now takes a required `actingUserId` and sends
+`X-User-ID` — see the new ask below), and `views/OneDayActionView.vue`
+(`records`/`pagination`, `row.amount` for cash rows, `formatDateTime` instead
+of the old regex parser, stale banner removed).
+
+**Also closed, no frontend involved:**
+
+- **Ask #21 (role numbering), the `AutoEntryService` half.** `$isSenderHead`
+  / `$isReceiverHead` now test `role->role == 'HEAD'` instead of
+  `role_id == 1`. `StockTestDataSeeder`'s `head_admin` was also corrected
+  from `role_id => 1` to `role_id => 3`, so the one seeded, loginable HEAD
+  account now actually satisfies the head check it never used to. The
+  `ReportController` half of #21 was already fixed in the PR #43–#45 pass.
+- `ReportController::getLiveMetalBalance` now catches
+  `ValidationException` and returns **422** instead of falling through to
+  the generic 500 handler — relevant if `item_id` is omitted and no
+  `live_metal_report_items` System Setting exists (see #17 note below).
+
+**New ask, found while fixing OneDayActionView:**
+
+<a id="37"></a>
+
+37. **`ReportController::getOneDayActionReport` (line 192) resolves the
+    acting user from `X-User-ID` only** — `(int) $request->header('X-User-ID', 1)`
+    — with no `$request->user()->user_id` preference, unlike the pattern ask
+    #2 already tracks elsewhere (`StockDetailsController:83`,
+    `CashTxnDetailController:2395/2419`). This was harmless while the
+    parameter was ignored (ask #22); now that PR #46 makes the endpoint
+    actually head-scope on it, an omitted header silently reports **user
+    1's** activity instead of the signed-in head's. `reportApi.ts` now
+    always sends `X-User-ID` from the auth store to compensate, but the
+    inconsistency itself — this method should prefer the bearer token the
+    same way its neighbours do — is backend work. Consider folding into #2's
+    fix rather than treating it as separate; it's the same bug, one more
+    site.
+
+**Not yet reflected in the testing doc.** The working-tree edits to
+`frontend/Stock Outward Module API Testing & Param.txt` (uncommitted as of
+this pass) add sections for PR #43–#45's endpoints (System Settings, Orders
+delete, user-details store/update, customer-touch-mappings store/destroy,
+the two CSV exports) but **nothing about PR #46** — no mention of the
+history head-only fix, the live-metal role/validation changes, or the
+one-day-action response shape change. Worth folding in before it goes
+further out of date.
 
 ### PR #43–#45 pass — 2026-09-22
 
@@ -307,6 +378,10 @@ Practical consequences for us:
 | Lot picking for **any** item in Item Change and Item Conversion (PR #42) | `lib/availableLotsApi.ts`, `types/availableLot.ts`, `components/stock/MetalPickerModal.vue` (`source` prop), `ItemChangeModal.vue`, `ItemConversionModal.vue` |
 | Hide transactions — row selection + confirm (PR #42) | `components/stock/TransactionHistoryPanel.vue`, `lib/stockApi.ts` (`postHideStocks`) |
 | Cash Out (PR #42) | `components/stock/CashOutModal.vue`, `types/cashOut.ts`, `lib/stockApi.ts` (`postCashOut`) |
+| Cash Management history shows on Head alone, matching the legacy screen (PR #46 closed ask #36) | `views/CashManagementView.vue` (`canShowHistory`), `components/cash-txn/CashTxnHistoryTable.vue`, `components/cash-txn/StockCashHistoryTable.vue` (`userId: number \| null`) |
+| One Day Action — fixed for the new response shape after PR #46's #22–25 broke it (`records`/`pagination`, `amount` on cash rows, standard date format), and now sends `X-User-ID` so the head-scoping PR #46 added actually scopes to the signed-in head (ask #37) | `views/OneDayActionView.vue`, `types/oneDayAction.ts`, `lib/reportApi.ts` |
+| Live Metal Balance — stale warning banners removed for the two bugs PR #46 fixed (#18 Postgres SQL, #19 admin override) | `views/LiveMetalBalanceView.vue`, `types/liveMetalBalance.ts` |
+| `api.ts` `get()` accepts a headers argument, matching `post`/`postForm` (needed to send `X-User-ID` on a GET) | `lib/api.ts` |
 
 **Every endpoint shipped in PRs #29–#32 now has a frontend**, PR #37's two
 new endpoints have one as of 2026-09-11, and everything PRs #38–#42 exposed
@@ -691,11 +766,21 @@ the head check will not recognise.
    |---|---|
    | `StockDetailsController:83` | `CashCategoryController:44` |
    | `CashTxnDetailController:2395`, `:2419` | `CashAutoEntryService:37` |
-   | `ReportController:143` | |
+   | `ReportController:143` | `ReportController:192` |
 
    `ReportController:143` was not in the original list — it is on the
    correct side, so it does not widen the bug, but it does mean the two
    stragglers are now outnumbered five to two.
+
+   **Update 2026-09-23 (PR #46) — a third straggler found, and it just
+   went live.** `ReportController:192` (`getOneDayActionReport`) is
+   header-only too — was not previously listed because
+   `getOneDayActionReport` ignored the resulting `$headId` entirely (ask
+   #22). PR #46 fixed #22, so this controller's header-only resolution now
+   has a real effect: an omitted `X-User-ID` silently scopes the report to
+   user 1 instead of the signed-in head. Full detail at
+   [#37](#37); frontend now always sends the header
+   (`reportApi.ts::getOneDayAction`) to work around it.
 
 3. ~~**`AuthController::login` does not check `is_active`.**~~
    **✅ FIXED in PR #38.** `AuthController:80-87` now returns **403** with
@@ -948,6 +1033,18 @@ the head check will not recognise.
     a name lookup, or make `item_id` required. A silent wrong answer is a
     worse default than a 422.
 
+    **Update 2026-09-23 (PR #46) — the silent-wrong-answer half is gone,
+    though not via either suggested fix.** `ReportService:807-816` no
+    longer defaults to item `2` at all: an omitted `item_id` now falls back
+    to a `live_metal_report_items` System Setting (a new key, seeded
+    through the same `apiResource('settings')` PR #43–#45 already exposed
+    a screen for), and if that setting is empty too, the service throws
+    `ValidationException` — which `ReportController` now catches and turns
+    into a real **422** instead of a generic 500. A caller that omits
+    `item_id` on a database with nothing configured gets a clear error, not
+    a wrong item. Doesn't affect this screen either way, since it always
+    sends `item_id` explicitly and never reaches this branch.
+
 18. **The `date`+`time` branch will throw a SQL error on this database.** It
     builds raw SQL via `selectRaw`/`havingRaw` using `IFNULL(...)` and
     backtick-quoted identifiers (`` `stock_details` ``) — MySQL syntax. Every
@@ -976,6 +1073,12 @@ the head check will not recognise.
     correct form of this query now exists in the codebase, twenty lines
     away, and could be copied. (That newer query has its own, different
     Postgres problem — [#28](#28).)
+
+    **✅ FIXED in PR #46 (2026-09-23).** `ReportService:838` now reads
+    exactly the fix this entry described: `COALESCE(...)` and no backticks.
+    Frontend done same day — `LiveMetalBalanceView.vue` no longer shows the
+    "as of" warning banner or the special-cased error message for this
+    path.
 
 <a id="19"></a>
 
@@ -1023,6 +1126,16 @@ the head check will not recognise.
     - 🆕 **New undocumented parameter `view_as`**, taking precedence over
       `user_id`. Not in the API doc. Frontend should prefer `view_as`.
 
+    **✅ FULLY FIXED in PR #46 (2026-09-23).** The dangling `role_id == 1`
+    arm — the CUSTOMER-access hole this entry's previous update flagged —
+    is deleted outright. `ReportController:151` now reads only
+    `in_array(strtoupper(optional($actingUser->role)->role), ['HEAD'])`.
+    Frontend done same day: `LiveMetalBalanceView.vue`'s note that "View
+    as" has no effect is removed; the override is expected to work for a
+    signed-in HEAD user now. (`view_as` still isn't sent by this app —
+    `user_id` alone is enough since the two are mutually exclusive here —
+    so that part of the ask stands as a nice-to-have, not a blocker.)
+
 20. Minor: `LiveMetalSeeder.php` has a duplicate `'added_by' => 1,` key in
     its first insert array. Harmless (PHP keeps the last value) but sloppy.
 
@@ -1064,6 +1177,15 @@ the head check will not recognise.
     be one or the other everywhere. If `RoleSeeder` is right, both code sites
     should test for 3 and `StockTestDataSeeder` should be corrected.
 
+    **✅ FIXED in PR #46 (2026-09-23) — `RoleSeeder` won, as this entry
+    suggested.** `AutoEntryService:133-134` now tests
+    `role->role == 'HEAD'` for both `$isSenderHead`/`$isReceiverHead`
+    (the `ReportController` half was already fixed in PR #43–#45).
+    `StockTestDataSeeder:79` also corrects `head_admin` from `role_id => 1`
+    to `role_id => 3`, so the one seeded, loginable HEAD account now
+    satisfies the check it never used to — the head-adjustment path in Auto
+    Entry is testable for the first time.
+
 ### One Day Action report (PR #37 — `GET /report/one-day-action`)
 
 <a id="22"></a>
@@ -1084,6 +1206,17 @@ the head check will not recognise.
     This method reads the header only, so it would silently default to
     user 1 even if the service did use it.
 
+    **✅ Query FIXED in PR #46 (2026-09-23)** — `ReportService:966-970`
+    (stock) and `:1049-1053` (cash) now AND
+    `given_by = $headId OR given_to = $headId` /
+    `sender_id = $headId OR recipient_id = $headId` into both queries.
+    **The header-only gap predicted above is now live, not hypothetical**
+    — see new ask [#37](#37): this controller still reads `X-User-ID` only,
+    still defaults to user 1 if it's absent, and now that default actually
+    changes what the report scopes to. `reportApi.ts` sends the header from
+    the auth store to compensate; the backend inconsistency itself is
+    still open.
+
 23. **Pagination is applied per source, then the two lists are
     concatenated.** `page_no`/`page_size` are applied to the stock query
     and the cash query separately, so page 2 means "stock rows 501–1000
@@ -1096,6 +1229,19 @@ the head check will not recognise.
     shows the two counts separately — which works, but a single paginated
     query would be a better contract.
 
+    **✅ FIXED in PR #46 (2026-09-23).** `ReportService:983`/`:1057` now
+    fetch both sources unpaginated, sort the combined collection by
+    `added_at` descending, then slice the merged list (`:1104-1105`) —
+    `page_no`/`page_size` apply to one dataset, not two. Response shape
+    changed to match: `records` (the sorted-then-sliced page) plus a
+    `pagination` object (`current_page`/`per_page`/`total_items`/
+    `total_pages`), replacing the old `transactions` + flat `page_no`/
+    `page_size`. `total_stock_count`/`total_cash_count` are unchanged.
+    Frontend updated same day — see the PR #46 pass note at the top of this
+    file for the full list of touched files. Pages now arrive pre-sorted
+    across the board, so the client-side re-sort on append was removed
+    rather than kept as a no-op.
+
 <a id="24"></a>
 
 24. **Cash amounts are returned in the `grams` field.** Deliberate, per the
@@ -1104,6 +1250,13 @@ the head check will not recognise.
     rows. It means the column cannot be totalled without first splitting on
     `record_type`, and any consumer that sums it naively adds rupees to
     grams. A separate `amount` field would remove the trap.
+
+    **✅ FIXED in PR #46 (2026-09-23) — exactly the suggested fix.**
+    `ReportService:1072` now returns `amount` on CASH rows (`grams` is
+    `null` there); STOCK rows get `amount: null` for shape symmetry
+    (`:996`). Frontend updated same day: `OneDayActionRow.amount`, and the
+    view uses it for the cash total and the cash-row cell instead of
+    reinterpreting `grams`.
 
 <a id="25"></a>
 
@@ -1120,6 +1273,16 @@ the head check will not recognise.
     stock rows are safe, but `cash_txn_details.created_at` comes from
     `$table->timestamps()` and is nullable — one imported row with a null
     `created_at` takes down the whole endpoint.
+
+    **✅ FIXED in PR #46 (2026-09-23).** Both rows now format
+    `Y-m-d H:i:s` (`ReportService:1003`, `:1079`), matching every other
+    endpoint. The null-timestamp crash risk is also gone: the new sort
+    (`:1120-1123`) checks `if ($item['added_at'] === '-') return 0;`
+    before calling `Carbon::createFromFormat`, instead of calling it
+    unconditionally. Frontend updated same day — `OneDayActionView.vue`
+    now formats `added_at` with the shared `formatDateTime` helper instead
+    of a bespoke regex parser, with a small guard for the endpoint's own
+    `"-"` sentinel.
 
 ### Phone book (PR #37 — `apiResource('phone-book')`)
 
@@ -1336,6 +1499,69 @@ the head check will not recognise.
 35. **`role_id == 1` in the live-metal override now grants CUSTOMER access.**
     Full detail in [#19](#19) — flagged separately here because it changed
     from inert to exploitable in this batch, and it is a one-line deletion.
+
+    **✅ FIXED in PR #46 (2026-09-23) — that exact line was deleted.** See
+    [#19](#19) for the full re-verification.
+
+### Cash Management history — head-only view is impossible (2026-09-22 finding)
+
+<a id="36"></a>
+
+36. **§13/§14/§15's `cash_user_id` is documented as if it narrows results,
+    but it is load-bearing — omit it and all three return zero (or, on one
+    of them, unscoped) rows.** Found while diagnosing an empty Cash
+    Management screen against the legacy screenshot, which shows Out/In data
+    populated from **Head alone** — Roles and Users both left on their
+    placeholder.
+
+    `CashTxnDetailController::getOutHistory` (`:53-56`) and `getInHistory`
+    (`:120-124`) both do:
+
+    ```php
+    if ($headId) {
+        $query->where(function($q) use ($headId, $cashUserId) {
+            $q->where('sender_id', $headId)->where('recipient_id', $cashUserId);
+        });
+    }
+    ```
+
+    `cash_user_id` is ANDed in unconditionally the moment `head_id` is
+    present, even when it is `null` — so `recipient_id = NULL` never matches
+    a real row and a head-only query always comes back empty. There is no
+    way today to ask "everything for this Head" the way the legacy screen
+    did; the two ids must be an exact, pre-known matched pair.
+
+    `StockDetailsController::getCashTransactionHistory` (`:534-543`, backs
+    the Stock History panel on the same screen) has the **opposite** bug from
+    the same root cause: `if ($cashUserId && $headId)` skips the filter
+    entirely when `cash_user_id` is missing, so a head-only call there
+    returns *every* user's PURCHASE_GOLD/SALE_GOLD/GOLD_TO_CASH/CASH_TO_GOLD/
+    conversion rows, not just the selected head's.
+
+    **Ask:** make `cash_user_id` genuinely optional in all three — filter by
+    `sender_id = $headId OR recipient_id = $headId` (matching the legacy
+    "head is either party" behaviour) when only `head_id` is given, and keep
+    the current exact-pair filter when both are given. That is one `if`
+    branch added per method, not a rewrite.
+
+    Frontend today (`views/CashManagementView.vue`) intentionally gates the
+    whole history section behind picking **both** Head and User, matching
+    this constraint — see the design-rationale comment at the top of that
+    file. That gate should be loosened to "Head alone reveals the section"
+    once the backend accepts a head-only query; until then, loosening it
+    frontend-side would only swap "hidden" for "visibly empty," not fix
+    anything.
+
+    **✅ FIXED in PR #46 (2026-09-23, backend commit 60b3816).** All three
+    methods now make `cash_user_id` conditional exactly as asked — Out/In
+    keep their directional half (`sender_id`/`recipient_id = head`) always
+    on, and only the counterparty half is skipped when `cash_user_id` is
+    absent; the stock-details endpoint's opposite bug (skipping the head
+    filter entirely) is fixed the same way, to `given_by = head OR
+    given_to = head`. Frontend done same day: `canShowHistory` in
+    `CashManagementView.vue` now needs only a Head, and
+    `CashTxnHistoryTable.vue` / `StockCashHistoryTable.vue` accept
+    `userId: number | null`.
 
 ---
 

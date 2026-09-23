@@ -16,12 +16,17 @@ import type { DataTableColumn } from '@/types/table'
 | Cash all write stock_details rows here in addition to cash_txn_details
 | rows, so this is what makes those show up anywhere in Cash Management.
 | `refreshKey` follows the same convention as CashTxnHistoryTable.
+|
+| `userId` is optional as of PR #46 (2026-09-22, backend commit 60b3816):
+| head-only now scopes correctly (`given_by = head OR given_to = head`)
+| instead of the previous either-missing-entirely or leaking-every-user
+| bug (PENDING_WORK.md #36, fixed).
 |--------------------------------------------------------------------------
 */
 
 const props = defineProps<{
   headId: number
-  userId: number
+  userId: number | null
   refreshKey?: number
 }>()
 
@@ -73,7 +78,7 @@ async function load() {
   try {
     const result = await stockCashHistoryApi.list({
       head_id: props.headId,
-      cash_user_id: props.userId,
+      cash_user_id: props.userId ?? undefined,
       per_page: PER_PAGE,
       page: page.value,
     })

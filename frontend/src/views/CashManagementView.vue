@@ -28,9 +28,15 @@ import type { BankDetail, Item, Role, UserDetailListItem } from '@/types'
 | optionally narrow the User picker by Role, pick a User, then quick-action
 | buttons appear and open an in-context modal.
 |
-| History tables (below the quick actions) use PR #17's GET .../in-history
-| and .../out-history — scoped to this head/user pair via head_id +
-| cash_user_id. Coverage: out-history = EXPENSE, PURCHASE_GOLD,
+| History tables use PR #17's GET .../in-history and .../out-history.
+| Since PR #46 (2026-09-22, backend commit 60b3816 — PENDING_WORK.md #36,
+| fixed) the backend accepts `head_id` alone, matching the legacy screen:
+| Out = the head is the sender, In = the head is the recipient, with the
+| picked User (if any) narrowing to that one counterparty on top. Before
+| PR #46 both `head_id` and `cash_user_id` were required together, so the
+| whole history section — and the Stock History panel below it — used to
+| stay gated behind picking both Head and User; `canShowHistory` now only
+| needs a Head. Coverage: out-history = EXPENSE, PURCHASE_GOLD,
 | GOLD_TO_CASH; in-history = INCOME, AUTO_ENTRY, CASH_TO_GOLD, SALE_GOLD.
 | Two things still don't show up there, both backend-side gaps rather than
 | a frontend limitation:
@@ -190,6 +196,12 @@ const activeModal = ref<ActiveModal>(null)
 const canQuickCreate = computed(
   () => headId.value !== null && userId.value !== null && headId.value !== userId.value,
 )
+
+// History reveals on Head alone, same as the legacy screen — the backend
+// accepts a head-only query as of PR #46 (2026-09-22, backend commit
+// 60b3816: PENDING_WORK.md #36, fixed). Picking a User still narrows it to
+// that one counterparty; it is no longer required to see anything at all.
+const canShowHistory = computed(() => headId.value !== null)
 
 function openModal(modal: ActiveModal) {
   activeModal.value = modal
@@ -352,7 +364,7 @@ async function handleSaved() {
       </p>
       <p v-else class="text-sm text-slate-500">Select a Head above to get started.</p>
 
-      <div v-if="canQuickCreate" class="mt-8">
+      <div v-if="canShowHistory" class="mt-8">
         <div class="mb-4 grid gap-3 sm:max-w-md sm:grid-cols-2">
           <BaseInput
             id="history-from-date"
@@ -378,7 +390,7 @@ async function handleSaved() {
             <CashTxnHistoryTable
               direction="out"
               :head-id="headId!"
-              :user-id="userId!"
+              :user-id="userId"
               :from-date="historyFromDate"
               :to-date="historyToDate"
               :refresh-key="historyRefreshKey"
@@ -389,7 +401,7 @@ async function handleSaved() {
             <CashTxnHistoryTable
               direction="in"
               :head-id="headId!"
-              :user-id="userId!"
+              :user-id="userId"
               :from-date="historyFromDate"
               :to-date="historyToDate"
               :refresh-key="historyRefreshKey"
@@ -404,9 +416,9 @@ async function handleSaved() {
         include those two sub-types. This is a known backend gap, not a missing screen.
       </p>
 
-      <div v-if="canQuickCreate" class="mt-8">
+      <div v-if="canShowHistory" class="mt-8">
         <p class="mb-2 text-xs font-semibold tracking-wide text-slate-400 uppercase">Stock History</p>
-        <StockCashHistoryTable :head-id="headId!" :user-id="userId!" :refresh-key="historyRefreshKey" />
+        <StockCashHistoryTable :head-id="headId!" :user-id="userId" :refresh-key="historyRefreshKey" />
       </div>
     </template>
 
