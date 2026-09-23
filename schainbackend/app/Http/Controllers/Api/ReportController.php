@@ -148,8 +148,8 @@ class ReportController extends Controller
             // Wait, we need to fetch the acting user to see if they are admin.
             $actingUser = \App\Models\UserDetail::find($actingUserId);
             
-            // Assuming role_id == 1 or role->role == 'ADMIN' or 'HEAD'
-            if ($actingUser && ($actingUser->role_id == 1 || in_array(strtoupper(optional($actingUser->role)->role), ['ADMIN', 'HEAD']))) {
+            // Assuming role->role == 'HEAD'
+            if ($actingUser && in_array(strtoupper(optional($actingUser->role)->role), ['HEAD'])) {
                 if ($request->filled('view_as')) {
                     $targetUserId = (int) $request->query('view_as');
                 } elseif ($request->filled('user_id')) {
@@ -167,6 +167,12 @@ class ReportController extends Controller
                 'data' => $result
             ], 200);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $e->errors()
+            ], 422);
         } catch (\Exception $e) {
             Log::error('ReportController@getLiveMetalBalance failed: ' . $e->getMessage());
             return response()->json([

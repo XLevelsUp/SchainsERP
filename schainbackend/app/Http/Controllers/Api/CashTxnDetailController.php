@@ -52,7 +52,10 @@ class CashTxnDetailController extends Controller
 
                 if ($headId) {
                     $query->where(function($q) use ($headId, $cashUserId) {
-                        $q->where('sender_id', $headId)->where('recipient_id', $cashUserId);
+                        $q->where('sender_id', $headId);
+                        if ($cashUserId) {
+                            $q->where('recipient_id', $cashUserId);
+                        }
                     });
                 }
 
@@ -119,7 +122,10 @@ class CashTxnDetailController extends Controller
 
                 if ($headId) {
                     $query->where(function($q) use ($headId, $cashUserId) {
-                        $q->where('recipient_id', $headId)->where('sender_id', $cashUserId);
+                        $q->where('recipient_id', $headId);
+                        if ($cashUserId) {
+                            $q->where('sender_id', $cashUserId);
+                        }
                     });
                 }
 
@@ -205,13 +211,17 @@ class CashTxnDetailController extends Controller
             // Otherwise, Handle Bulk Report
             $query = CashTxnDetail::with(['givenByUser', 'givenToUser', 'category']);
 
-            if ($headId && $cashUserId) {
+            if ($headId) {
                 $query->where(function($q) use ($headId, $cashUserId) {
-                    $q->where(function($sub1) use ($headId, $cashUserId) {
-                        $sub1->where('sender_id', $headId)->where('recipient_id', $cashUserId);
-                    })->orWhere(function($sub2) use ($headId, $cashUserId) {
-                        $sub2->where('sender_id', $cashUserId)->where('recipient_id', $headId);
-                    });
+                    if ($cashUserId) {
+                        $q->where(function($sub1) use ($headId, $cashUserId) {
+                            $sub1->where('sender_id', $headId)->where('recipient_id', $cashUserId);
+                        })->orWhere(function($sub2) use ($headId, $cashUserId) {
+                            $sub2->where('sender_id', $cashUserId)->where('recipient_id', $headId);
+                        });
+                    } else {
+                        $q->where('sender_id', $headId)->orWhere('recipient_id', $headId);
+                    }
                 });
             }
 

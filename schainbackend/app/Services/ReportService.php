@@ -802,7 +802,9 @@ class ReportService
         if (!$itemId) {
             $metalItemIds = \App\Models\SystemSetting::get('live_metal_report_items', []);
             if (empty($metalItemIds)) {
-                throw new \Exception('No items mapped for Live Metal Report. Please configure live_metal_report_items in settings or provide an item_id.');
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'item_id' => 'No items mapped for Live Metal Report. Please configure live_metal_report_items in settings or provide an item_id.'
+                ]);
             }
             $itemId = $metalItemIds[0];
         }
@@ -833,8 +835,8 @@ class ReportService
         if ($date && $time) {
             $dateTime = date('Y-m-d H:i:s', strtotime("$date $time"));
             
-            // Replicate the legacy subquery exactly
-            $query->selectRaw("stock_details.*, IFNULL((SELECT SUM(stock.grams) FROM `stock_details` as stock WHERE stock.stock_in_id = stock_details.stock_id and added_at <= ?), 0) as used_grams", [$dateTime])
+            // Replicate the legacy subquery exactly (PostgreSQL safe)
+            $query->selectRaw("stock_details.*, COALESCE((SELECT SUM(stock.grams) FROM stock_details as stock WHERE stock.stock_in_id = stock_details.stock_id and added_at <= ?), 0) as used_grams", [$dateTime])
                   ->havingRaw('grams - used_grams > 0')
                   ->orderBy('stock_in_id', 'desc');
         } else {
@@ -961,6 +963,12 @@ class ReportService
             });
         }
 
+        // Apply strict Head Scoping (Issue #22)
+        $stockQuery->where(function ($q) use ($headId) {
+            $q->where('given_by', $headId)
+              ->orWhere('given_to', $headId);
+        });
+
         // Date Filter (Specific Day or Range)
         $toDate = $filters['to_date'] ?? $fromDate;
         if ($fromDate === $toDate) {
@@ -971,10 +979,8 @@ class ReportService
         }
 
         $stockTotalCount = $stockQuery->count();
-        $stockRecords = $stockQuery->orderBy('stock_id', 'desc')
-            ->skip(($pageNo - 1) * $pageSize)
-            ->take($pageSize)
-            ->get();
+        // Issue #23: Fetch all and paginate later
+        $stockRecords = $stockQuery->orderBy('stock_id', 'desc')->get();
 
         // Map Stock Details to consistent array output
         $formattedStockRecords = $stockRecords->map(function ($stock) {
@@ -987,13 +993,14 @@ class ReportService
                 'given_to' => $stock->givenTo ? $stock->givenTo->name : '-',
                 'item_name' => $stock->item ? $stock->item->item_name : '-',
                 'grams' => $stock->grams,
+                'amount' => null,
                 'touch' => $stock->touch,
                 'purity' => $stock->purity,
                 'waste_total' => $stock->waste_total,
                 'waste_value' => $stock->waste_value,
                 'remarks' => $stock->remarks,
                 'added_by' => $stock->added_by,
-                'added_at' => $stock->added_at ? $stock->added_at->format('d-m-Y H:i:s') : '-',
+                'added_at' => $stock->added_at ? $stock->added_at->format('Y-m-d H:i:s') : '-',
                 'is_hided' => $stock->is_hided
             ];
         });
@@ -1039,11 +1046,15 @@ class ReportService
             $cashQuery->where('recipient_id', $givenTo);
         }
 
+        // Apply strict Head Scoping (Issue #22)
+        $cashQuery->where(function ($q) use ($headId) {
+            $q->where('sender_id', $headId)
+              ->orWhere('recipient_id', $headId);
+        });
+
         $cashTotalCount = $cashQuery->count();
-        $cashRecords = $cashQuery->orderBy('txn_id', 'desc')
-            ->skip(($pageNo - 1) * $pageSize)
-            ->take($pageSize)
-            ->get();
+        // Issue #23: Fetch all and paginate later
+        $cashRecords = $cashQuery->orderBy('txn_id', 'desc')->get();
 
         // Map Cash Details to consistent array output
         $formattedCashRecords = $cashRecords->map(function ($cash) {
@@ -1057,31 +1068,41 @@ class ReportService
                 'given_by' => $cash->givenByUser ? $cash->givenByUser->name : '-',
                 'given_to' => $cash->givenToUser ? $cash->givenToUser->name : '-',
                 'item_name' => 'CASH',
-                'grams' => $cash->amount, // Using grams column to display amount for consolidated views
+                'grams' => null, 
+                'amount' => $cash->amount, // Fixed Issue #24
                 'touch' => null,
                 'purity' => null,
                 'waste_total' => null,
                 'waste_value' => null,
                 'remarks' => $cash->remarks,
                 'added_by' => $cash->added_by,
-                'added_at' => $cash->created_at ? $cash->created_at->format('d-m-Y H:i:s') : '-',
+                'added_at' => $cash->created_at ? $cash->created_at->format('Y-m-d H:i:s') : '-',
                 'is_hided' => 0
             ];
         });
 
-        // Combine logic (Stock first, then cash, or interspersed by time if desired, currently sequential)
+        // Combine logic
         $combinedRecords = $formattedStockRecords->concat($formattedCashRecords);
-        // Sort combined by added_at desc if you want them truly interspersed
+        // Sort combined by added_at desc
         $combinedRecords = $combinedRecords->sortByDesc(function ($item) {
-            return \Carbon\Carbon::createFromFormat('d-m-Y H:i:s', $item['added_at'])->timestamp;
+            if ($item['added_at'] === '-') return 0;
+            return \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $item['added_at'])->timestamp;
         })->values();
+
+        // Issue #23: Paginate the combined dataset mathematically correctly
+        $totalRecords = $combinedRecords->count();
+        $paginatedRecords = $combinedRecords->slice(($pageNo - 1) * $pageSize, $pageSize)->values();
 
         return [
             'total_stock_count' => $stockTotalCount,
             'total_cash_count' => $cashTotalCount,
-            'page_no' => $pageNo,
-            'page_size' => $pageSize,
-            'transactions' => $combinedRecords
+            'records' => $paginatedRecords, // Replaced separate lists with the slice
+            'pagination' => [
+                'current_page' => (int)$pageNo,
+                'per_page' => (int)$pageSize,
+                'total_items' => $totalRecords,
+                'total_pages' => ceil($totalRecords / $pageSize),
+            ]
         ];
     }
 }
