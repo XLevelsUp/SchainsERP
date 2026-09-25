@@ -17,11 +17,19 @@ class ReportService
     public function getConsolidatedReport(array $filters, int $headId): array
     {
         $employeeId = $filters['user_id'] ?? $filters['retailer_id'] ?? null;
-        $fromDate = $filters['from_date'] ?? null;
-        $fromTime = $filters['from_time'] ?? null;
-        $toDate = $filters['to_date'] ?? null;
-        $toTime = $filters['to_time'] ?? null;
-        $itemId = $filters['item_id'] ?? null;
+        $fromDate = !empty($filters['from_date']) ? $filters['from_date'] : null;
+        $fromTime = !empty($filters['from_time']) ? $filters['from_time'] : null;
+        $toDate = !empty($filters['to_date']) ? $filters['to_date'] : null;
+        $toTime = !empty($filters['to_time']) ? $filters['to_time'] : null;
+
+        if (!$toDate && !empty($filters['closing_date'])) {
+            $toDate = $filters['closing_date'];
+            $toTime = !empty($filters['closing_time']) ? $filters['closing_time'] : null;
+        }
+        $itemIds = $filters['item_id'] ?? null;
+        if ($itemIds && !is_array($itemIds)) {
+            $itemIds = [$itemIds];
+        }
         
         $pageSize = $filters['page_size'] ?? 1000;
         $pageNoOut = $filters['page_no_out'] ?? 1;
@@ -30,7 +38,14 @@ class ReportService
         $userId = null;
         $retailerId = null;
 
-        if ($employeeId) {
+        $type4 = $filters['type4'] ?? null;
+        if ($type4 === 'HEAD') {
+            $userId = (int) ($filters['head_user_id'] ?? $headId);
+        } elseif ($type4 === 'EMPLOYEE') {
+            $userId = (int) ($filters['employee_id'] ?? $filters['user_id'] ?? null);
+        } elseif ($type4 === 'CUSTOMER' || $type4 === 'RETAILER') {
+            $retailerId = (int) ($filters['customer_id'] ?? $filters['retailer_id'] ?? null);
+        } else if ($employeeId) {
             if (strpos($employeeId, 'retailer_') === 0) {
                 $retailerId = (int) str_replace('retailer_', '', $employeeId);
             } elseif (strpos($employeeId, 'user_') === 0) {
@@ -56,8 +71,8 @@ class ReportService
             $tDateTime = $toTime ? "$toDate $toTime" : "$toDate 23:59:59";
             $query->where('added_at', '<=', $tDateTime);
         }
-        if ($itemId) {
-            $query->where('item_id', $itemId);
+        if (!empty($itemIds)) {
+            $query->whereIn('item_id', $itemIds);
         }
 
         // Clone base query for OUT and IN
@@ -1102,6 +1117,90 @@ class ReportService
                 'per_page' => (int)$pageSize,
                 'total_items' => $totalRecords,
                 'total_pages' => ceil($totalRecords / $pageSize),
+            ]
+        ];
+    }
+    public function getDaywiseGrandReport(array $filters, int $headId): array
+    {
+        $fromDate = !empty($filters['from_date']) ? $filters['from_date'] : null;
+        $toDate = !empty($filters['to_date']) ? $filters['to_date'] : null;
+        
+        $pageSize = $filters['page_size'] ?? 15;
+        $pageNo = $filters['page'] ?? $filters['page_no'] ?? 1;
+
+        $userId = null;
+        $retailerId = null;
+
+        $type4 = $filters['type4'] ?? null;
+        if ($type4 === 'HEAD') {
+            $userId = (int) ($filters['head_user_id'] ?? $headId);
+        } elseif ($type4 === 'EMPLOYEE') {
+            $userId = (int) ($filters['employee_id'] ?? $filters['user_id'] ?? null);
+        } elseif ($type4 === 'CUSTOMER' || $type4 === 'RETAILER') {
+            $retailerId = (int) ($filters['customer_id'] ?? $filters['retailer_id'] ?? null);
+        }
+
+        $query = StockDetails::where('is_hided', 0)
+            ->where('is_freezed', 0);
+
+        if ($fromDate) {
+            $query->where('added_at', '>=', "$fromDate 00:00:00");
+        }
+        if ($toDate) {
+            $query->where('added_at', '<=', "$toDate 23:59:59");
+        }
+
+        if ($retailerId) {
+            $query->where(function($q) use ($retailerId) {
+                $q->where('retailer_id', $retailerId)
+                  ->orWhere('to_retailer_id', $retailerId);
+            });
+            $targetId = $retailerId;
+            $inCol = 'to_retailer_id';
+            $outCol = 'retailer_id';
+        } else {
+            if (!$userId) $userId = $headId;
+            $query->where(function($q) use ($userId) {
+                $q->where('given_to', $userId)
+                  ->orWhere('given_by', $userId);
+            });
+            $targetId = $userId;
+            $inCol = 'given_to';
+            $outCol = 'given_by';
+        }
+
+        // Group by Date and calculate grand totals
+        $dailyAggregates = $query->selectRaw("
+                DATE(added_at) as txn_date,
+                SUM(CASE WHEN $inCol = ? THEN grams ELSE 0 END) as in_grams,
+                SUM(CASE WHEN $inCol = ? THEN purity ELSE 0 END) as in_purity,
+                SUM(CASE WHEN $outCol = ? THEN grams ELSE 0 END) as out_grams,
+                SUM(CASE WHEN $outCol = ? THEN purity ELSE 0 END) as out_purity
+            ", [$targetId, $targetId, $targetId, $targetId])
+            ->groupByRaw("DATE(added_at)")
+            ->orderByRaw("DATE(added_at) DESC")
+            ->paginate($pageSize, ['*'], 'page', $pageNo);
+
+        $formattedRecords = $dailyAggregates->getCollection()->map(function ($day) {
+            return [
+                'date' => $day->txn_date,
+                'in_grams' => round($day->in_grams ?? 0, 3),
+                'in_purity' => round($day->in_purity ?? 0, 3),
+                'out_grams' => round($day->out_grams ?? 0, 3),
+                'out_purity' => round($day->out_purity ?? 0, 3),
+            ];
+        });
+
+        return [
+            'total_count' => $dailyAggregates->total(),
+            'page_no' => (int) $pageNo,
+            'page_size' => (int) $pageSize,
+            'records' => $formattedRecords,
+            'pagination' => [
+                'current_page' => $dailyAggregates->currentPage(),
+                'per_page' => $dailyAggregates->perPage(),
+                'total_items' => $dailyAggregates->total(),
+                'total_pages' => $dailyAggregates->lastPage(),
             ]
         ];
     }
