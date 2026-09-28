@@ -18,7 +18,16 @@ class OrderController extends Controller
 
     public function store(Request $request)
     {
-        $order = OrderDetail::create($request->all());
+        $validated = $request->validate([
+            'customer_id' => 'required|exists:user_details,user_id',
+            'item_id' => 'required|exists:items,item_id',
+            'status' => 'required|in:PENDING,PROCESSING,COMPLETED,CANCELLED',
+            'grams' => 'nullable|numeric',
+            'remarks' => 'nullable|string',
+            'due_date' => 'nullable|date'
+        ]);
+
+        $order = OrderDetail::create($validated);
         return response()->json([
             'success' => true,
             'data' => $order
@@ -36,7 +45,17 @@ class OrderController extends Controller
     public function update(Request $request, $id)
     {
         $order = OrderDetail::findOrFail($id);
-        $order->update($request->all());
+        
+        $validated = $request->validate([
+            'customer_id' => 'sometimes|exists:user_details,user_id',
+            'item_id' => 'sometimes|exists:items,item_id',
+            'status' => 'sometimes|in:PENDING,PROCESSING,COMPLETED,CANCELLED',
+            'grams' => 'nullable|numeric',
+            'remarks' => 'nullable|string',
+            'due_date' => 'nullable|date'
+        ]);
+
+        $order->update($validated);
         return response()->json([
             'success' => true,
             'data' => $order

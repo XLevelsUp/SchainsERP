@@ -845,6 +845,26 @@ class StockOutService extends BaseStockService
         });
     }
 
+    public function unhideStocks(array $stockIds): void
+    {
+        DB::transaction(function () use ($stockIds) {
+            foreach ($stockIds as $id) {
+                $stock = StockDetails::findOrFail($id);
+                $stock->is_hided = false;
+                $stock->save();
+
+                // If parent stock_in_id is linked, unhide it as well
+                if ($stock->stock_in_id) {
+                    $parent = StockDetails::find($stock->stock_in_id);
+                    if ($parent) {
+                        $parent->is_hided = false;
+                        $parent->save();
+                    }
+                }
+            }
+        });
+    }
+
     /**
      * 7. Cash / RTGS Transfer (Cash Out)
      */
