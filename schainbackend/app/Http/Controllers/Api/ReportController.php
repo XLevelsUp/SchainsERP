@@ -216,4 +216,27 @@ class ReportController extends Controller
             ], 500);
         }
     }
+    public function getDaywiseGrandReport(Request $request): JsonResponse
+    {
+        try {
+            $headId = (int) $request->header('X-User-ID', 1);
+            $filters = $request->all();
+
+            $result = $this->reportService->getDaywiseGrandReport($filters, $headId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Daywise Grand Report fetched successfully.',
+                'data' => $result
+            ], 200);
+
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('ReportController::getDaywiseGrandReport failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch daywise grand report.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

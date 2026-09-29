@@ -58,6 +58,7 @@ Route::prefix('v1')->group(function () {
         Route::get('report/cash-transactions-obcb', [ReportController::class, 'getCashTransactionsObcb']);
         Route::get('report/live-metal-balance', [ReportController::class, 'getLiveMetalBalance']);
         Route::get('report/one-day-action', [ReportController::class, 'getOneDayActionReport']);
+        Route::get('report/daywise-grand', [ReportController::class, 'getDaywiseGrandReport']);
         Route::get('cash-txn-details/out-history', [CashTxnDetailController::class, 'getOutHistory']);
         Route::get('cash-txn-details/in-history', [CashTxnDetailController::class, 'getInHistory']);
         Route::get('cash-txn-details/print-report', [CashTxnDetailController::class, 'getPrintReport']);
