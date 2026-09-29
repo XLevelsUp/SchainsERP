@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { RefreshCw, UserPlus, Store } from 'lucide-vue-next'
+import { computed, onMounted, ref, watch } from 'vue'
+import { RefreshCw, UserPlus } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import { itemsApi } from '@/lib/itemsApi'
@@ -11,8 +11,10 @@ import { useToastStore } from '@/stores/toast'
 import AddUserModal from '@/components/user/AddUserModal.vue'
 import HeadStockSummaryPanel from '@/components/stock/HeadStockSummaryPanel.vue'
 import TransactionHistoryPanel from '@/components/stock/TransactionHistoryPanel.vue'
+import ViewNotesPanel from '@/components/stock/ViewNotesPanel.vue'
 import UserPickerPanel from '@/components/stock/UserPickerPanel.vue'
 import CustomerContextPanel from '@/components/stock/CustomerContextPanel.vue'
+import RetailerPickerPanel from '@/components/stock/RetailerPickerPanel.vue'
 import StockOutPanel from '@/components/stock/StockOutPanel.vue'
 import StockInPanel from '@/components/stock/StockInPanel.vue'
 import NumericWastageOutPanel from '@/components/stock/NumericWastageOutPanel.vue'
@@ -54,9 +56,13 @@ import type { Item, UserDetailListItem } from '@/types'
 |  - POST /v1/stock/cash-out likewise went from "implemented with no
 |    route" to routed — CashOutModal below.
 |
-| "Add User" / "Add Retailer" (header actions) both open AddUserModal —
-| there's no separate Retailer entity in the backend, just a user that
-| later shows up in a "Retailer" picker (see AddUserModal.vue's comment).
+| "Add User" (header action) opens AddUserModal, the full admin create
+| form. "Add Retailer" is deliberately NOT a header action any more — it
+| used to open the same AddUserModal under a different title, an 11-field
+| form for what the legacy screen treats as a two-field quick-add. It now
+| lives on RetailerPickerPanel itself (see that file and AddRetailerModal's
+| comment), positioned the same place the legacy screen puts it: directly
+| above the Retailer dropdown, not in the page header.
 |
 | The legacy screen's item-wise stock summary panel (METAL/GOLD/FITEM/
 | STONE totals with grams/%/purity, Cash, Active Orders) is now
@@ -68,13 +74,15 @@ import type { Item, UserDetailListItem } from '@/types'
 | used by NumericWastageInModal similarly went from unreachable to
 | registered between pulls).
 |
-| selectedUserId (UserPickerPanel, left column) scopes both
-| TransactionHistoryPanel (as head_id) and CustomerContextPanel
-| (Customer Touch/photo/comments/Deliver, right column, legacy screen's
-| lower-middle block) — the latter only renders once a user is picked.
+| selectedUserId (UserPickerPanel, left column) scopes TransactionHistory-
+| Panel (as head_id). CustomerContextPanel (Customer Touch/photo/comments/
+| Deliver, right column, legacy screen's lower-middle block) is scoped to
+| activeCustomerId instead — selectedUserId if one is picked, otherwise
+| selectedRetailerId — since a retailer is just another user_details row
+| and the panel works identically for either; see its own comment for why.
 | Customer Deliver has no backing endpoint yet (order_details table
-| doesn't exist) and the comments textarea isn't wired to save — see
-| CustomerContextPanel's own comment.
+| doesn't exist); the comments textarea saves for real via
+| PUT /user-details/{id}/update-cc — see CustomerContextPanel's comment.
 |
 | Stock Out/In ("NEW OUT"/"NEW IN") are StockOutPanel/StockInPanel, not
 | modals — the legacy screen never opens a dialog for these: clicking a
@@ -130,6 +138,24 @@ const users = ref<UserDetailListItem[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 const selectedUserId = ref<number | null>(null)
+
+// Retailer is the alternative to picking a real user — RetailerPickerPanel
+// only shows while selectedUserId is null. But UserPickerPanel is always
+// visible, so a user can be picked at any time regardless of a prior
+// retailer selection; without this, a stale retailer id would keep riding
+// along into a StockOutPanel submit for a completely unrelated user.
+const selectedRetailerId = ref<number | null>(null)
+watch(selectedUserId, (id) => {
+  if (id !== null) selectedRetailerId.value = null
+})
+
+// Whichever party is actually in play — a real user, or a retailer picked
+// instead. Feeds two different things that both treat a retailer as just
+// another user_details row: StockOutRequest's required given_to (retailer_id
+// is a separate, optional flag on top of it, not a substitute), and
+// CustomerContextPanel's photo/comments/touch/deliver, which work
+// identically for either.
+const activeCustomerId = computed(() => selectedUserId.value ?? selectedRetailerId.value)
 const isSubmittingAll = ref(false)
 
 const headStockPanelRef = ref<InstanceType<typeof HeadStockSummaryPanel> | null>(null)
@@ -186,7 +212,6 @@ onMounted(loadData)
 
 type ActiveModal =
   | 'add-user'
-  | 'add-retailer'
   | 'item-change'
   | 'item-conversion'
   | 'gms-out'
@@ -268,7 +293,6 @@ async function handleSubmitAll() {
       <template #actions>
         <BaseButton variant="secondary" :icon="RefreshCw" @click="loadData">Refresh</BaseButton>
         <BaseButton variant="secondary" :icon="UserPlus" @click="openModal('add-user')">Add User</BaseButton>
-        <BaseButton variant="secondary" :icon="Store" @click="openModal('add-retailer')">Add Retailer</BaseButton>
       </template>
     </PageHeader>
 
@@ -285,13 +309,20 @@ async function handleSubmitAll() {
         <UserPickerPanel v-model="selectedUserId" />
       </div>
       <div class="space-y-6">
-        <TransactionHistoryPanel ref="txnHistoryPanelRef" :items="items" :employee-id="selectedUserId" />
-        <CustomerContextPanel
-          v-if="selectedUserId"
-          :user-id="selectedUserId"
+        <ViewNotesPanel :users="users" />
+        <TransactionHistoryPanel
+          ref="txnHistoryPanelRef"
+          :items="items"
+          :employee-id="selectedUserId"
+          :users="users"
+        />
+        <RetailerPickerPanel
+          v-if="!selectedUserId"
+          v-model="selectedRetailerId"
           :users="users"
           @users-changed="loadData"
         />
+        <CustomerContextPanel v-if="activeCustomerId !== null" :active-id="activeCustomerId" />
       </div>
     </div>
 
@@ -353,7 +384,8 @@ async function handleSubmitAll() {
           ref="stockOutPanelRef"
           :items="items"
           :head-id="auth.user?.user_id ?? null"
-          :given-to="selectedUserId"
+          :given-to="activeCustomerId"
+          :retailer-id="selectedRetailerId"
           @saved="handleStockChanged"
         />
         <NumericWastageOutPanel
@@ -447,12 +479,6 @@ async function handleSubmitAll() {
     <AddUserModal
       v-if="activeModal === 'add-user'"
       title="Add User"
-      @close="closeModal"
-      @saved="handleUserSaved"
-    />
-    <AddUserModal
-      v-if="activeModal === 'add-retailer'"
-      title="Add Retailer"
       @close="closeModal"
       @saved="handleUserSaved"
     />

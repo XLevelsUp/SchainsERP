@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Plus, Minus } from 'lucide-vue-next'
+import { Plus, Minus, Layers } from 'lucide-vue-next'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import MetalPickerModal from '@/components/stock/MetalPickerModal.vue'
 import { stockApi } from '@/lib/stockApi'
 import { ApiError } from '@/lib/api'
 import { nowDateTimeInputValue, toBackendDateTime } from '@/lib/date'
 import { useToastStore } from '@/stores/toast'
-import type { Item, StockOutItemInput } from '@/types'
+import { isMetalItem } from '@/lib/metalItem'
+import type { Item, MetalPickerSelection, StockOutItemInput } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
@@ -42,21 +44,14 @@ import type { Item, StockOutItemInput } from '@/types'
 | REPLY OUT, which itself has no endpoint yet) and the "Order"/"View"
 | per-row buttons.
 |
-| Metal is entered here like any other item — one row, operator-typed
-| grams, touch from the item's default. There is deliberately no lot
-| picker on this panel: MetalPickerModal used to open the moment "Metal"
-| was chosen, which interrupted the operator mid-row on the most-used
-| screen on the page. Removed on request (2026-09-07), along with the
-| "Pick lots…" link that reopened it.
-|
-| This is Stock Out only. Stock In still opens the picker on selecting
-| Metal, and so do GmsInModal, GmsOutModal and ItemChangeModal — do not
-| "tidy up" those to match; the asymmetry is intentional.
-|
-| Nothing about the payload changed: the picker only ever split a row
-| into one row per lot (grams/touch from the lot, lot noted in
-| item_remarks). It never sent stock_id, so postStockOut's contract is
-| identical with or without it.
+| Selecting the item literally named "Metal" opens MetalPickerModal
+| (GET /stock-details/available-metals, API doc #22) scoped to headId —
+| that's the *source* of this OUT transaction's stock, matching the
+| endpoint's own query (lots previously given TO the user_id you pass).
+| Saving there replaces the triggering row with one row per lot taken
+| (touch comes from the lot; waste_total/remarks/added_at carry over from
+| the row that triggered it). "Pick lots…" reopens it for an
+| already-metal row without re-touching the Item dropdown.
 |
 | No Submit/Clear buttons here — rows just sit here ("stored in session")
 | until the page-level shared Submit button (StockManagementView) fires
@@ -68,7 +63,19 @@ import type { Item, StockOutItemInput } from '@/types'
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ items: Item[]; headId: number | null; givenTo: number | null }>()
+const props = withDefaults(
+  defineProps<{
+    items: Item[]
+    headId: number | null
+    givenTo: number | null
+    // Set when givenTo was resolved from RetailerPickerPanel rather than
+    // UserPickerPanel — StockOutRequest validates it as a separate,
+    // optional field alongside the required given_to, not a substitute for
+    // it. null for an ordinary user transaction.
+    retailerId?: number | null
+  }>(),
+  { retailerId: null },
+)
 const emit = defineEmits<{ saved: [] }>()
 
 const toast = useToastStore()
@@ -97,7 +104,7 @@ function addRow() {
     return
   }
   if (props.givenTo === null) {
-    toast.show('Select a user (left panel) before adding a Stock Out row.', 'error')
+    toast.show('Select a user or retailer before adding a Stock Out row.', 'error')
     return
   }
   rows.value.push(makeEmptyRow())
@@ -105,14 +112,36 @@ function addRow() {
 
 function removeRow(index: number) {
   rows.value.splice(index, 1)
+  metalPickerRowIndex.value = null
 }
 
-// No row index needed here any more — it only existed to tell the metal
-// picker which row it was opened for. Stock In still passes one.
-function onItemSelect(row: StockOutItemInput, itemId: number | null) {
+const metalPickerRowIndex = ref<number | null>(null)
+
+function onItemSelect(row: StockOutItemInput, index: number, itemId: number | null) {
   row.item_id = itemId
   const item = props.items.find((i) => i.item_id === itemId)
   if (item) row.touch = item.default_touch
+  if (isMetalItem(item)) metalPickerRowIndex.value = index
+}
+
+function handleMetalConfirm(selection: MetalPickerSelection[]) {
+  const index = metalPickerRowIndex.value
+  metalPickerRowIndex.value = null
+  if (index === null) return
+
+  const source = rows.value[index]
+  if (!source || selection.length === 0) return
+
+  const lotRows: StockOutItemInput[] = selection.map((lot) => ({
+    item_id: source.item_id,
+    grams: lot.taken,
+    touch: lot.touch,
+    waste_total: source.waste_total,
+    remarks: source.remarks,
+    item_remarks: [source.item_remarks, `Lot #${lot.id} (${lot.party_name})`].filter(Boolean).join(' — '),
+    added_at: source.added_at,
+  }))
+  rows.value.splice(index, 1, ...lotRows)
 }
 
 function wasteValueFor(row: StockOutItemInput): number {
@@ -163,6 +192,7 @@ function validate(): boolean {
 function clear() {
   rows.value = []
   fieldErrors.value = {}
+  metalPickerRowIndex.value = null
 }
 
 function hasRows() {
@@ -179,7 +209,7 @@ async function submit(): Promise<boolean> {
       {
         given_by: props.headId,
         given_to: props.givenTo,
-        retailer_id: null,
+        retailer_id: props.retailerId,
         items: rows.value.map((row) => ({
           ...row,
           added_at: toBackendDateTime(row.added_at),
@@ -243,8 +273,16 @@ defineExpose({ addRow, submit, clear, hasRows, totals })
                 placeholder="Select an item…"
                 :options="itemOptions"
                 :error="fieldErrors[`${index}.item_id`]"
-                @update:model-value="(v) => onItemSelect(row, v as number | null)"
+                @update:model-value="(v) => onItemSelect(row, index, v as number | null)"
               />
+              <button
+                v-if="isMetalItem(items.find((i) => i.item_id === row.item_id))"
+                type="button"
+                class="mt-1 flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+                @click="metalPickerRowIndex = index"
+              >
+                <Layers class="h-3 w-3" /> Pick lots…
+              </button>
               <BaseInput v-model="row.remarks" size="sm" placeholder="Remarks…" class="mt-1" />
               <BaseInput v-model="row.item_remarks" size="sm" placeholder="Item remarks…" class="mt-1" />
             </td>
@@ -316,5 +354,14 @@ defineExpose({ addRow, submit, clear, hasRows, totals })
       </span>
       <span v-if="isSaving" class="italic text-slate-400">Submitting…</span>
     </div>
+
+    <MetalPickerModal
+      v-if="metalPickerRowIndex !== null && headId !== null"
+      :item-id="rows[metalPickerRowIndex]!.item_id!"
+      :user-id="headId"
+      :required="rows[metalPickerRowIndex]!.grams ?? 0"
+      @close="metalPickerRowIndex = null"
+      @confirm="handleMetalConfirm"
+    />
   </BaseCard>
 </template>

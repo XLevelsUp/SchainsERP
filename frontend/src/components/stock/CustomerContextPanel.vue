@@ -3,21 +3,27 @@ import { computed, onMounted, ref, watch } from 'vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseTextarea from '@/components/ui/BaseTextarea.vue'
-import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import AddUserModal from '@/components/user/AddUserModal.vue'
 import CustomerDeliveryModal from '@/components/stock/CustomerDeliveryModal.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { customerTouchApi } from '@/lib/customerTouchApi'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
-import type { CustomerTouch, UserDetail, UserDetailListItem } from '@/types'
+import type { CustomerTouch, UserDetail } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
-| Customer context — extra fields that appear once a user is picked in
-| UserPickerPanel, reproducing the legacy screen's Customer Touch/photo/
-| comments/Retailer/Deliver block.
+| Customer context — extra fields that appear once a PARTY is picked,
+| reproducing the legacy screen's Customer Touch/photo/comments/Deliver
+| block. "Party" is deliberately either a user (UserPickerPanel) or a
+| retailer (RetailerPickerPanel) — the legacy screenshot this was built
+| from shows the Retailer picker and an (empty) Customer Comments box
+| visible at the same time, with no user chosen. That is not a coincidence:
+| a retailer is just a regular user_details row (see AddRetailerModal's
+| comment), so GET /user-details/{id} and PUT .../update-cc work on one
+| exactly the same as on a real user. StockManagementView computes
+| activeId as selectedUserId ?? selectedRetailerId and only renders this
+| panel once one of them is non-null.
 |--------------------------------------------------------------------------
 | user_details has ~30 "is_..._shown" boolean columns (is_customer_touch_
 | need_shown, is_customer_cmts_need_to_shown, is_need_to_retailer_shown,
@@ -31,9 +37,16 @@ import type { CustomerTouch, UserDetail, UserDetailListItem } from '@/types'
 | to build a working settings page to edit them — see chat for the
 | backend ask this needs.
 |
-| Retailer picker: same "just a regular user" pattern StockOutPanel's
-| retailer_id field already uses (see AddUserModal's comment) — reuses
-| the same users list, not a separate entity.
+| Retailer PICKING (the "+Add Retailer"/dropdown/phone trio) used to live
+| here too, gated behind is_need_to_retailer_shown, and disconnected from
+| the real transaction besides — StockOutPanel hardcoded retailer_id: null
+| no matter what was selected. That part moved out to
+| RetailerPickerPanel.vue and is wired through to StockOutPanel for real.
+| is_need_to_retailer_shown itself is untouched — still a real column,
+| still editable on UsersView's permissions section — this only removes
+| the one (broken) reader of it that lived here. What stayed, per the
+| header note above: once a retailer is the active party, this panel still
+| shows for it — same photo/comments/touch/deliver a real user gets.
 |
 | Customer Touch: GET /customer-touch (already-existing customerTouchApi,
 | same picklist used by CustomerTouchView admin screen) — a standalone
@@ -57,8 +70,7 @@ import type { CustomerTouch, UserDetail, UserDetailListItem } from '@/types'
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ userId: number; users: UserDetailListItem[] }>()
-const emit = defineEmits<{ usersChanged: [] }>()
+const props = defineProps<{ activeId: number }>()
 
 const toast = useToastStore()
 
@@ -75,26 +87,16 @@ const comments = ref('')
 const savedComments = ref('')
 const isSavingComments = ref(false)
 const commentsError = ref('')
-const retailerId = ref<number | null>(null)
-const retailerPhone = ref('')
-const showAddRetailerModal = ref(false)
 const showDeliveryModal = ref(false)
 
 const showTouch = computed(() => detail.value?.is_customer_touch_need_shown ?? false)
 const showComments = computed(() => detail.value?.is_customer_cmts_need_to_shown ?? false)
-const showRetailer = computed(() => detail.value?.is_need_to_retailer_shown ?? false)
-
-const retailerOptions = computed(() =>
-  props.users
-    .filter((u) => u.id !== props.userId)
-    .map((u) => ({ value: u.id, label: u.full_name })),
-)
 
 async function loadDetail() {
   isLoading.value = true
   loadError.value = ''
   try {
-    const result = await userDetailsApi.get(props.userId)
+    const result = await userDetailsApi.get(props.activeId)
     detail.value = result.user
     profileImageUrl.value = result.profile_image_url
     comments.value = result.user.customer_commants ?? ''
@@ -133,7 +135,7 @@ async function saveComments() {
     // Send null for an emptied box so the column is cleared rather than set
     // to an empty string — matches how create/update build this field.
     const next = comments.value.trim().length > 0 ? comments.value : null
-    const result = await userDetailsApi.updateCustomerComments(props.userId, next)
+    const result = await userDetailsApi.updateCustomerComments(props.activeId, next)
 
     // Trust the echoed value over the local one.
     comments.value = result.customer_commants ?? ''
@@ -150,22 +152,15 @@ async function saveComments() {
 }
 
 watch(
-  () => props.userId,
+  () => props.activeId,
   () => {
     selectedTouchId.value = null
-    retailerId.value = null
-    retailerPhone.value = ''
     commentsError.value = ''
     loadDetail()
   },
   { immediate: true },
 )
 onMounted(loadTouchOptions)
-
-function handleRetailerAdded() {
-  showAddRetailerModal.value = false
-  emit('usersChanged')
-}
 </script>
 
 <template>
@@ -173,19 +168,6 @@ function handleRetailerAdded() {
     <div v-if="loadError" class="p-4 text-sm text-red-700">{{ loadError }}</div>
 
     <div v-else class="space-y-6 p-4">
-      <div v-if="showRetailer" class="space-y-3 border-b border-slate-100 pb-6">
-        <BaseButton variant="secondary" @click="showAddRetailerModal = true">
-          + Add Retailer
-        </BaseButton>
-        <BaseSelect
-          v-model="retailerId"
-          label="Retailer"
-          placeholder="Select Retailer…"
-          :options="retailerOptions"
-        />
-        <BaseInput v-model="retailerPhone" label="Phone No" />
-      </div>
-
       <div class="grid gap-6 sm:grid-cols-[1fr_auto_1fr]">
         <div class="space-y-3">
           <BaseSelect
@@ -244,12 +226,6 @@ function handleRetailerAdded() {
       </div>
     </div>
 
-    <AddUserModal
-      v-if="showAddRetailerModal"
-      title="Add Retailer"
-      @close="showAddRetailerModal = false"
-      @saved="handleRetailerAdded"
-    />
     <CustomerDeliveryModal
       v-if="showDeliveryModal"
       :customer-name="detail?.name ?? 'Customer'"

@@ -1,4 +1,5 @@
 import { api, type ApiResponse } from './api'
+import { USER_FEATURE_FLAG_KEYS } from './userFeatureFlags'
 import type { UserDetail, UserDetailFormValues, UserDetailListItem } from '@/types'
 
 const RESOURCE = '/user-details'
@@ -23,6 +24,17 @@ function toPayload(form: UserDetailFormValues, includePassword = true) {
     is_active: form.is_active,
     is_delete: form.is_delete,
     is_billable: form.is_billable,
+  }
+
+  // Bug fix (2026-09-26): this function used to stop at is_billable, so
+  // none of the 40 per-user feature flags UsersView.vue collects (PR
+  // #43–#45's "Permissions & features" section) ever left the browser —
+  // the checkboxes toggled local state and toPayload() silently dropped
+  // all of it before the request went out. store()/update() both validate
+  // every key in USER_FEATURE_FLAG_KEYS as `sometimes|boolean`, so they
+  // belong here same as is_active/is_delete/is_billable above.
+  for (const key of USER_FEATURE_FLAG_KEYS) {
+    payload[key] = form[key]
   }
 
   if (includePassword) payload.password = form.password

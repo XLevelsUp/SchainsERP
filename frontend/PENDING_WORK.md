@@ -3,7 +3,7 @@
 Living tracker for the frontend team. Updated as items land — tick things off
 here rather than opening a new doc.
 
-**Last updated:** 2026-09-23
+**Last updated:** 2026-09-25
 **Backend baseline:** `515db79` (PR #46 — history head-scoping, role-numbering
 and report fixes)
 
@@ -382,6 +382,8 @@ Practical consequences for us:
 | One Day Action — fixed for the new response shape after PR #46's #22–25 broke it (`records`/`pagination`, `amount` on cash rows, standard date format), and now sends `X-User-ID` so the head-scoping PR #46 added actually scopes to the signed-in head (ask #37) | `views/OneDayActionView.vue`, `types/oneDayAction.ts`, `lib/reportApi.ts` |
 | Live Metal Balance — stale warning banners removed for the two bugs PR #46 fixed (#18 Postgres SQL, #19 admin override) | `views/LiveMetalBalanceView.vue`, `types/liveMetalBalance.ts` |
 | `api.ts` `get()` accepts a headers argument, matching `post`/`postForm` (needed to send `X-User-ID` on a GET) | `lib/api.ts` |
+| Transaction History print — isolated to a real slip (row receipt / table report) instead of printing the whole page | `components/stock/TransactionHistoryPanel.vue` |
+| View Notes — built against no backend at all (ask #38), banner explains why every action 404s | `components/stock/ViewNotesPanel.vue`, `lib/remindersApi.ts`, `types/reminder.ts` |
 
 **Every endpoint shipped in PRs #29–#32 now has a frontend**, PR #37's two
 new endpoints have one as of 2026-09-11, and everything PRs #38–#42 exposed
@@ -1562,6 +1564,62 @@ the head check will not recognise.
     `CashManagementView.vue` now needs only a Head, and
     `CashTxnHistoryTable.vue` / `StockCashHistoryTable.vue` accept
     `userId: number | null`.
+
+### View Notes / reminders — feature does not exist on the backend (2026-09-25 finding)
+
+<a id="38"></a>
+
+38. **The "View Notes" panel (Stock Details screen's per-head task list) has
+    no backend at all — not a bug, a total absence.** Asked to implement it
+    from two legacy screenshots (a notes table: Sno/Description/IsCompleted/
+    Added By/Remainder At/Assign To/Is Viewed/Actions, and a "Create new
+    Remainder" dialog: Description/Remainder Date/Assign_to). Searched
+    exhaustively before writing any frontend code: no migration, no model, no
+    controller, no route anywhere in `schainbackend`, and no mention in the
+    API testing doc. The only "remainder" hits in the entire backend are
+    unrelated — `CashTxnDetail`'s own `remainder`/`remainder_at` columns (a
+    single date on one cash transaction, added by
+    `2026_08_12_233141_add_remainder_and_hide_to_cash_txn_details_table`) and
+    the `is_remainder_shown` per-user UI-visibility flag. Neither is a task
+    list.
+
+    **Built anyway**, per the standing instruction to ship UI ahead of
+    backend gaps rather than hold it back: `ViewNotesPanel.vue`, wired into
+    `StockManagementView.vue`'s right column above `TransactionHistoryPanel`
+    (matching the legacy screen's placement opposite Head Stocks). It carries
+    a permanent on-screen banner saying the backend does not exist yet, and
+    every list/create/edit/complete/view action goes through
+    `lib/remindersApi.ts` against a speculative `apiResource('reminders')` —
+    so today it 404s cleanly with that banner for context, and the day the
+    route exists this screen needs no rework, just verification.
+
+    **Ask:** a `reminders` (or similar) table and matching
+    `apiResource('reminders')`. Proposed shape, reverse-engineered from the
+    two screenshots — every name here is a proposal, not a contract:
+
+    ```
+    id              bigint, PK
+    description     text, required
+    is_completed    boolean, default false
+    added_by        FK -> user_details, set server-side from the acting user
+    assign_to       FK -> user_details, required
+    remainder_at    date (the create dialog only collects a date — but the
+                    legacy table's Remainder At column displays a
+                    time too, "31-Jul-2026 10:52:36 AM"; where that time
+                    comes from is open, most likely the row's created-at
+                    timestamp rather than a separate input)
+    is_viewed       boolean, default false — set true the first time
+                    assign_to (or anyone?) opens the note; scope
+                    unconfirmed
+    added_at / updated_at
+    ```
+
+    Two open questions for whoever builds this, both left unresolved
+    on purpose rather than guessed: whether `index()` should scope to the
+    signed-in head (as `added_by` or `assign_to`) or return everything the
+    way `OrderController::index()` currently does; and whether "complete" and
+    "view" are just `PATCH` with `is_completed`/`is_viewed` (what the
+    frontend assumes today) or deserve their own endpoints.
 
 ---
 
