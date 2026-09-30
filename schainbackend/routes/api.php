@@ -70,7 +70,7 @@ Route::prefix('v1')->group(function () {
 
         Route::apiResource('cash-txn-details', CashTxnDetailController::class);
         Route::apiResource('cash-categories', CashCategoryController::class);
-        Route::apiResource('phone-book', PhoneBookController::class);
+        Route::apiResource('phone-book', PhoneBookController::class)->only(['index', 'show']);
         Route::post('cash-txn-details/{id}/images', [CashTxnDetailController::class, 'addImages']);
         Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage']);
         Route::apiResource('bank-details', BankDetailController::class);
@@ -106,5 +106,6 @@ Route::prefix('v1/stock')->middleware('auth:api')->group(function () {
     Route::get('reports/consolidated', [StockDetailsController::class, 'getConsolidatedReport']);
     Route::get('reports/id-wise', [StockDetailsController::class, 'getIdWiseReport']);
     Route::post('hide', [StockDetailsController::class, 'postHide']);
+    Route::post('unhide', [StockDetailsController::class, 'postUnhide']);
     Route::post('cash-out', [StockDetailsController::class, 'postCash']);
 });

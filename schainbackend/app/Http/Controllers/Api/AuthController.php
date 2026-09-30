@@ -88,17 +88,14 @@ class AuthController extends Controller
         // Generate Passport Token
         $token = $user->createToken('auth_token')->accessToken;
 
+        $user->load('role');
+
         // Login successful - Secure Response
         return response()->json([
             'success' => true,
             'message' => 'Login successful',
             'data' => [
-                'user' => [
-                    'user_id' => $user->user_id,
-                    'name' => $user->name,
-                    'user_name' => $user->user_name,
-                    'role_id' => $user->role_id
-                ],
+                'user' => $user,
                 'token' => $token,
                 'token_type' => 'Bearer'
             ]
@@ -145,17 +142,12 @@ class AuthController extends Controller
     public function me(Request $request)
     {
         $user = $request->user();
+        $user->load('role');
 
         return response()->json([
             'success' => true,
             'message' => 'Authenticated user retrieved.',
-            'data' => [
-                'user_id'  => $user->user_id,
-                'name'     => $user->name,
-                'user_name'=> $user->user_name,
-                'role_id'  => $user->role_id,
-                'is_active'=> $user->is_active,
-            ]
+            'data' => $user
         ], 200);
     }
 }

@@ -18,7 +18,7 @@ class PhoneBookController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $query = UserDetail::with('role');
+            $query = UserDetail::with('role')->where('is_delete', false);
 
             if ($request->has('search') && !empty($request->search)) {
                 $search = $request->search;

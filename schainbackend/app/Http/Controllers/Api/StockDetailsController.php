@@ -294,6 +294,28 @@ class StockDetailsController extends Controller
     }
 
     /**
+     * Unhide specific stock details and their parent
+     */
+    public function postUnhide(HideStockRequest $request): JsonResponse
+    {
+        try {
+            $this->stockOutService->unhideStocks($request->input('stock_ids'));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Stock Unhidden Successfully',
+            ], 200);
+        } catch (\Throwable $e) {
+            Log::error('StockDetailsController::postUnhide failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process Unhide transaction.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * 6. Cash / RTGS Transfer (Cash Out)
      */
     public function postCash(CashOutRequest $request): JsonResponse
@@ -704,6 +726,7 @@ class StockDetailsController extends Controller
                 ->where('given_to', $userId)
                 ->where('item_id', $itemId)
                 ->whereIn('stock_type', ['IN'])
+                ->where('is_hided', 0)
                 ->whereNull('stock_in_id'); // Only parent IN lots
 
             if ($date && $time) {
@@ -712,7 +735,7 @@ class StockDetailsController extends Controller
                     "stock_details.*, COALESCE((SELECT SUM(s.grams) FROM stock_details s WHERE s.stock_in_id = stock_details.stock_id AND s.added_at <= ?), 0) as used_grams",
                     [$dateTime]
                 )
-                ->havingRaw('grams - used_grams > 0')
+                ->whereRaw('grams - COALESCE((SELECT SUM(s.grams) FROM stock_details s WHERE s.stock_in_id = stock_details.stock_id AND s.added_at <= ?), 0) > 0', [$dateTime])
                 ->orderBy('stock_id', 'desc');
             } else {
                 $query->select('stock_details.*')
