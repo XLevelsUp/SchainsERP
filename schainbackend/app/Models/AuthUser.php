@@ -33,4 +33,9 @@ class AuthUser extends Authenticatable
     {
         return $this->password_hash;
     }
+
+    public function role()
+    {
+        return $this->belongsTo(Role::class, 'role_id', 'id');
+    }
 }
