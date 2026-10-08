@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\CashToGoldController;
 use App\Http\Controllers\Api\GoldToCashController;
 use App\Http\Controllers\Api\CashCategoryController;
 use App\Http\Controllers\Api\PhoneBookController;
+use App\Http\Controllers\Api\ReminderController;
 
 Route::prefix('v1')->group(function () {
     // Public routes
@@ -74,6 +75,7 @@ Route::prefix('v1')->group(function () {
         Route::post('cash-txn-details/{id}/images', [CashTxnDetailController::class, 'addImages']);
         Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage']);
         Route::apiResource('bank-details', BankDetailController::class);
+        Route::apiResource('reminders', ReminderController::class);
 
         Route::post('purchase-gold', [PurchaseGoldController::class, 'store']);
         Route::post('sale-gold', [SaleGoldController::class, 'store']);
