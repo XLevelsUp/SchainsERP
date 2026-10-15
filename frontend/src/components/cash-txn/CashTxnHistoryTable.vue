@@ -48,7 +48,7 @@ const columns: DataTableColumn<CashTxnHistoryRow>[] = [
   { key: 'added_at', label: 'Date' },
   { key: 'type', label: 'Type' },
   { key: 'category', label: 'Category' },
-  { key: 'amount', label: 'Amount' },
+  { key: 'amount', label: 'Amount', align: 'right' },
   { key: 'payment_method', label: 'Method' },
   { key: 'remarks', label: 'Remarks' },
 ]
@@ -56,20 +56,23 @@ const columns: DataTableColumn<CashTxnHistoryRow>[] = [
 const printTxnId = ref<number | null>(null)
 const detailTxnId = ref<number | null>(null)
 
-// Mirrors the badge colors already used on the modals that create each
-// type, so the history reads as one system with the quick-action buttons
-// above it rather than inventing a new palette.
+// Coloured by cash direction, the same way Cash Management's quick-action
+// buttons are: oxblood for types where cash leaves the head (the Pay
+// group), verdigris where it reaches the head (the Receive group). The
+// label tells the types apart; the colour says which way the money went.
+const OUT_BADGE = 'bg-outflow-50 text-outflow-700'
+const IN_BADGE = 'bg-inflow-50 text-inflow-700'
 const typeMeta: Record<CashTxnHistoryType, { label: string; class: string }> = {
-  EXPENSE: { label: 'Pay', class: 'bg-red-50 text-red-700' },
-  INCOME: { label: 'Receive', class: 'bg-emerald-50 text-emerald-700' },
-  AUTO_ENTRY: { label: 'Auto Entry', class: 'bg-amber-50 text-amber-700' },
-  PURCHASE_GOLD: { label: 'Purchase Gold', class: 'bg-amber-50 text-amber-700' },
-  SALE_GOLD: { label: 'Sale Gold', class: 'bg-purple-50 text-purple-700' },
-  CASH_TO_GOLD: { label: 'Cash To Gold', class: 'bg-red-50 text-red-700' },
-  GOLD_TO_CASH: { label: 'Gold To Cash', class: 'bg-blue-50 text-blue-700' },
+  EXPENSE: { label: 'Pay', class: OUT_BADGE },
+  INCOME: { label: 'Receive', class: IN_BADGE },
+  AUTO_ENTRY: { label: 'Auto Entry', class: IN_BADGE },
+  PURCHASE_GOLD: { label: 'Purchase Gold', class: OUT_BADGE },
+  SALE_GOLD: { label: 'Sale Gold', class: IN_BADGE },
+  CASH_TO_GOLD: { label: 'Cash To Gold', class: IN_BADGE },
+  GOLD_TO_CASH: { label: 'Gold To Cash', class: OUT_BADGE },
   INTERNAL_TRANSFER: { label: 'Internal', class: 'bg-slate-100 text-slate-500' },
-  OUT_CASH_CONVERTER: { label: 'Out Cash Converter', class: 'bg-amber-50 text-amber-800' },
-  IN_CASH_CONVERTER: { label: 'In Cash Converter', class: 'bg-purple-50 text-purple-800' },
+  OUT_CASH_CONVERTER: { label: 'Out Cash Converter', class: OUT_BADGE },
+  IN_CASH_CONVERTER: { label: 'In Cash Converter', class: IN_BADGE },
 }
 
 function typeBadge(type: CashTxnHistoryType) {
@@ -147,11 +150,14 @@ function nextPage() {
     </div>
 
     <template v-else>
-      <DataTable :columns="columns" :rows="rows" empty-message="No entries recorded yet.">
-        <template #added_at="{ value }">{{ formatDateOnly(value as string | null) }}</template>
+      <!-- size="sm": these always render two-up on Cash Management. -->
+      <DataTable :columns="columns" :rows="rows" size="sm" empty-message="No entries recorded yet.">
+        <template #added_at="{ value }">
+          <span class="font-figure whitespace-nowrap tabular-nums">{{ formatDateOnly(value as string | null) }}</span>
+        </template>
         <template #type="{ value }">
           <span
-            class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
+            class="inline-flex rounded px-1.5 py-0.5 font-figure text-[11px] leading-4 font-semibold tracking-[0.06em] whitespace-nowrap uppercase"
             :class="typeBadge(value as CashTxnHistoryType).class"
           >
             {{ typeBadge(value as CashTxnHistoryType).label }}
@@ -159,28 +165,32 @@ function nextPage() {
         </template>
         <template #category="{ row }">{{ row.category?.category_name ?? '—' }}</template>
         <template #amount="{ value }">
-          <span class="font-semibold tabular-nums text-slate-900">
+          <span class="font-figure text-[15px] font-semibold tabular-nums text-ink-900">
             {{ Number(value).toLocaleString() }}
           </span>
         </template>
-        <template #payment_method="{ row }">{{ methodLabel(row) }}</template>
+        <template #payment_method="{ row }">
+          <span class="whitespace-nowrap">{{ methodLabel(row) }}</span>
+        </template>
         <template #remarks="{ value }">{{ value || '—' }}</template>
         <template #txn_id="{ value }">
-          <div class="flex flex-col items-center gap-1">
-            <span class="tabular-nums text-slate-700">{{ value }}</span>
+          <div class="flex items-center gap-1">
+            <span class="font-figure tabular-nums text-slate-500">{{ value }}</span>
             <div class="flex items-center gap-0.5">
               <button
                 type="button"
-                class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-ink-900"
                 aria-label="View transaction detail"
+                title="View transaction detail"
                 @click="detailTxnId = value as number"
               >
                 <Eye class="h-4 w-4" />
               </button>
               <button
                 type="button"
-                class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-ink-900"
                 aria-label="Print receipt"
+                title="Print receipt"
                 @click="printTxnId = value as number"
               >
                 <Printer class="h-4 w-4" />
@@ -203,7 +213,7 @@ function nextPage() {
       />
 
       <div v-if="total > 0" class="mt-2 flex items-center justify-between text-xs text-slate-500">
-        <span>{{ rangeLabel }}</span>
+        <span class="font-figure tabular-nums">{{ rangeLabel }}</span>
         <div class="flex items-center gap-1">
           <button
             type="button"

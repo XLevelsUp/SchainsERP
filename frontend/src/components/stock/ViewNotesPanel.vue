@@ -291,12 +291,12 @@ function closeView() {
       other).
     -->
     <div
-      class="flex items-center justify-between px-4 py-3"
+      class="flex items-center justify-between px-4 py-2"
       :class="isExpanded ? 'border-b border-slate-200' : ''"
     >
       <button
         type="button"
-        class="flex min-w-0 flex-1 items-center gap-2 text-left"
+        class="flex min-w-0 flex-1 items-center gap-2 rounded text-left focus-visible:outline-2 focus-visible:outline-gold-500"
         :aria-expanded="isExpanded"
         aria-label="Toggle View Notes"
         @click="isExpanded = !isExpanded"
@@ -304,27 +304,27 @@ function closeView() {
         <h2 class="text-sm font-semibold text-slate-900">View Notes</h2>
         <span
           v-if="hasLoaded && reminders.length > 0"
-          class="inline-flex min-w-5 items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"
+          class="inline-flex min-w-5 items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 font-figure text-xs font-medium text-slate-600 tabular-nums"
         >
           {{ reminders.length }}
         </span>
         <ChevronDown
-          class="h-4 w-4 text-slate-400 transition-transform"
+          class="h-4 w-4 text-slate-400 motion-safe:transition-transform"
           :class="isExpanded ? 'rotate-180' : ''"
         />
       </button>
       <button
         type="button"
-        class="ml-2 shrink-0 rounded-md bg-red-600 p-1 text-white hover:bg-red-700"
+        class="ml-2 flex shrink-0 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-gold-500"
         aria-label="New note"
         @click="openCreate"
       >
-        <Plus class="h-4 w-4" />
+        <Plus class="h-3.5 w-3.5" /> New note
       </button>
     </div>
 
     <template v-if="isExpanded">
-      <div class="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
+      <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50/60 px-4 py-2">
         <BaseButton
           variant="secondary"
           :disabled="selectedIds.size === 0 || isCompleting"
@@ -342,12 +342,14 @@ function closeView() {
 
       <div v-else class="overflow-x-auto">
         <table class="min-w-full text-sm">
-          <thead class="bg-slate-50">
-            <tr class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+          <thead>
+            <tr
+              class="border-b border-slate-100 font-figure text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap text-slate-500 uppercase"
+            >
               <th scope="col" class="w-8 px-3 py-2 text-left">
                 <input
                   type="checkbox"
-                  class="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                  class="h-3.5 w-3.5 rounded border-slate-300 accent-ink-900"
                   aria-label="Select all notes"
                   :disabled="reminders.length === 0"
                   @change="toggleAll"
@@ -372,55 +374,56 @@ function closeView() {
             <tr
               v-for="(row, index) in reminders"
               :key="row.id"
-              class="hover:bg-slate-50"
-              :class="selectedIds.has(row.id) ? 'bg-brand-50/60' : ''"
+              :class="selectedIds.has(row.id) ? 'bg-gold-50' : 'hover:bg-slate-50'"
             >
-              <td class="px-3 py-2">
+              <td class="px-3 py-1.5">
                 <input
                   type="checkbox"
-                  class="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                  class="h-3.5 w-3.5 rounded border-slate-300 accent-ink-900"
                   :aria-label="`Select note ${row.id}`"
                   :checked="selectedIds.has(row.id)"
                   @change="toggleRow(row.id)"
                 />
               </td>
-              <td class="px-3 py-2 text-slate-500">{{ index + 1 }}</td>
-              <td class="px-3 py-2 text-slate-900">{{ row.description }}</td>
-              <td class="px-3 py-2">
+              <td class="px-3 py-1.5 font-figure tabular-nums text-slate-400">{{ index + 1 }}</td>
+              <td class="px-3 py-1.5 text-slate-900">{{ row.description }}</td>
+              <td class="px-3 py-1.5">
                 <span
-                  class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
-                  :class="row.is_completed ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'"
+                  class="inline-flex rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap"
+                  :class="row.is_completed ? 'bg-inflow-50 text-inflow-700' : 'bg-slate-100 text-slate-600'"
                 >
                   {{ row.is_completed ? 'Yes' : 'No' }}
                 </span>
               </td>
-              <td class="px-3 py-2 text-slate-700">{{ addedByLabel(row) }}</td>
-              <td class="px-3 py-2 whitespace-nowrap text-slate-500">
+              <td class="px-3 py-1.5 text-slate-700">{{ addedByLabel(row) }}</td>
+              <td class="px-3 py-1.5 whitespace-nowrap font-figure tabular-nums text-slate-600">
                 {{ formatDateOnly(row.remainder_at) }}
               </td>
-              <td class="px-3 py-2 text-slate-700">{{ assignToLabel(row) }}</td>
-              <td class="px-3 py-2">
+              <td class="px-3 py-1.5 text-slate-700">{{ assignToLabel(row) }}</td>
+              <td class="px-3 py-1.5">
                 <span
-                  class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
-                  :class="row.is_viewed ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'"
+                  class="inline-flex rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap"
+                  :class="row.is_viewed ? 'bg-inflow-50 text-inflow-700' : 'bg-slate-100 text-slate-600'"
                 >
                   {{ row.is_viewed ? '✓ Viewed' : 'Not viewed' }}
                 </span>
               </td>
-              <td class="px-3 py-2">
-                <div class="flex justify-end gap-1">
+              <td class="px-3 py-1.5">
+                <div class="flex justify-end gap-0.5">
                   <button
                     type="button"
-                    class="rounded-md bg-emerald-600 p-1.5 text-white hover:bg-emerald-700"
+                    class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-ink-900"
                     aria-label="View note"
+                    title="View note"
                     @click="openView(row)"
                   >
                     <Eye class="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
-                    class="rounded-md bg-amber-500 p-1.5 text-white hover:bg-amber-600"
+                    class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-ink-900"
                     aria-label="Edit note"
+                    title="Edit note"
                     @click="openEdit(row)"
                   >
                     <Pencil class="h-3.5 w-3.5" />

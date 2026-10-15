@@ -5,6 +5,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import DirectionTag from '@/components/ui/DirectionTag.vue'
 import { stockHistoryApi } from '@/lib/stockHistoryApi'
 import { stockApi } from '@/lib/stockApi'
 import { ApiError } from '@/lib/api'
@@ -93,10 +94,9 @@ const itemOptions = computed(() =>
   props.items.map((item) => ({ value: item.item_id, label: item.item_name })),
 )
 
-const typeMeta: Record<'IN' | 'OUT', string> = {
-  IN: 'bg-emerald-50 text-emerald-700',
-  OUT: 'bg-red-50 text-red-700',
-}
+const hasFilters = computed(
+  () => typeFilter.value !== null || itemFilter.value !== null || fromDate.value !== '' || toDate.value !== '',
+)
 
 function formatNumber(value: number) {
   return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : '0'
@@ -269,21 +269,26 @@ defineExpose({ refresh: load })
 
 <template>
   <BaseCard :padded="false">
-    <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-      <h2 class="text-sm font-semibold text-slate-900">Transaction History</h2>
-      <div class="flex items-center gap-2">
+    <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5">
+      <h2 class="flex min-w-0 items-baseline gap-2 text-sm font-semibold text-slate-900">
+        Transaction History
+        <!-- Whose ledger this is — the picked user, or the signed-in head. -->
+        <span class="truncate text-xs font-normal text-slate-500">{{ headName }}</span>
+      </h2>
+      <div class="flex shrink-0 items-center gap-2">
         <button
           v-if="selectedCount > 0"
           type="button"
-          class="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+          class="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-outflow-700 hover:bg-outflow-50"
           @click="confirmingHide = true"
         >
           <EyeOff class="h-3.5 w-3.5" /> Hide {{ selectedCount }} selected
         </button>
         <button
           type="button"
-          class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+          class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-ink-900 disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Print transaction history"
+          title="Print this page of the history"
           :disabled="rows.length === 0"
           @click="printTable"
         >
@@ -294,25 +299,27 @@ defineExpose({ refresh: load })
 
     <div
       v-if="confirmingHide"
-      class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900"
+      class="border-b border-outflow-100 bg-outflow-50 px-4 py-3 text-xs text-outflow-700"
+      role="alertdialog"
+      aria-labelledby="hide-confirm-title"
     >
-      <p class="font-medium">Hide {{ selectedCount }} transaction(s)?</p>
-      <p class="mt-1">
+      <p id="hide-confirm-title" class="font-semibold">Hide {{ selectedCount }} transaction(s)?</p>
+      <p class="mt-1 text-slate-700">
         They stay in the ledger and keep affecting balances — they just stop appearing in this
         history and in the metal picker. Any selected row drawn from a parent lot hides that lot
-        too. <strong>There is no way to un-hide from this app.</strong>
+        too. <strong class="text-outflow-700">There is no way to un-hide from this app.</strong>
       </p>
       <div class="mt-2 flex items-center gap-2">
         <BaseButton variant="secondary" :disabled="isHiding" @click="confirmingHide = false">
           Cancel
         </BaseButton>
-        <BaseButton :disabled="isHiding" @click="confirmHide">
+        <BaseButton variant="outflow" :disabled="isHiding" @click="confirmHide">
           {{ isHiding ? 'Hiding…' : 'Hide them' }}
         </BaseButton>
       </div>
     </div>
 
-    <div class="grid gap-2 border-b border-slate-200 px-4 py-3 sm:grid-cols-4">
+    <div class="grid gap-2 border-b border-slate-200 bg-slate-50/60 px-4 py-2 sm:grid-cols-4">
       <BaseSelect
         v-model="typeFilter"
         :options="typeOptions"
@@ -331,26 +338,54 @@ defineExpose({ refresh: load })
 
     <p v-if="loadError" class="px-4 py-3 text-sm text-red-700">{{ loadError }}</p>
 
-    <div v-else-if="isLoading" class="px-4 py-8 text-center text-sm text-slate-500">Loading…</div>
+    <div v-else-if="isLoading" class="px-4 py-8 text-center text-sm text-slate-500">
+      Loading transactions…
+    </div>
 
     <template v-else>
-      <div class="overflow-x-auto">
+      <!--
+        Vertical scroll after roughly four rows, so this panel stays close to
+        Head Stocks' height in the column beside it rather than running on and
+        pushing the two columns out of alignment.
+
+        max-height, not a fixed height: a page with one or two rows stays
+        short instead of leaving dead space. The value is in rem rather than a
+        row count because rows wrap to different heights (a "Gold Chain =>
+        Gold Ring" item cell is two lines, a plain "Metal" is one), so "four
+        rows" is approximate by nature.
+
+        The header is sticky so Total and the column labels stay put while the
+        rows move under them — the totals are for the whole filtered set, not
+        the visible slice, so scrolling them out of view would be worse than
+        the scrolling itself.
+
+        Printing is unaffected: it renders .txn-print-root, a separate subtree,
+        never this table.
+      -->
+      <div class="max-h-60 overflow-y-auto overflow-x-auto">
         <table class="min-w-full text-sm">
-          <thead class="bg-slate-50">
-            <tr class="border-b border-slate-200 font-semibold text-slate-900">
-              <td colspan="5" class="px-4 py-2">Total</td>
-              <td class="px-3 py-2 text-right tabular-nums">{{ formatNumber(totals.grams) }}</td>
-              <td class="px-3 py-2 text-right tabular-nums">{{ formatNumber(totals.pcs) }}</td>
+          <thead class="sticky top-0 z-10 bg-white">
+            <tr class="border-b border-slate-200 bg-gold-50/60 font-semibold text-ink-900">
+              <td colspan="5" class="px-4 py-2 text-xs">Total <span class="font-normal text-slate-500">· all pages</span></td>
+              <td class="px-3 py-2 text-right font-figure tabular-nums">{{ formatNumber(totals.grams) }}</td>
+              <td class="px-3 py-2 text-right font-figure tabular-nums">{{ formatNumber(totals.pcs) }}</td>
               <td class="px-3 py-2"></td>
               <td class="px-3 py-2"></td>
-              <td class="px-4 py-2 text-right tabular-nums">{{ formatNumber(totals.purity) }}</td>
+              <td class="px-4 py-2 text-right font-figure tabular-nums text-gold-700">{{ formatNumber(totals.purity) }}</td>
               <td colspan="3" class="px-4 py-2"></td>
             </tr>
-            <tr class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+            <!--
+              Bottom border lives here, not on <thead>: tbody's divide-y gives
+              no top border to its first row, so without this the rows would
+              slide right up against the sticky header with no edge between.
+            -->
+            <tr
+              class="border-b border-slate-200 font-figure text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap text-slate-500 uppercase"
+            >
               <th scope="col" class="w-8 px-3 py-2 text-left">
                 <input
                   type="checkbox"
-                  class="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                  class="h-3.5 w-3.5 rounded border-slate-300 accent-ink-900"
                   aria-label="Select all on this page"
                   :checked="allOnPageSelected"
                   :disabled="rows.length === 0"
@@ -363,9 +398,9 @@ defineExpose({ refresh: load })
               <th scope="col" class="px-3 py-2 text-left">Type</th>
               <th scope="col" class="px-3 py-2 text-right">Grams</th>
               <th scope="col" class="px-3 py-2 text-right">Pcs</th>
-              <th scope="col" class="px-3 py-2 text-right">Touch</th>
+              <th scope="col" class="px-3 py-2 text-right">Touch %</th>
               <th scope="col" class="px-3 py-2 text-right">Wastage</th>
-              <th scope="col" class="px-4 py-2 text-right">Purity</th>
+              <th scope="col" class="px-4 py-2 text-right">Purity g</th>
               <th scope="col" class="px-3 py-2 text-left">User</th>
               <th scope="col" class="px-4 py-2 text-left">Remarks</th>
               <th scope="col" class="px-4 py-2 text-center">Print</th>
@@ -374,45 +409,42 @@ defineExpose({ refresh: load })
           <tbody class="divide-y divide-slate-100">
             <tr v-if="rows.length === 0">
               <td colspan="13" class="px-4 py-8 text-center text-slate-500">
-                No transactions recorded yet.
+                {{ hasFilters ? 'No transactions match these filters.' : 'No transactions recorded yet.' }}
               </td>
             </tr>
             <tr
               v-for="(row, index) in rows"
               :key="row.id"
-              class="hover:bg-slate-50"
-              :class="selectedIds.has(row.id) ? 'bg-brand-50/60' : ''"
+              :class="selectedIds.has(row.id) ? 'bg-gold-50' : 'hover:bg-slate-50'"
             >
-              <td class="px-3 py-2">
+              <td class="px-3 py-1.5">
                 <input
                   type="checkbox"
-                  class="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                  class="h-3.5 w-3.5 rounded border-slate-300 accent-ink-900"
                   :aria-label="`Select transaction ${row.id}`"
                   :checked="selectedIds.has(row.id)"
                   @change="toggleRow(row.id)"
                 />
               </td>
-              <td class="px-4 py-2 text-slate-500">{{ (page - 1) * PER_PAGE + index + 1 }}</td>
-              <td class="px-3 py-2 text-slate-500">{{ row.id }}</td>
-              <td class="px-3 py-2 text-slate-700">{{ row.item_name || '—' }}</td>
-              <td class="px-3 py-2">
-                <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium" :class="typeMeta[row.stock_type]">
-                  {{ row.stock_type === 'IN' ? 'In' : 'Out' }}
-                </span>
+              <td class="px-4 py-1.5 font-figure tabular-nums text-slate-400">{{ (page - 1) * PER_PAGE + index + 1 }}</td>
+              <td class="px-3 py-1.5 font-figure tabular-nums text-slate-500">{{ row.id }}</td>
+              <td class="px-3 py-1.5 whitespace-nowrap text-slate-800">{{ row.item_name || '—' }}</td>
+              <td class="px-3 py-1.5">
+                <DirectionTag :direction="row.stock_type === 'IN' ? 'in' : 'out'" variant="pill" />
               </td>
-              <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ formatNumber(row.grams) }}</td>
-              <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ formatNumber(row.pcs) }}</td>
-              <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ formatNumber(row.touch) }}</td>
-              <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ formatNumber(row.wastage) }}</td>
-              <td class="px-4 py-2 text-right tabular-nums font-semibold text-slate-900">
+              <td class="px-3 py-1.5 text-right font-figure tabular-nums text-slate-900">{{ formatNumber(row.grams) }}</td>
+              <td class="px-3 py-1.5 text-right font-figure tabular-nums text-slate-600">{{ formatNumber(row.pcs) }}</td>
+              <td class="px-3 py-1.5 text-right font-figure tabular-nums text-slate-600">{{ formatNumber(row.touch) }}</td>
+              <td class="px-3 py-1.5 text-right font-figure tabular-nums text-slate-600">{{ formatNumber(row.wastage) }}</td>
+              <td class="px-4 py-1.5 text-right font-figure font-semibold tabular-nums text-gold-700">
                 {{ formatNumber(row.purity) }}
               </td>
-              <td class="px-3 py-2 text-slate-700">{{ row.user || '—' }}</td>
-              <td class="px-4 py-2 text-slate-500">{{ row.remarks || '—' }}</td>
-              <td class="px-4 py-2 text-center">
+              <td class="px-3 py-1.5 whitespace-nowrap text-slate-700">{{ row.user || '—' }}</td>
+              <td class="max-w-[12rem] truncate px-4 py-1.5 text-slate-500" :title="row.remarks || undefined">{{ row.remarks || '—' }}</td>
+              <td class="px-4 py-1.5 text-center">
                 <button
                   type="button"
-                  class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-ink-900"
                   :aria-label="`Print transaction ${row.id}`"
                   @click="printRow(row)"
                 >
@@ -425,7 +457,7 @@ defineExpose({ refresh: load })
       </div>
 
       <div v-if="total > 0" class="flex items-center justify-between border-t border-slate-200 px-4 py-2 text-xs text-slate-500">
-        <span>{{ rangeLabel }}</span>
+        <span class="font-figure tabular-nums">{{ rangeLabel }}</span>
         <div class="flex items-center gap-1">
           <button
             type="button"

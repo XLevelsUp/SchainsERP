@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import DataTable from '@/components/ui/DataTable.vue'
+import DirectionTag from '@/components/ui/DirectionTag.vue'
 import { stockCashHistoryApi } from '@/lib/stockCashHistoryApi'
 import { ApiError } from '@/lib/api'
 import type { StockCashHistoryRow, StockCashHistoryType } from '@/types'
@@ -42,22 +43,17 @@ const loadError = ref('')
 const columns: DataTableColumn<StockCashHistoryRow>[] = [
   { key: 'stock_type', label: 'Type' },
   { key: 'item', label: 'Item' },
-  { key: 'grams', label: 'Grams' },
-  { key: 'no_of_pcs', label: 'Pcs' },
-  { key: 'touch', label: 'Touch' },
-  { key: 'wastage', label: 'Wastage' },
-  { key: 'purity', label: 'Purity' },
+  { key: 'grams', label: 'Grams', align: 'right' },
+  { key: 'no_of_pcs', label: 'Pcs', align: 'right' },
+  { key: 'touch', label: 'Touch %', align: 'right' },
+  { key: 'wastage', label: 'Wastage', align: 'right' },
+  { key: 'purity', label: 'Purity g', align: 'right' },
   { key: 'user', label: 'With' },
   { key: 'remarks', label: 'Remarks' },
 ]
 
-const typeMeta: Record<StockCashHistoryType, { label: string; class: string }> = {
-  IN: { label: 'In', class: 'bg-emerald-50 text-emerald-700' },
-  OUT: { label: 'Out', class: 'bg-red-50 text-red-700' },
-}
-
-function typeBadge(type: StockCashHistoryType) {
-  return typeMeta[type] ?? { label: type, class: 'bg-slate-100 text-slate-600' }
+function isKnownType(type: StockCashHistoryType | string): type is StockCashHistoryType {
+  return type === 'IN' || type === 'OUT'
 }
 
 function formatNumber(value: number | string) {
@@ -127,34 +123,36 @@ function nextPage() {
     <template v-else>
       <DataTable :columns="columns" :rows="rows" empty-message="No stock movements recorded yet.">
         <template #stock_type="{ value }">
-          <span
-            class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
-            :class="typeBadge(value as StockCashHistoryType).class"
-          >
-            {{ typeBadge(value as StockCashHistoryType).label }}
+          <DirectionTag
+            v-if="isKnownType(value as StockCashHistoryType)"
+            :direction="value === 'IN' ? 'in' : 'out'"
+            variant="pill"
+          />
+          <span v-else class="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+            {{ value }}
           </span>
         </template>
         <template #item="{ value }">{{ value || '—' }}</template>
         <template #grams="{ value }">
-          <span class="tabular-nums">{{ formatNumber(value as number) }}</span>
+          <span class="font-figure tabular-nums text-slate-900">{{ formatNumber(value as number) }}</span>
         </template>
         <template #no_of_pcs="{ value }">
-          <span class="tabular-nums">{{ formatNumber(value as number) }}</span>
+          <span class="font-figure tabular-nums">{{ formatNumber(value as number) }}</span>
         </template>
         <template #touch="{ value }">
-          <span class="tabular-nums">{{ formatNumber(value as number) }}</span>
+          <span class="font-figure tabular-nums">{{ formatNumber(value as number) }}</span>
         </template>
         <template #wastage="{ value }">
-          <span class="tabular-nums">{{ formatNumber(value as number) }}</span>
+          <span class="font-figure tabular-nums">{{ formatNumber(value as number) }}</span>
         </template>
         <template #purity="{ value }">
-          <span class="font-semibold tabular-nums text-slate-900">{{ formatNumber(value as number) }}</span>
+          <span class="font-figure font-semibold tabular-nums text-gold-700">{{ formatNumber(value as number) }}</span>
         </template>
         <template #remarks="{ value }">{{ value || '—' }}</template>
       </DataTable>
 
       <div v-if="total > 0" class="mt-2 flex items-center justify-between text-xs text-slate-500">
-        <span>{{ rangeLabel }}</span>
+        <span class="font-figure tabular-nums">{{ rangeLabel }}</span>
         <div class="flex items-center gap-1">
           <button
             type="button"

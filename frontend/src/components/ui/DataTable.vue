@@ -43,8 +43,9 @@ withDefaults(
             v-for="column in columns"
             :key="String(column.key)"
             scope="col"
-            class="bg-slate-50 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase"
+            class="bg-slate-50 text-xs font-semibold tracking-wide text-slate-500 uppercase"
             :class="[
+              column.align === 'right' ? 'text-right' : 'text-left',
               size === 'sm' ? 'px-2.5 py-2' : 'px-4 py-3',
               maxHeight ? 'sticky top-0 z-10 shadow-[inset_0_-1px_0_#e2e8f0]' : '',
             ]"
@@ -68,7 +69,10 @@ withDefaults(
             v-for="column in columns"
             :key="String(column.key)"
             class="text-slate-700"
-            :class="size === 'sm' ? 'px-2.5 py-1.5 text-[13px]' : 'px-4 py-3 text-sm'"
+            :class="[
+              column.align === 'right' ? 'text-right' : '',
+              size === 'sm' ? 'px-2.5 py-1.5 text-[13px]' : 'px-4 py-3 text-sm',
+            ]"
           >
             <slot :name="String(column.key)" :row="row" :value="row[column.key]">
               {{ row[column.key] }}

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { RefreshCw, UserPlus } from 'lucide-vue-next'
+import { Plus, RefreshCw, RotateCcw, UserPlus } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import DirectionTag from '@/components/ui/DirectionTag.vue'
 import { itemsApi } from '@/lib/itemsApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
+import { bankDetailsApi } from '@/lib/bankDetailsApi'
 import { ApiError } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
@@ -24,7 +26,11 @@ import GmsOutModal from '@/components/stock/GmsOutModal.vue'
 import GmsInModal from '@/components/stock/GmsInModal.vue'
 import NumericWastageInModal from '@/components/stock/NumericWastageInModal.vue'
 import CashOutModal from '@/components/stock/CashOutModal.vue'
-import type { Item, UserDetailListItem } from '@/types'
+// Reused rather than rebuilt: it already handles both directions and every
+// payment method, and Cash In here is the same transaction Cash Management
+// records — see the project's component-first rule.
+import CashTxnEntryModal from '@/components/cash-txn/CashTxnEntryModal.vue'
+import type { BankDetail, Item, UserDetailListItem } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
@@ -135,6 +141,7 @@ const toastStore = useToastStore()
 
 const items = ref<Item[]>([])
 const users = ref<UserDetailListItem[]>([])
+const banks = ref<BankDetail[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 const selectedUserId = ref<number | null>(null)
@@ -156,6 +163,48 @@ watch(selectedUserId, (id) => {
 // CustomerContextPanel's photo/comments/touch/deliver, which work
 // identically for either.
 const activeCustomerId = computed(() => selectedUserId.value ?? selectedRetailerId.value)
+
+/*
+|--------------------------------------------------------------------------
+| What shows depends on whether a user is picked, and what role they are
+|--------------------------------------------------------------------------
+| Taken from the legacy screens (five reference screenshots, 2026-10-11),
+| which gate this screen in two separate ways. Keeping them separate here
+| because they genuinely are separate — conflating them is the easy mistake:
+|
+|  1. A USER IS PICKED (any role) unlocks the second half of each action
+|     row. With nothing picked the legacy screen shows five OUT actions and
+|     three IN; picking anyone — customer, employee, invest alike — reveals
+|     the rest. So this is NOT role-driven, despite looking like it.
+|
+|  2. THE ROLE drives the right-hand panel only: who gets a deliver button
+|     and which one.
+|
+| Matched on the role NAME, not its id. `type` is the role string the
+| backend already sends on each user row (UserDetailController:62), and
+| names survive the id drift between environments that has bitten this
+| project repeatedly. It also means INVEST starts working the day the
+| backend adds it, with no change here — see the ask in BACKEND_TODO.md.
+|--------------------------------------------------------------------------
+*/
+
+const selectedUser = computed(() =>
+  activeCustomerId.value === null
+    ? null
+    : (users.value.find((u) => u.id === activeCustomerId.value) ?? null),
+)
+
+/** Role name, upper-cased. Null when nothing is picked. */
+const selectedUserRole = computed(() => selectedUser.value?.type?.trim().toUpperCase() ?? null)
+
+/** Gate 1: the extra actions the legacy screen reveals once anyone is picked. */
+const hasUserSelected = computed(() => activeCustomerId.value !== null)
+
+// Gate 2 lives in CustomerContextPanel, which is the only thing it affects —
+// `selectedUserRole` is handed to it as a prop. Every role that is not
+// CUSTOMER or EMPLOYEE gets the INVEST treatment there: comments only, no
+// deliver action. That is what the legacy INVEST screen shows, and a safe
+// default for HEAD/PURCHASE/SALARY, none of which the screenshots covered.
 
 /*
 |--------------------------------------------------------------------------
@@ -234,16 +283,36 @@ function formatTotal(value: number) {
   return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : '0'
 }
 
+/*
+| The balance bar's beam: pending OUT purity vs pending IN purity, drawn
+| out from a centre tick — the heavier side reaches the end of its half.
+| Presentation only: it reads the same outTotals/inTotals the figures
+| beside it print, and feeds nothing back.
+*/
+const beam = computed(() => {
+  const out = Math.abs(outTotals.value.purity)
+  const inn = Math.abs(inTotals.value.purity)
+  const max = Math.max(out, inn)
+  if (!Number.isFinite(max) || max === 0) return { out: 0, in: 0 }
+  return { out: (out / max) * 50, in: (inn / max) * 50 }
+})
+
 async function loadData() {
   isLoading.value = true
   loadError.value = ''
   try {
-    const [itemsData, usersData] = await Promise.all([
+    // Banks are only needed by the Cash In modal (CashTxnEntryModal takes a
+    // bank list for the non-cash payment methods). Fetched with the rest
+    // rather than on open so the modal never shows an empty bank dropdown
+    // while a request is in flight — it is a small, rarely-changing table.
+    const [itemsData, usersData, banksData] = await Promise.all([
       itemsApi.list(),
       userDetailsApi.list(undefined, 'stock'),
+      bankDetailsApi.list(),
     ])
     items.value = itemsData
     users.value = usersData
+    banks.value = banksData
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load items/users.'
   } finally {
@@ -261,6 +330,7 @@ type ActiveModal =
   | 'gms-in'
   | 'numeric-wastage-in'
   | 'cash-out'
+  | 'cash-in'
   | null
 
 const activeModal = ref<ActiveModal>(null)
@@ -387,14 +457,27 @@ async function handleSubmitAll() {
       row-for-row grid alignment does not apply once the two columns can
       hold different numbers of items.
     -->
-    <div class="mb-6 grid items-start gap-6 lg:grid-cols-[minmax(0,340px)_1fr]">
-      <button
-        type="button"
-        class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+    <!--
+      grid-cols-[minmax(0,1fr)] below lg: without an explicit track the
+      single implicit column grew to the history table's full width, and
+      every panel ran off the right edge of a phone screen.
+    -->
+    <div
+      class="mb-6 grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]"
+    >
+      <!--
+        Named "Clear page", not "Clear": the balance bar below has its own
+        Clear that only empties queued rows, and the two used to share a label.
+      -->
+      <BaseButton
+        variant="secondary"
+        :icon="RotateCcw"
+        class="justify-self-start"
+        title="Reload the page and reset every picker and panel"
         @click="handleClearPage"
       >
-        Clear
-      </button>
+        Clear page
+      </BaseButton>
       <ViewNotesPanel :users="users" />
 
       <HeadStockSummaryPanel ref="headStockPanelRef" />
@@ -415,7 +498,11 @@ async function handleSubmitAll() {
           :users="users"
           @users-changed="loadData"
         />
-        <CustomerContextPanel v-if="activeCustomerId !== null" :active-id="activeCustomerId" />
+        <CustomerContextPanel
+          v-if="activeCustomerId !== null"
+          :active-id="activeCustomerId"
+          :role="selectedUserRole"
+        />
       </div>
     </div>
 
@@ -423,56 +510,50 @@ async function handleSubmitAll() {
       v-if="isLoading"
       class="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500"
     >
-      Loading…
+      Loading items and users…
     </div>
 
-    <div v-else class="grid gap-4 lg:grid-cols-2">
-      <div class="space-y-3">
-        <p class="text-xs font-semibold tracking-wide text-red-700 uppercase">Out</p>
+    <!--
+      Colour follows direction, not action: every OUT action is oxblood,
+      every IN action verdigris (main.css). The filled button is each
+      side's main action; a "+" marks the actions that queue a row on this
+      page, as opposed to the ones that open their own dialog.
+    -->
+    <div v-else class="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">
+      <section class="space-y-3" aria-labelledby="stock-out-heading">
+        <h2 id="stock-out-heading"><DirectionTag direction="out" /></h2>
         <div class="flex flex-wrap gap-2">
-          <button
-            type="button"
-            class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
-            @click="handleAddStockOutRow"
-          >
-            Stock Out
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-slate-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
-            @click="openModal('item-change')"
-          >
-            Item Change
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-slate-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
-            @click="openModal('item-conversion')"
-          >
-            Item Conversion
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
-            @click="openModal('gms-out')"
-          >
-            GMS Out
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
-            @click="handleAddNumericWastageOutRow"
-          >
+          <BaseButton variant="outflow" :icon="Plus" @click="handleAddStockOutRow">Stock Out</BaseButton>
+          <BaseButton variant="outflow-soft" @click="openModal('item-change')">Item Change</BaseButton>
+          <BaseButton variant="outflow-soft" @click="openModal('item-conversion')">Item Conversion</BaseButton>
+          <BaseButton variant="outflow-soft" @click="openModal('gms-out')">GMS Out</BaseButton>
+          <BaseButton variant="outflow-soft" :icon="Plus" @click="handleAddNumericWastageOutRow">
             Numeric Wastage Out
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-slate-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
-            @click="openModal('cash-out')"
-          >
-            Cash Out
-          </button>
+          </BaseButton>
+          <!--
+            Everything from here on appears only once a user is picked, per
+            the legacy screens. Reply Out has no endpoint on our backend at
+            all, so it renders disabled rather than being left out — the row
+            then matches the legacy layout, and the gap is visible instead of
+            silently missing. Tracked in BACKEND_TODO.md.
+          -->
+          <template v-if="hasUserSelected">
+            <BaseButton
+              variant="outflow-soft"
+              disabled
+              title="Reply Out has no backend endpoint yet — flagged to the backend team."
+            >
+              Reply Out
+            </BaseButton>
+            <BaseButton variant="outflow-soft" @click="openModal('cash-out')">Cash Out</BaseButton>
+          </template>
         </div>
+        <p
+          v-if="!stockOutPanelRef?.hasRows() && !numericWastageOutPanelRef?.hasRows()"
+          class="rounded-lg border border-dashed border-slate-300 px-4 py-3 text-xs text-slate-500"
+        >
+          Rows from Stock Out and Numeric Wastage Out queue here until you submit.
+        </p>
         <StockOutPanel
           ref="stockOutPanelRef"
           :items="items"
@@ -490,33 +571,32 @@ async function handleSubmitAll() {
           @saved="handleStockChanged"
           @missing-user="flagMissingUserSelection"
         />
-      </div>
+      </section>
 
-      <div class="space-y-3">
-        <p class="text-xs font-semibold tracking-wide text-emerald-700 uppercase">In</p>
+      <section class="space-y-3" aria-labelledby="stock-in-heading">
+        <h2 id="stock-in-heading"><DirectionTag direction="in" /></h2>
         <div class="flex flex-wrap gap-2">
-          <button
-            type="button"
-            class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-            @click="handleAddStockInRow"
-          >
-            Stock In
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
-            @click="openModal('gms-in')"
-          >
-            GMS In
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-            @click="openModal('numeric-wastage-in')"
-          >
-            Numeric Wastage In
-          </button>
+          <BaseButton variant="inflow" :icon="Plus" @click="handleAddStockInRow">Stock In</BaseButton>
+          <BaseButton variant="inflow-soft" @click="openModal('gms-in')">GMS In</BaseButton>
+          <BaseButton variant="inflow-soft" @click="openModal('numeric-wastage-in')">Numeric Wastage In</BaseButton>
+          <!-- Mirrors the Out row: revealed by a user selection. -->
+          <template v-if="hasUserSelected">
+            <BaseButton
+              variant="inflow-soft"
+              disabled
+              title="Reply In has no backend endpoint yet — flagged to the backend team."
+            >
+              Reply In
+            </BaseButton>
+            <BaseButton variant="inflow-soft" @click="openModal('cash-in')">Cash In</BaseButton>
+          </template>
         </div>
+        <p
+          v-if="!stockInPanelRef?.hasRows()"
+          class="rounded-lg border border-dashed border-slate-300 px-4 py-3 text-xs text-slate-500"
+        >
+          Rows from Stock In queue here until you submit.
+        </p>
         <StockInPanel
           ref="stockInPanelRef"
           :items="items"
@@ -525,50 +605,79 @@ async function handleSubmitAll() {
           @saved="handleStockChanged"
           @missing-user="flagMissingUserSelection"
         />
-      </div>
+      </section>
     </div>
 
+    <!--
+      Balance bar. Same figures, same Clear/Submit handlers as before — what
+      changed is placement: from md up it pins to the bottom of the scroll
+      area while rows are queued, so the totals stay readable and Submit
+      stays reachable however long the grids get. Out | Total | In keeps the
+      page's left-out/right-in order; the beam on top compares pending
+      purity either side of the centre (see `beam`).
+
+      -mx-6/-mb-6 cancel AppShell's <main> p-6 so the bar runs edge to edge
+      and sits flush on the bottom. -bottom-6 likewise: sticky offsets are
+      measured inside the scroller's padding, so bottom-0 would float the
+      bar 24px up with rows showing through underneath.
+    -->
     <div
       v-if="entryPanels.some((p) => p.hasRows())"
-      class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3"
+      class="z-20 -mx-6 mt-6 -mb-6 border-t border-slate-200 bg-white px-6 py-3 shadow-[0_-2px_6px_-2px_rgb(15_23_42/0.08)] md:sticky md:-bottom-6"
     >
-      <div class="flex flex-1 flex-wrap justify-center gap-8 text-sm">
-        <div>
-          <p class="text-xs font-semibold tracking-wide text-red-700 uppercase">Out</p>
-          <p class="text-slate-700">Grams: <span class="font-semibold tabular-nums">{{ formatTotal(outTotals.grams) }}</span></p>
-          <p class="text-slate-700">Purity: <span class="font-semibold tabular-nums text-amber-700">{{ formatTotal(outTotals.purity) }}</span></p>
-          <p class="text-slate-700">Wastage: <span class="font-semibold tabular-nums text-red-700">{{ formatTotal(outTotals.wastage) }}</span></p>
-        </div>
-        <div>
-          <p class="text-xs font-semibold tracking-wide text-slate-500 uppercase">Total</p>
-          <p class="text-slate-700">Grams: <span class="font-semibold tabular-nums">{{ formatTotal(grandTotals.grams) }}</span></p>
-          <p class="text-slate-700">Purity: <span class="font-semibold tabular-nums text-amber-700">{{ formatTotal(grandTotals.purity) }}</span></p>
-          <p class="text-slate-700">Wastage: <span class="font-semibold tabular-nums text-red-700">{{ formatTotal(grandTotals.wastage) }}</span></p>
-        </div>
-        <div>
-          <p class="text-xs font-semibold tracking-wide text-emerald-700 uppercase">In</p>
-          <p class="text-slate-700">Grams: <span class="font-semibold tabular-nums">{{ formatTotal(inTotals.grams) }}</span></p>
-          <p class="text-slate-700">Purity: <span class="font-semibold tabular-nums text-amber-700">{{ formatTotal(inTotals.purity) }}</span></p>
-          <p class="text-slate-700">Wastage: <span class="font-semibold tabular-nums text-red-700">{{ formatTotal(inTotals.wastage) }}</span></p>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <button
-          type="button"
-          class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="isSubmittingAll"
-          @click="handleClearAll"
+      <div class="flex flex-wrap items-center justify-between gap-x-10 gap-y-3">
+        <div
+          class="grid min-w-0 flex-1 grid-cols-[auto_repeat(3,minmax(4.5rem,1fr))] items-baseline gap-x-6 gap-y-0.5 sm:max-w-xl"
         >
-          Clear
-        </button>
-        <button
-          type="button"
-          class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="isSubmittingAll"
-          @click="handleSubmitAll"
-        >
-          {{ isSubmittingAll ? 'Submitting…' : 'Submit' }}
-        </button>
+          <div
+            class="relative col-span-3 col-start-2 mb-2 h-[3px] rounded-full bg-slate-100"
+            role="img"
+            :aria-label="`Pending purity — out ${formatTotal(outTotals.purity)}, in ${formatTotal(inTotals.purity)}`"
+          >
+            <span
+              class="absolute inset-y-0 right-1/2 rounded-l-full bg-outflow-600 motion-safe:transition-[width] motion-safe:duration-300"
+              :style="{ width: `${beam.out}%` }"
+            />
+            <span
+              class="absolute inset-y-0 left-1/2 rounded-r-full bg-inflow-600 motion-safe:transition-[width] motion-safe:duration-300"
+              :style="{ width: `${beam.in}%` }"
+            />
+            <span class="absolute -top-1 -bottom-1 left-1/2 w-px -translate-x-1/2 bg-ink-900" />
+          </div>
+
+          <span></span>
+          <DirectionTag direction="out" class="justify-end" />
+          <span
+            class="text-right font-figure text-xs font-semibold tracking-[0.08em] text-slate-500 uppercase"
+          >
+            Total
+          </span>
+          <DirectionTag direction="in" class="justify-end" />
+
+          <span class="text-xs text-slate-500">Grams</span>
+          <span class="text-right font-figure text-sm tabular-nums text-slate-900">{{ formatTotal(outTotals.grams) }}</span>
+          <span class="text-right font-figure text-sm font-semibold tabular-nums text-ink-900">{{ formatTotal(grandTotals.grams) }}</span>
+          <span class="text-right font-figure text-sm tabular-nums text-slate-900">{{ formatTotal(inTotals.grams) }}</span>
+
+          <span class="text-xs text-slate-500">Purity</span>
+          <span class="text-right font-figure text-sm tabular-nums text-gold-700">{{ formatTotal(outTotals.purity) }}</span>
+          <span class="text-right font-figure text-sm font-semibold tabular-nums text-gold-700">{{ formatTotal(grandTotals.purity) }}</span>
+          <span class="text-right font-figure text-sm tabular-nums text-gold-700">{{ formatTotal(inTotals.purity) }}</span>
+
+          <span class="text-xs text-slate-500">Wastage</span>
+          <span class="text-right font-figure text-sm tabular-nums text-slate-600">{{ formatTotal(outTotals.wastage) }}</span>
+          <span class="text-right font-figure text-sm font-semibold tabular-nums text-slate-700">{{ formatTotal(grandTotals.wastage) }}</span>
+          <span class="text-right font-figure text-sm tabular-nums text-slate-600">{{ formatTotal(inTotals.wastage) }}</span>
+        </div>
+
+        <div class="flex gap-2">
+          <BaseButton variant="secondary" :disabled="isSubmittingAll" @click="handleClearAll">
+            Clear rows
+          </BaseButton>
+          <BaseButton variant="ink" :disabled="isSubmittingAll" @click="handleSubmitAll">
+            {{ isSubmittingAll ? 'Submitting…' : 'Submit' }}
+          </BaseButton>
+        </div>
       </div>
     </div>
 
@@ -622,5 +731,22 @@ async function handleSubmitAll() {
       @missing-user="flagMissingUserSelection"
     />
     <CashOutModal v-if="activeModal === 'cash-out'" :users="users" @close="closeModal" @saved="handleCashOutSaved" />
+    <!--
+      Cash In reuses Cash Management's entry modal. Only rendered with a user
+      actually picked — the button that opens it is itself behind
+      hasUserSelected, and this modal needs a concrete counterparty, not a
+      nullable one.
+    -->
+    <CashTxnEntryModal
+      v-if="activeModal === 'cash-in' && selectedUser && auth.user"
+      :head-id="auth.user.user_id"
+      :head-name="auth.user.name"
+      :user-id="selectedUser.id"
+      :user-name="selectedUser.full_name || selectedUser.name"
+      direction="in"
+      :banks="banks"
+      @close="closeModal"
+      @saved="handleCashOutSaved"
+    />
   </div>
 </template>

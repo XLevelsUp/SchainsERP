@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { ArrowLeftRight, Info } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import DirectionTag from '@/components/ui/DirectionTag.vue'
 import CashTxnEntryModal from '@/components/cash-txn/CashTxnEntryModal.vue'
 import CashToGoldModal from '@/components/cash-txn/CashToGoldModal.vue'
 import GoldToCashModal from '@/components/cash-txn/GoldToCashModal.vue'
@@ -228,50 +231,82 @@ async function handleSaved() {
       description="Pick a Head and a User to record cash, gold, or conversion transactions between them."
     />
 
-    <BaseCard class="mb-6">
-      <div class="grid gap-3 sm:grid-cols-3">
-        <BaseSelect
-          id="head"
-          :model-value="headId"
-          label="Head"
-          size="sm"
-          placeholder="Select a head…"
-          :options="headOptions"
-          @update:model-value="(v) => onHeadChange(v as number | null)"
-        />
-        <BaseSelect
-          id="role"
-          :model-value="roleFilter"
-          label="Roles"
-          size="sm"
-          :options="roleOptions"
-          @update:model-value="(v) => onRoleFilterChange(v as string)"
-        />
-        <BaseSelect
-          id="user"
-          :model-value="userId"
-          label="Users"
-          size="sm"
-          placeholder="Choose user…"
-          :options="userOptions"
-          @update:model-value="(v) => (userId = v as number | null)"
-        />
-      </div>
+    <!--
+      The two parties, each with its balance directly beneath it. Head sits
+      left and the User right, with Roles grouped beside Users because it
+      only narrows that picker. Tab order is unchanged: Head, Roles, Users.
+    -->
+    <BaseCard :padded="false" class="mb-6">
+      <div
+        class="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.6fr)] sm:items-start"
+      >
+        <div class="space-y-2">
+          <BaseSelect
+            id="head"
+            :model-value="headId"
+            label="Head"
+            size="sm"
+            placeholder="Select a head…"
+            :options="headOptions"
+            @update:model-value="(v) => onHeadChange(v as number | null)"
+          />
+          <p v-if="headUser && headBalance.loading" class="text-xs text-slate-500">Loading balance…</p>
+          <dl v-else-if="headUser" class="flex flex-wrap gap-x-5 gap-y-1">
+            <div class="flex items-baseline gap-1.5">
+              <dt class="text-xs text-slate-500">Cash</dt>
+              <dd class="font-figure text-sm font-medium tabular-nums text-ink-900">
+                {{ headBalance.cash.toLocaleString() }}
+              </dd>
+            </div>
+            <div class="flex items-baseline gap-1.5">
+              <dt class="text-xs text-slate-500">RTGS</dt>
+              <dd class="font-figure text-sm font-medium tabular-nums text-ink-900">
+                {{ headBalance.rtgs.toLocaleString() }}
+              </dd>
+            </div>
+          </dl>
+        </div>
 
-      <div v-if="headUser || selectedUser" class="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
-        <p v-if="headUser">
-          <template v-if="headBalance.loading">Loading balance…</template>
-          <template v-else>
-            Cash: {{ headBalance.cash.toLocaleString() }} · RTGS: {{ headBalance.rtgs.toLocaleString() }}
-          </template>
-        </p>
-        <p></p>
-        <p v-if="selectedUser">
-          <template v-if="userBalance.loading">Loading balance…</template>
-          <template v-else>
-            Cash: {{ userBalance.cash.toLocaleString() }} · RTGS: {{ userBalance.rtgs.toLocaleString() }}
-          </template>
-        </p>
+        <div class="hidden pt-7 text-slate-300 sm:block" aria-hidden="true">
+          <ArrowLeftRight class="h-5 w-5" />
+        </div>
+
+        <div class="space-y-2">
+          <div class="grid gap-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]">
+            <BaseSelect
+              id="role"
+              :model-value="roleFilter"
+              label="Roles"
+              size="sm"
+              :options="roleOptions"
+              @update:model-value="(v) => onRoleFilterChange(v as string)"
+            />
+            <BaseSelect
+              id="user"
+              :model-value="userId"
+              label="Users"
+              size="sm"
+              placeholder="Choose user…"
+              :options="userOptions"
+              @update:model-value="(v) => (userId = v as number | null)"
+            />
+          </div>
+          <p v-if="selectedUser && userBalance.loading" class="text-xs text-slate-500">Loading balance…</p>
+          <dl v-else-if="selectedUser" class="flex flex-wrap gap-x-5 gap-y-1">
+            <div class="flex items-baseline gap-1.5">
+              <dt class="text-xs text-slate-500">Cash</dt>
+              <dd class="font-figure text-sm font-medium tabular-nums text-ink-900">
+                {{ userBalance.cash.toLocaleString() }}
+              </dd>
+            </div>
+            <div class="flex items-baseline gap-1.5">
+              <dt class="text-xs text-slate-500">RTGS</dt>
+              <dd class="font-figure text-sm font-medium tabular-nums text-ink-900">
+                {{ userBalance.rtgs.toLocaleString() }}
+              </dd>
+            </div>
+          </dl>
+        </div>
       </div>
     </BaseCard>
 
@@ -290,103 +325,100 @@ async function handleSaved() {
     </div>
 
     <template v-else>
-      <p v-if="canQuickCreate" class="mb-3 text-xs font-semibold tracking-wide text-slate-400 uppercase">
-        Manual Entries
-      </p>
-      <div v-if="canQuickCreate" class="grid gap-6 sm:grid-cols-2">
-        <div>
-          <p class="mb-2 text-xs font-semibold tracking-wide text-red-700 uppercase">Pay</p>
-          <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
-              @click="openModal('out')"
-            >
-              PAY
-            </button>
-            <button
-              type="button"
-              class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
-              @click="openModal('purchase-gold')"
-            >
-              Purchase Gold
-            </button>
-            <button
-              type="button"
-              class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-              @click="openModal('gold-to-cash')"
-            >
-              Gold To Cash
-            </button>
-          </div>
-        </div>
+      <!--
+        Same seven actions, same order, same modals. Colour now follows the
+        cash direction (oxblood = cash leaves the head, verdigris = cash
+        reaches it) instead of one colour per button, and each group names
+        both parties, so the direction can be checked before opening a form.
+      -->
+      <section v-if="canQuickCreate" aria-labelledby="manual-entries-heading">
+        <h2 id="manual-entries-heading" class="mb-2 text-sm font-semibold text-slate-900">
+          Manual Entries
+        </h2>
+        <BaseCard :padded="false">
+          <div class="grid divide-y divide-slate-200 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+            <div class="space-y-3 p-4">
+              <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <DirectionTag direction="out">Pay</DirectionTag>
+                <span class="truncate text-xs text-slate-500">
+                  {{ headUser?.name }} <span aria-hidden="true">→</span><span class="sr-only">to</span>
+                  {{ selectedUser?.name }}
+                </span>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <BaseButton variant="outflow" @click="openModal('out')">PAY</BaseButton>
+                <BaseButton variant="outflow-soft" @click="openModal('purchase-gold')">Purchase Gold</BaseButton>
+                <BaseButton variant="outflow-soft" @click="openModal('gold-to-cash')">Gold To Cash</BaseButton>
+              </div>
+            </div>
 
-        <div>
-          <p class="mb-2 text-xs font-semibold tracking-wide text-emerald-700 uppercase">Receive</p>
-          <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-              @click="openModal('in')"
-            >
-              RECEIVE
-            </button>
-            <button
-              type="button"
-              class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
-              @click="openModal('cash-to-gold')"
-            >
-              Cash To Gold
-            </button>
-            <button
-              type="button"
-              class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700"
-              @click="openModal('sale-gold')"
-            >
-              Sale Gold
-            </button>
-            <button
-              type="button"
-              class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
-              @click="openModal('auto-entry')"
-            >
-              Auto Entry
-            </button>
+            <div class="space-y-3 p-4">
+              <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <DirectionTag direction="in">Receive</DirectionTag>
+                <span class="truncate text-xs text-slate-500">
+                  {{ selectedUser?.name }} <span aria-hidden="true">→</span><span class="sr-only">to</span>
+                  {{ headUser?.name }}
+                </span>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <BaseButton variant="inflow" @click="openModal('in')">RECEIVE</BaseButton>
+                <BaseButton variant="inflow-soft" @click="openModal('cash-to-gold')">Cash To Gold</BaseButton>
+                <BaseButton variant="inflow-soft" @click="openModal('sale-gold')">Sale Gold</BaseButton>
+                <BaseButton variant="inflow-soft" @click="openModal('auto-entry')">Auto Entry</BaseButton>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </BaseCard>
+      </section>
 
-      <p v-else-if="headId !== null && userId !== null" class="text-sm text-slate-500">
+      <p
+        v-else-if="headId !== null && userId !== null"
+        class="rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-600"
+      >
         Pick a different User than the Head to record a transaction between them.
       </p>
-      <p v-else-if="headId !== null" class="text-sm text-slate-500">
+      <p
+        v-else-if="headId !== null"
+        class="rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-600"
+      >
         Select a User above to record a new transaction with this head.
       </p>
-      <p v-else class="text-sm text-slate-500">Select a Head above to get started.</p>
+      <p v-else class="rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-600">
+        Select a Head above to get started.
+      </p>
 
-      <div v-if="canShowHistory" class="mt-8">
-        <div class="mb-4 grid gap-3 sm:max-w-md sm:grid-cols-2">
-          <BaseInput
-            id="history-from-date"
-            v-model="historyFromDate"
-            label="From date"
-            type="date"
-            size="sm"
-            clearable
-          />
-          <BaseInput
-            id="history-to-date"
-            v-model="historyToDate"
-            label="To date"
-            type="date"
-            size="sm"
-            clearable
-          />
+      <section v-if="canShowHistory" class="mt-8" aria-labelledby="cash-history-heading">
+        <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 id="cash-history-heading" class="text-sm font-semibold text-slate-900">Cash history</h2>
+            <p class="mt-0.5 text-xs text-slate-500">
+              <template v-if="selectedUser">Between {{ headUser?.name }} and {{ selectedUser.name }}.</template>
+              <template v-else>Everything {{ headUser?.name }} paid or received. Pick a User to narrow it.</template>
+            </p>
+          </div>
+          <div class="grid w-full grid-cols-2 gap-2 sm:w-80">
+            <BaseInput
+              id="history-from-date"
+              v-model="historyFromDate"
+              label="From date"
+              type="date"
+              size="sm"
+              clearable
+            />
+            <BaseInput
+              id="history-to-date"
+              v-model="historyToDate"
+              label="To date"
+              type="date"
+              size="sm"
+              clearable
+            />
+          </div>
         </div>
 
-        <div class="grid gap-6 sm:grid-cols-2">
+        <div class="grid gap-6 lg:grid-cols-2">
           <div>
-            <p class="mb-2 text-xs font-semibold tracking-wide text-red-700 uppercase">Out History</p>
+            <h3 class="mb-2"><DirectionTag direction="out">Out history</DirectionTag></h3>
             <CashTxnHistoryTable
               direction="out"
               :head-id="headId!"
@@ -397,7 +429,7 @@ async function handleSaved() {
             />
           </div>
           <div>
-            <p class="mb-2 text-xs font-semibold tracking-wide text-emerald-700 uppercase">In History</p>
+            <h3 class="mb-2"><DirectionTag direction="in">In history</DirectionTag></h3>
             <CashTxnHistoryTable
               direction="in"
               :head-id="headId!"
@@ -408,18 +440,27 @@ async function handleSaved() {
             />
           </div>
         </div>
-      </div>
+      </section>
 
-      <p class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        Purchase Gold's "Out Cash Converter" and Sale Gold's "In Cash Converter" are recorded
-        successfully but don't appear in the history above — the backend's history filters don't
-        include those two sub-types. This is a known backend gap, not a missing screen.
+      <p
+        class="mt-6 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+      >
+        <Info class="mt-px h-3.5 w-3.5 shrink-0 text-amber-700" aria-hidden="true" />
+        <span>
+          Purchase Gold's "Out Cash Converter" and Sale Gold's "In Cash Converter" are recorded
+          successfully but don't appear in the history above — the backend's history filters don't
+          include those two sub-types. This is a known backend gap, not a missing screen.
+        </span>
       </p>
 
-      <div v-if="canShowHistory" class="mt-8">
-        <p class="mb-2 text-xs font-semibold tracking-wide text-slate-400 uppercase">Stock History</p>
+      <section v-if="canShowHistory" class="mt-8" aria-labelledby="stock-history-heading">
+        <h2 id="stock-history-heading" class="text-sm font-semibold text-slate-900">Stock history</h2>
+        <p class="mt-0.5 mb-3 text-xs text-slate-500">
+          The gold side of Purchase Gold, Sale Gold, Cash To Gold and Gold To Cash. Not filtered by the
+          dates above.
+        </p>
         <StockCashHistoryTable :head-id="headId!" :user-id="userId" :refresh-key="historyRefreshKey" />
-      </div>
+      </section>
     </template>
 
     <CashTxnEntryModal

@@ -117,17 +117,20 @@ const columns: DataTableColumn<CashTransactionReportRow>[] = [
 
 // Mirrors the palette CashTxnHistoryTable already uses for the same
 // underlying type values, so this reads as one system with the rest of
-// Cash Management rather than inventing new colors.
+// Cash Management rather than inventing new colors: oxblood where cash
+// leaves the head, verdigris where it reaches the head.
 function typeBadgeClass(label: string): string {
-  if (label.includes('INCOME')) return 'bg-emerald-50 text-emerald-700'
-  if (label.includes('EXPENSE')) return 'bg-red-50 text-red-700'
-  if (label.includes('AUTO_ENTRY')) return 'bg-amber-50 text-amber-700'
-  if (label.includes('SALE GOLD') || label === 'SALE_GOLD') return 'bg-purple-50 text-purple-700'
-  if (label.includes('PURCHASE GOLD') || label === 'PURCHASE_GOLD') return 'bg-amber-50 text-amber-700'
-  if (label.includes('CASH_TO_GOLD')) return 'bg-red-50 text-red-700'
-  if (label.includes('GOLD_TO_CASH')) return 'bg-blue-50 text-blue-700'
-  if (label.includes('OUT_CASH_CONVERTER')) return 'bg-amber-50 text-amber-800'
-  if (label.includes('IN_CASH_CONVERTER')) return 'bg-purple-50 text-purple-800'
+  const OUT = 'bg-outflow-50 text-outflow-700'
+  const IN = 'bg-inflow-50 text-inflow-700'
+  if (label.includes('INCOME')) return IN
+  if (label.includes('EXPENSE')) return OUT
+  if (label.includes('AUTO_ENTRY')) return IN
+  if (label.includes('SALE GOLD') || label === 'SALE_GOLD') return IN
+  if (label.includes('PURCHASE GOLD') || label === 'PURCHASE_GOLD') return OUT
+  if (label.includes('CASH_TO_GOLD')) return IN
+  if (label.includes('GOLD_TO_CASH')) return OUT
+  if (label.includes('OUT_CASH_CONVERTER')) return OUT
+  if (label.includes('IN_CASH_CONVERTER')) return IN
   return 'bg-slate-100 text-slate-600'
 }
 

@@ -97,9 +97,21 @@ function lotSourceFor(itemId: number | null): 'metal' | 'lots' {
 
 // Changing the source item invalidates any lot already attached to the row —
 // the lot belongs to the item it was drawn from.
-function onSourceItemSelect(row: ItemConversionItemInput, itemId: number | null) {
+function onSourceItemSelect(
+  row: ItemConversionItemInput,
+  index: number,
+  itemId: number | null,
+) {
   row.source_item_id = itemId
   row.stock_in_id = null
+  // Picking Metal opens the lot picker straight away, the same as Item
+  // Change, Stock In/Out and both GMS screens — a metal row is drawn from
+  // specific lots, so the operator is going to open it anyway. Other items
+  // can still be picked, via the explicit "Pick lots…" button below; they
+  // don't auto-open because the lot is optional for them.
+  if (isMetalItem(props.items.find((i) => i.item_id === itemId))) {
+    lotPickerRowIndex.value = index
+  }
 }
 
 function handleLotConfirm(selection: MetalPickerSelection[]) {
@@ -286,7 +298,7 @@ async function handleSubmit() {
                 placeholder="Select item…"
                 :options="itemOptions"
                 :error="fieldErrors[`${index}.source_item_id`]"
-                @update:model-value="(v) => onSourceItemSelect(row, v as number | null)"
+                @update:model-value="(v) => onSourceItemSelect(row, index, v as number | null)"
               />
               <button
                 v-if="row.source_item_id !== null"

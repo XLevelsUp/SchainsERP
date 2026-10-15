@@ -70,7 +70,17 @@ import type { CustomerTouch, UserDetail } from '@/types'
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ activeId: number }>()
+/*
+| `role` is the selected user's role NAME (UserDetailController sends it as
+| `type` on each user row), upper-cased by the caller, or null when nothing
+| is picked. It decides which deliver action this panel offers — the legacy
+| screens give CUSTOMER and EMPLOYEE different ones and INVEST none at all.
+|
+| Passed in rather than re-derived here: StockManagementView already holds
+| the users list and the selection, so looking it up again would mean a
+| second source of truth for the same fact.
+*/
+const props = defineProps<{ activeId: number; role?: string | null }>()
 
 const toast = useToastStore()
 
@@ -89,7 +99,21 @@ const isSavingComments = ref(false)
 const commentsError = ref('')
 const showDeliveryModal = ref(false)
 
-const showTouch = computed(() => detail.value?.is_customer_touch_need_shown ?? false)
+const isCustomer = computed(() => props.role === 'CUSTOMER')
+const isEmployee = computed(() => props.role === 'EMPLOYEE')
+
+/*
+| Customer Touch needs BOTH conditions, which the reference screenshots make
+| plain: two different CUSTOMER accounts, one showing the dropdown and one
+| not — so the per-user flag still governs — while the EMPLOYEE account
+| never shows it at all, so the role governs too.
+*/
+const showTouch = computed(
+  () => isCustomer.value && (detail.value?.is_customer_touch_need_shown ?? false),
+)
+
+// Comments stay flag-only: every role in the reference screenshots shows the
+// box, including INVEST, which shows nothing else.
 const showComments = computed(() => detail.value?.is_customer_cmts_need_to_shown ?? false)
 
 async function loadDetail() {
@@ -177,14 +201,45 @@ onMounted(loadTouchOptions)
             placeholder="Select Customer Touch…"
             :options="touchOptions.map((t) => ({ value: t.item_id, label: t.item_name }))"
           />
-          <button
-            type="button"
-            class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          <!--
+            Which deliver action appears is role-driven, straight from the
+            legacy screens: CUSTOMER gets Customer Deliver, EMPLOYEE gets
+            Assign to Employee + Employee Deliver, and every other role
+            (INVEST in the reference, plus HEAD/PURCHASE/SALARY here) gets
+            none — the comments box below is all they have.
+
+            The two employee actions have no backend endpoint of any kind,
+            so they render disabled rather than being omitted: the panel then
+            matches the legacy layout and the gap is visible. Tracked in
+            BACKEND_TODO.md.
+          -->
+          <BaseButton
+            v-if="isCustomer"
+            variant="inflow-soft"
             :disabled="isLoading"
             @click="showDeliveryModal = true"
           >
             Customer Deliver
-          </button>
+          </BaseButton>
+
+          <template v-if="isEmployee">
+            <BaseButton
+              variant="inflow-soft"
+              class="w-full"
+              disabled
+              title="Assign to Employee has no backend endpoint yet — flagged to the backend team."
+            >
+              Assign to Employee
+            </BaseButton>
+            <BaseButton
+              variant="inflow-soft"
+              class="w-full"
+              disabled
+              title="Employee Deliver has no backend endpoint yet — flagged to the backend team."
+            >
+              Employee Deliver
+            </BaseButton>
+          </template>
         </div>
 
         <div
@@ -208,7 +263,7 @@ onMounted(loadTouchOptions)
           />
           <div class="flex items-center justify-between gap-3">
             <span
-              class="text-xs tabular-nums"
+              class="font-figure text-xs tabular-nums"
               :class="comments.length > COMMENTS_MAX ? 'text-red-600' : 'text-slate-400'"
             >
               {{ comments.length }} / {{ COMMENTS_MAX }}

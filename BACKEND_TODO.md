@@ -62,7 +62,73 @@ integer with a comment — that is what caused this.
 
 ---
 
-## 2. Any signed-in user can read any head's reports  *(new)*
+## 2. The metal picker is broken on every database — `system_settings` is never seeded  *(new)*
+
+**Where:** `app/Http/Controllers/Api/StockDetailsController.php:616`,
+`app/Services/ReportService.php:818`, and the missing seeder for
+`2026_09_18_223934_create_system_settings_table`.
+
+**Symptom:** every call to `GET /stock-details/available-metals` returns
+
+```
+400  {"success": false, "message": "Selected item is not valid for metal selection"}
+```
+
+Example that fails today: `?item_id=4&user_id=999`, where item 4 **is** named
+`Metal` and user 999 **does** exist.
+
+**Cause:** PR #45 changed the gate from a name check to a settings lookup:
+
+```php
+$metalItemIds = SystemSetting::get('metal_popup_items', []);
+if (!$item || !in_array($item->item_id, $metalItemIds)) { /* 400 */ }
+```
+
+The migration creates `system_settings`, but **nothing seeds it** — grepped
+all of `database/`, there is no seeder. So `get()` returns its `[]` default and
+`in_array($anything, [])` is always false. Verified on the local database
+2026-10-08:
+
+```
+=== system_settings rows ===
+  (EMPTY TABLE)
+=== metal_popup_items as the controller reads it ===
+  array(0) { }
+```
+
+**Why it matters:** the metal picker is not a corner of the app. Stock In,
+Stock Out, GMS In, GMS Out and Item Change all open it to draw down a metal
+lot. All of them have been dead since PR #45 on any database that was not
+hand-configured — which is all of them.
+
+**The same gap takes out a second endpoint.** `ReportService:818` reads
+`live_metal_report_items` the same way; with it unset, Live Metal Balance
+throws a validation error unless the caller passes `item_id` explicitly.
+
+**Fix:** ship a seeder for `system_settings` covering at least
+`metal_popup_items` and `live_metal_report_items`, resolving the items **by
+name** rather than hardcoding ids — ids already differ between environments,
+which is what caused the original Live Metal bug (`#17`).
+
+A settings-driven design is the right call and we are not asking you to revert
+it. It just cannot ship without the row that makes it work, because the
+failure mode is a 400 that looks like the caller's fault.
+
+**Workaround meanwhile** (one row):
+
+```sql
+insert into system_settings (setting_key, setting_value, created_at, updated_at)
+values ('metal_popup_items', '[4]', now(), now());
+```
+
+**One more thing this changed, which nobody told us:** the frontend still
+decides whether to open the metal picker by matching the item name
+`'metal'` — the rule the backend used before PR #45. The backend now decides
+by the settings list. Those two will disagree as soon as the list holds
+anything other than exactly the items named "Metal". We will move the
+frontend onto `GET /settings`; flagging it so the drift is on the record.
+
+## 3. Any signed-in user can read any head's reports  *(new)*
 
 **Where:** `app/Http/Controllers/Api/StockDetailsController.php:495` and `:516`
 
@@ -279,9 +345,41 @@ either way. This is for anyone else calling the endpoint.)
 
 ---
 
+## 9. Missing pieces for the legacy Stock Details screen  *(new)*
+
+We are rebuilding that screen against five screenshots of the old software
+(2026-10-11). Most of it maps onto endpoints you already have. Three things
+do not.
+
+**a. There is no `INVEST` role.** The old screens show four user types —
+CUSTOMER, EMPLOYEE, INVEST and head — and the screen behaves differently for
+each. `RoleSeeder` defines only `1 CUSTOMER · 2 EMPLOYEE · 3 HEAD ·
+4 PURCHASE · 5 SALARY`, so INVEST users cannot be represented at all.
+
+Please add it as a new role rather than reusing PURCHASE — they are
+different things in the old system, and overloading one would make the
+numbering confusion in [§1](#1-wastage-is-added-to-the-wrong-persons-balance-21)
+worse. The frontend matches on the role **name**, so it will pick INVEST up
+automatically the moment the seeder runs; nothing needs coordinating.
+
+**b. `REPLY OUT` / `REPLY IN` have no endpoint.** Two buttons on the old
+screen's action rows, present for every user type. Nothing in the API
+resembles them. We do not know what they are meant to do — if they are
+dead in the old software too, say so and we will drop them.
+
+**c. `Assign to Employee` and `Employee Deliver` have no endpoint.** Both
+appear on the old screen whenever an EMPLOYEE is selected, next to where
+CUSTOMER gets Customer Deliver. No route, controller or table for either.
+
+All four buttons ship **disabled with a tooltip** in the meantime, so the
+screen matches the old layout and the gaps are visible rather than silently
+absent.
+
+---
+
 # 🟡 When you can
 
-## 9. The API testing doc is well behind the code  `#32`
+## 10. The API testing doc is well behind the code  `#32`
 
 `frontend/Stock Outward Module API Testing & Param.txt` was last extended on
 2026-09-11 (sections 36–52). Since then these have shipped with **no
@@ -306,7 +404,7 @@ balances under a "Metal" heading.
 Everything the frontend needed for these came from reading the request classes
 and controllers.
 
-## 10. One stale `sanctum` reference  `#15`
+## 11. One stale `sanctum` reference  `#15`
 
 `app/Http/Controllers/Api/AuthController.php:112` — the OpenAPI annotation
 still says `security={{"sanctum":{}}}`. The app uses Passport. Cosmetic, but it

@@ -8,4 +8,63 @@
   --color-brand-500: #6366f1;
   --color-brand-600: #4f46e5;
   --color-brand-700: #4338ca;
+
+  /*
+  | Ledger palette — first adopted by Stock and Cash Management.
+  |
+  | Direction is the colour system: every OUT/PAY action, badge and figure
+  | uses `outflow`, every IN/RECEIVE one uses `inflow`. They are the legacy
+  | screen's red/green convention, kept for operator recognition but pulled
+  | down to oxblood/verdigris so a screen full of them stays calm.
+  |
+  | `gold` is the accent and only the accent — fine-gold (purity) figures
+  | and focus rings — never a surface. `ink` is the charcoal used for the
+  | primary action and the strongest figures.
+  */
+  --color-ink-700: #3a3f47;
+  --color-ink-800: #2a2e35;
+  --color-ink-900: #1b1e23;
+
+  --color-gold-50: #faf6ec;
+  --color-gold-100: #f3e9d2;
+  --color-gold-200: #e6d3a6;
+  --color-gold-500: #b38b3a;
+  --color-gold-600: #9c7730;
+  --color-gold-700: #84662a;
+
+  --color-outflow-50: #fbf2f0;
+  --color-outflow-100: #f5dfda;
+  --color-outflow-200: #e9bfb6;
+  --color-outflow-600: #a23b2e;
+  --color-outflow-700: #862f24;
+
+  --color-inflow-50: #eef6f2;
+  --color-inflow-100: #d6eae0;
+  --color-inflow-200: #b1d3c2;
+  --color-inflow-600: #2e6b55;
+  --color-inflow-700: #245644;
+
+  /*
+  | Figures face: grams, touch, purity, amounts, and the small uppercase
+  | direction stamps. Condensed so dense ledgers (13 columns in Transaction
+  | History) fit without scrolling; always paired with tabular-nums so
+  | 3-decimal weights line up. Loaded in index.html.
+  */
+  --font-figure: 'IBM Plex Sans Condensed', 'Arial Narrow', ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+| Hides the native number spinner. For dense entry grids only, where the
+| spinner ate a third of an 80px grams box and hid the figure being typed.
+| Arrow keys still step the value.
+*/
+@utility no-spin {
+  appearance: textfield;
+  -moz-appearance: textfield;
+
+  &::-webkit-inner-spin-button,
+  &::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
 }

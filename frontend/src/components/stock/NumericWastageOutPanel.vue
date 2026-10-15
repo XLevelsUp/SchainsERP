@@ -4,6 +4,7 @@ import { Plus, Minus } from 'lucide-vue-next'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import DirectionTag from '@/components/ui/DirectionTag.vue'
 import { stockApi } from '@/lib/stockApi'
 import { ApiError } from '@/lib/api'
 import { nowDateTimeInputValue, toBackendDateTime } from '@/lib/date'
@@ -176,22 +177,24 @@ defineExpose({ addRow, submit, clear, hasRows, totals })
   <BaseCard v-if="rows.length > 0" :padded="false">
     <div class="flex items-center justify-between border-b border-slate-200 px-3 py-2">
       <h2 class="text-sm font-semibold text-slate-900">Numeric Wastage Out</h2>
-      <span class="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">OUT</span>
+      <DirectionTag direction="out" variant="pill" />
     </div>
 
     <div class="overflow-x-auto">
       <table class="w-full min-w-[800px] border-collapse text-sm">
         <thead>
-          <tr class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-            <th class="px-2 py-1.5 text-left">Date-Time</th>
+          <tr
+            class="border-b border-slate-100 font-figure text-[11px] font-semibold tracking-[0.06em] text-slate-500 uppercase"
+          >
+            <th class="px-2 py-1.5 text-left">Date-time</th>
             <th class="px-2 py-1.5 text-left">Item</th>
-            <th class="px-2 py-1.5 text-left">Grams</th>
-            <th class="px-2 py-1.5 text-left">Touch</th>
-            <th class="px-2 py-1.5 text-left">Pcs</th>
-            <th class="px-2 py-1.5 text-left">Wastage</th>
-            <th class="px-2 py-1.5 text-left">WValue</th>
-            <th class="px-2 py-1.5 text-left">Total</th>
-            <th class="px-2 py-1.5"></th>
+            <th class="px-2 py-1.5 text-right">Grams</th>
+            <th class="px-2 py-1.5 text-right">Touch %</th>
+            <th class="px-2 py-1.5 text-right">Pcs · Amt/pc</th>
+            <th class="px-2 py-1.5 text-right">Waste/pc g</th>
+            <th class="px-2 py-1.5 text-right">Waste g</th>
+            <th class="px-2 py-1.5 text-right">Total g</th>
+            <th class="px-2 py-1.5"><span class="sr-only">Row actions</span></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
@@ -211,32 +214,38 @@ defineExpose({ addRow, submit, clear, hasRows, totals })
               <BaseInput v-model="row.remarks" size="sm" placeholder="Remarks…" class="mt-1" />
               <BaseInput v-model="row.item_remarks" size="sm" placeholder="Item remarks…" class="mt-1" />
             </td>
-            <td class="w-20 p-1.5">
+            <td class="w-20 min-w-[5.5rem] p-1.5">
               <BaseInput
                 :model-value="row.grams === null ? '' : String(row.grams)"
                 type="number"
                 step="0.001"
                 size="sm"
+                class="no-spin text-right font-figure tabular-nums"
+                aria-label="Grams"
                 :error="fieldErrors[`${index}.grams`]"
                 @update:model-value="(v) => (row.grams = v === '' ? null : Number(v))"
               />
             </td>
-            <td class="w-20 p-1.5">
+            <td class="w-20 min-w-[5.5rem] p-1.5">
               <BaseInput
                 :model-value="row.touch === null ? '' : String(row.touch)"
                 type="number"
                 step="0.001"
                 size="sm"
+                class="no-spin text-right font-figure tabular-nums"
+                aria-label="Touch %"
                 @update:model-value="(v) => (row.touch = v === '' ? null : Number(v))"
               />
             </td>
-            <td class="w-24 p-1.5">
+            <td class="w-24 min-w-[6rem] p-1.5">
               <BaseInput
                 :model-value="row.no_of_pcs === null ? '' : String(row.no_of_pcs)"
                 type="number"
                 step="1"
                 size="sm"
                 placeholder="No. of pcs"
+                class="no-spin text-right font-figure tabular-nums"
+                aria-label="Number of pieces"
                 :error="fieldErrors[`${index}.no_of_pcs`]"
                 @update:model-value="(v) => (row.no_of_pcs = v === '' ? null : Number(v))"
               />
@@ -246,39 +255,48 @@ defineExpose({ addRow, submit, clear, hasRows, totals })
                 step="0.001"
                 size="sm"
                 placeholder="Amount/pc"
-                class="mt-1"
+                class="no-spin mt-1 text-right font-figure tabular-nums"
+                aria-label="Amount per piece"
                 @update:model-value="(v) => (row.amount_pcs = v === '' ? null : Number(v))"
               />
             </td>
-            <td class="w-20 p-1.5">
+            <td class="w-20 min-w-[5.5rem] p-1.5">
               <BaseInput
                 :model-value="row.waste_total === null ? '' : String(row.waste_total)"
                 type="number"
                 step="0.001"
                 size="sm"
                 placeholder="Per pc"
+                class="no-spin text-right font-figure tabular-nums"
+                aria-label="Waste per piece, grams"
                 @update:model-value="(v) => (row.waste_total = v === '' ? null : Number(v))"
               />
             </td>
-            <td class="w-20 p-1.5 pt-3 tabular-nums text-slate-600">{{ formatNumber(wastageTotalFor(row)) }}</td>
-            <td class="w-20 p-1.5 pt-3 tabular-nums text-slate-600">{{ formatNumber(purityFor(row)) }}</td>
-            <td class="p-1.5 pt-3">
-              <div class="flex flex-col gap-1">
+            <td class="w-20 p-1.5 pt-3 text-right font-figure tabular-nums text-slate-600">
+              {{ formatNumber(wastageTotalFor(row)) }}
+            </td>
+            <td class="w-20 p-1.5 pt-3 text-right font-figure font-medium tabular-nums text-gold-700">
+              {{ formatNumber(purityFor(row)) }}
+            </td>
+            <td class="p-1.5 pt-2">
+              <div class="flex flex-col gap-0.5">
                 <button
                   type="button"
-                  class="rounded p-0.5 text-emerald-600 hover:bg-emerald-50"
+                  class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-ink-900"
                   aria-label="Add another row"
+                  title="Add another row"
                   @click="addRow"
                 >
-                  <Plus class="h-4 w-4" />
+                  <Plus class="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
-                  class="rounded p-0.5 text-red-600 hover:bg-red-50"
+                  class="rounded p-1 text-slate-400 hover:bg-outflow-50 hover:text-outflow-700"
                   aria-label="Remove row"
+                  title="Remove row"
                   @click="removeRow(index)"
                 >
-                  <Minus class="h-4 w-4" />
+                  <Minus class="h-3.5 w-3.5" />
                 </button>
               </div>
             </td>
@@ -287,17 +305,17 @@ defineExpose({ addRow, submit, clear, hasRows, totals })
       </table>
     </div>
 
-    <div class="flex items-center gap-4 border-t border-slate-200 px-3 py-2 text-xs">
-      <span class="text-slate-600">
-        Grams: <span class="font-semibold text-slate-900 tabular-nums">{{ formatNumber(totals.grams) }}</span>
+    <div class="flex items-center gap-5 border-t border-slate-200 bg-slate-50/60 px-3 py-2 text-xs">
+      <span class="text-slate-500">
+        Grams <span class="ml-1 font-figure text-[13px] font-semibold text-slate-900 tabular-nums">{{ formatNumber(totals.grams) }}</span>
       </span>
-      <span class="text-slate-600">
-        Purity: <span class="font-semibold text-amber-700 tabular-nums">{{ formatNumber(totals.purity) }}</span>
+      <span class="text-slate-500">
+        Purity <span class="ml-1 font-figure text-[13px] font-semibold text-gold-700 tabular-nums">{{ formatNumber(totals.purity) }}</span>
       </span>
-      <span class="text-slate-600">
-        Wastage: <span class="font-semibold text-red-700 tabular-nums">{{ formatNumber(totals.wastage) }}</span>
+      <span class="text-slate-500">
+        Wastage <span class="ml-1 font-figure text-[13px] font-semibold text-slate-700 tabular-nums">{{ formatNumber(totals.wastage) }}</span>
       </span>
-      <span v-if="isSaving" class="italic text-slate-400">Submitting…</span>
+      <span v-if="isSaving" class="ml-auto text-slate-400 italic">Submitting…</span>
     </div>
   </BaseCard>
 </template>
