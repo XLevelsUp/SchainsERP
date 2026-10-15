@@ -42,6 +42,31 @@ export function toBackendDateTime(value: string): string {
   return `${value.replace('T', ' ')}:00`
 }
 
+/**
+ * Normalises any backend date or date-time to "YYYY-MM-DD" for an
+ * `<input type="date">`.
+ *
+ * Not the same as `value.slice(0, 10)`, and that difference matters. A
+ * Laravel `date` cast serialises midnight **in the app timezone** as a UTC
+ * instant, so `reminders.remainder_at` = 2026-10-15 comes back as
+ * "2026-10-14T18:30:00.000000Z" (Asia/Kolkata is +05:30, per the backend's
+ * config/app.php). Slicing that string yields the 14th — a day early. Reading
+ * the instant back through local getters yields the 15th, which is the date
+ * that was stored.
+ *
+ * Assumes the viewer's clock is on the same timezone as the server, which
+ * holds for this ERP's operators. A browser set to UTC would still read a
+ * day early; the real fix is the backend sending a bare "YYYY-MM-DD".
+ */
+export function toDateInputValue(value?: string | null): string {
+  if (!value) return ''
+  // Already a plain date — no instant to convert, no shift to undo.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 /** Formats a date-only value (e.g. "YYYY-MM-DD") as "dd/mm/yy". */
 export function formatDateOnly(value?: string | null): string {
   if (!value) return '—'

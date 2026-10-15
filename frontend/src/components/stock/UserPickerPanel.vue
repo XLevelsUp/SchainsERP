@@ -42,6 +42,13 @@ import type { UserDetailListItem } from '@/types'
 
 const selectedUserId = defineModel<number | null>({ default: null })
 
+// Set by StockManagementView when a submit was attempted with no user (and,
+// for panels that accept one, no retailer) selected — see that file's
+// comment for the full mechanism. Shown on the dropdown itself rather than
+// a toast, per the 2026-10 request to let people fill in every other field
+// first and only find out about this one at submit time.
+const props = defineProps<{ error?: string }>()
+
 const auth = useAuthStore()
 
 const users = ref<UserDetailListItem[]>([])
@@ -111,6 +118,7 @@ defineExpose({ refresh: load })
         placeholder="Choose User"
         :options="userOptions"
         :disabled="isLoading"
+        :error="props.error"
       />
       <p v-if="loadError" class="text-sm text-red-700">{{ loadError }}</p>
 

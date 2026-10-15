@@ -20,22 +20,24 @@ import type { DataTableColumn, Item, Order, UserDetailListItem } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
-| Orders — apiResource('orders') (PR #43–#45)
+| Orders — apiResource('orders') (PR #43–#45, validated in PR #48)
 |--------------------------------------------------------------------------
 | CRUD over `order_details`. Feeds the "Active Orders" figure that
 | HeadStockSummaryPanel has always shown as 0, because the table did not
 | exist until this PR.
 |
-| Built deliberately defensively. OrderController pipes $request->all() into
-| a $guarded = [] model with no FormRequest, no status enum and no existence
-| check on customer_id or item_id — so this screen is the only thing
-| standing between a typo and a bad row. Everything is validated here before
-| it is sent, and the banner says so rather than hiding it.
+| Originally built defensively against zero backend validation. PR #48
+| closed most of that: OrderController now checks customer_id/item_id exist
+| and status is a real enum. ORDER_STATUSES below is read straight off that
+| enum, not a guess any more — see its own comment for a mismatch that
+| caught (this file used to send 'IN_PROGRESS', the backend wants
+| 'PROCESSING'). grams still has no server-side bound, so this screen's own
+| checks stay in validate().
 |
-| The status vocabulary in ORDER_STATUSES is OUR proposal, not a backend
-| contract: nothing server-side constrains the column and no other vocabulary
-| exists anywhere in the codebase. The table was empty when this shipped, so
-| whatever is used first becomes the de facto convention — hence the notice.
+| PR #48 also validates `remarks`/`due_date`, which order_details has no
+| columns for — confirmed live, both crash with an uncaught 500. This form
+| has neither field on purpose; see types/order.ts for the full write-up
+| and don't add them until the backend fixes it.
 |
 | index() returns OrderDetail::all() with no eager loading, so customer and
 | item names are resolved from the lookups this screen loads itself, the same
@@ -119,7 +121,7 @@ function statusClass(status: string): string {
       return 'bg-emerald-50 text-emerald-700'
     case 'CANCELLED':
       return 'bg-red-50 text-red-700'
-    case 'IN_PROGRESS':
+    case 'PROCESSING':
       return 'bg-amber-50 text-amber-700'
     case 'PENDING':
       return 'bg-slate-100 text-slate-600'
@@ -196,8 +198,11 @@ function closeForm() {
   formError.value = ''
 }
 
-// The backend validates none of this, so these checks are the only ones
-// that run. Keep them strict.
+// The backend validates customer_id/item_id/status for real as of PR #48
+// (existence checks + a real enum) — these checks now mostly duplicate that
+// rather than being the only line of defence. Kept anyway: grams' column
+// bound below has no server-side equivalent, and validating client-side
+// still beats a round trip for the common mistakes.
 function validate(): string | null {
   if (form.customer_id === null) return 'Select a customer.'
   if (form.item_id === null) return 'Select an item.'
@@ -297,13 +302,15 @@ onMounted(async () => {
     >
       <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
       <div>
-        <p class="font-medium">This endpoint validates nothing server-side.</p>
+        <p class="font-medium">Create and edit orders here, not through the API directly.</p>
         <p class="mt-1 text-amber-800">
-          Orders are written straight to the database with no checks on the customer, the item or
-          the amount, and the status column accepts any text. Everything is validated in this
-          screen instead, so create and edit orders here rather than through the API directly.
-          The four statuses offered are the frontend's proposal and are awaiting confirmation from
-          the backend team.
+          The backend now checks that the customer and item exist and that status is one of
+          PENDING/PROCESSING/COMPLETED/CANCELLED (PR #48) — real validation, not this screen's
+          guess any more. What it does <em>not</em> check: the grams amount has no server-side
+          bound, so this screen's own checks are still the only ones there. Also worth knowing —
+          this form deliberately has no remarks or due-date field: the API accepts both but the
+          orders table has no such columns, so sending either crashes with a 500. Flagged to
+          backend; don't add those fields here until it's fixed.
         </p>
       </div>
     </div>

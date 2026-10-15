@@ -76,7 +76,7 @@ const props = withDefaults(
   }>(),
   { retailerId: null },
 )
-const emit = defineEmits<{ saved: [] }>()
+const emit = defineEmits<{ saved: []; missingUser: [] }>()
 
 const toast = useToastStore()
 
@@ -98,15 +98,12 @@ function makeEmptyRow(): StockOutItemInput {
   }
 }
 
+// Deliberately no user/retailer/sign-in gate here (2026-10 request) — rows
+// can be added and filled in freely; submit() below is the only place any
+// of that is checked, so the operator can pick the item/grams/etc. first
+// and decide who it's for last, instead of being blocked before they can
+// type anything.
 function addRow() {
-  if (props.headId === null) {
-    toast.show('You must be signed in to record a stock out.', 'error')
-    return
-  }
-  if (props.givenTo === null) {
-    toast.show('Select a user or retailer before adding a Stock Out row.', 'error')
-    return
-  }
   rows.value.push(makeEmptyRow())
 }
 
@@ -201,7 +198,20 @@ function hasRows() {
 
 async function submit(): Promise<boolean> {
   if (!validate()) return false
-  if (props.headId === null || props.givenTo === null) return false
+  // Not signed in is a broken-session case, not a "pick someone" case — a
+  // toast still fits it, and it should never actually happen on a page you
+  // needed a session to reach.
+  if (props.headId === null) {
+    toast.show('You must be signed in to record a stock out.', 'error')
+    return false
+  }
+  // No user AND no retailer — StockManagementView shows this as a red
+  // border on the Users dropdown rather than a toast, since neither picker
+  // lives inside this panel.
+  if (props.givenTo === null) {
+    emit('missingUser')
+    return false
+  }
 
   isSaving.value = true
   try {

@@ -32,10 +32,10 @@ import type { DataTableColumn } from '@/types/table'
 | otherwise be a request, and the endpoint pages server-side so there is no
 | local list to filter instead.
 |
-| The Role column is present but reads "—" for every row today: the
-| resource asks for `role_name` and the roles table column is `role`
-| (PENDING_WORK.md #26). Kept in place rather than removed so it starts
-| working the moment the backend fixes the field.
+| The Role column used to read "—" for every row: the resource asked for
+| `role_name` and the roles table column is `role` (PENDING_WORK.md #26).
+| Fixed server-side in PR #48 — real role names now, no frontend change
+| needed since the JSON key itself never changed.
 |--------------------------------------------------------------------------
 */
 

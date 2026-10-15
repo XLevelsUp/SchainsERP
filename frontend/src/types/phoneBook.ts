@@ -14,8 +14,9 @@
 
 export interface PhoneBookRole {
   id: number | null
-  // Always null today: the resource reads `role_name`, but the roles table
-  // column is `role` (PENDING_WORK.md #26).
+  // Was always null — the resource read `role_name`, but the roles table
+  // column is `role`. Fixed server-side in PR #48 (PENDING_WORK.md #26);
+  // this JSON key name is unchanged, only its value now actually populates.
   role_name: string | null
 }
 

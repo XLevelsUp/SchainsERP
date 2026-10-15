@@ -156,6 +156,49 @@ watch(selectedUserId, (id) => {
 // CustomerContextPanel's photo/comments/touch/deliver, which work
 // identically for either.
 const activeCustomerId = computed(() => selectedUserId.value ?? selectedRetailerId.value)
+
+/*
+|--------------------------------------------------------------------------
+| "Select a user" surfaced as a field error, not a toast (2026-10 request)
+|--------------------------------------------------------------------------
+| Every entry panel/modal below used to block the operator BEFORE they
+| could type anything — addRow() (or, for the modals, the open button
+| itself in effect, since their own submit ran the same check) refused to
+| proceed and toast.show()'d "select a user first." That meant filling in
+| grams/touch/item/etc. was only possible after picking a user, which is
+| backwards from how an operator actually works: pick the item and amount
+| while deciding who it's for, not the other way round.
+|
+| Now every panel/modal lets you fill in everything regardless, and the
+| check happens once, at submit — each one's submit()/handleSubmit() still
+| refuses to POST without its required id, but instead of a toast (which
+| scrolls away and doesn't point at anything) it emits `missingUser`, which
+| sets this shared message and shows it as a red border + message directly
+| on UserPickerPanel's dropdown (`:error` — the same mechanism BaseSelect
+| already uses for every other field-level error on this page, just aimed
+| at a dropdown that lives outside the panel raising it instead of a field
+| inside it).
+|
+| One message for every panel rather than one ref each: they all fail for
+| the same reason (no user picked — StockOutPanel's retailer alternative is
+| the only variation, handled by clearing on retailer selection too, right
+| below), so a shared string is simpler than eight near-identical refs and
+| avoids the message flickering between slightly different wordings
+| depending on which panel happened to fail last.
+|
+| Cleared the instant either a user or a retailer is actually chosen — not
+| on next submit — so fixing the problem visibly fixes the field, matching
+| how BaseSelect's own field errors behave elsewhere (CashOutModal,
+| AddRetailerModal, etc. all clear on the next valid input, not on retry).
+|--------------------------------------------------------------------------
+*/
+const userSelectionError = ref('')
+watch([selectedUserId, selectedRetailerId], ([userId, retailerId]) => {
+  if (userId !== null || retailerId !== null) userSelectionError.value = ''
+})
+function flagMissingUserSelection() {
+  userSelectionError.value = 'Select a user before submitting.'
+}
 const isSubmittingAll = ref(false)
 
 const headStockPanelRef = ref<InstanceType<typeof HeadStockSummaryPanel> | null>(null)
@@ -222,6 +265,16 @@ type ActiveModal =
 
 const activeModal = ref<ActiveModal>(null)
 
+// The legacy screen's top-left "Clear" button — a full page reload, not
+// handleClearAll's targeted row-clear below. Deliberately a hard reload
+// rather than resetting refs one by one: the legacy button's job was
+// "give me a clean slate," and a reload is the one way to guarantee that
+// covers every picker/panel on this page, including ones a future panel
+// might add, without this handler having to know about all of them.
+function handleClearPage() {
+  window.location.reload()
+}
+
 function openModal(modal: ActiveModal) {
   activeModal.value = modal
 }
@@ -264,6 +317,11 @@ function handleCashOutSaved() {
   headStockPanelRef.value?.refresh()
 }
 
+// Not the same "Clear" as the page-header button above (handleClearPage) —
+// this one only empties the pending rows in the entry panels (Stock Out/In/
+// GMS/Numeric Wastage), leaving pickers and loaded data alone. Two buttons,
+// two different scopes, matching the legacy screen's own split between a
+// page-level Clear and this row-level one.
 function handleClearAll() {
   entryPanels.value.forEach((p) => p.clear())
 }
@@ -303,19 +361,54 @@ async function handleSubmitAll() {
       {{ loadError }}
     </div>
 
-    <div class="mb-6 grid gap-6 lg:grid-cols-[minmax(0,340px)_1fr]">
+    <!--
+      Rows 1–2 (Clear/ViewNotesPanel, HeadStockSummaryPanel/TransactionHistory
+      Panel) are direct children of this grid, not nested in per-column divs —
+      that's the actual alignment mechanism. Two independent `space-y-6`
+      columns only guarantee the COLUMNS start at the same height; nothing
+      then keeps a later row aligned if the elements ahead of it in each
+      column happen to differ in height, which is exactly what matching
+      Tailwind padding by eye was trying (and failing) to paper over. Grid
+      row tracks don't have that problem: a row's height is the max of
+      whatever sits in it, and every column's NEXT row starts after that
+      same shared boundary — Clear and ViewNotesPanel can be any height at
+      all and HeadStockSummaryPanel/TransactionHistoryPanel still start
+      level, by construction rather than coincidence.
+
+      `items-start` so Clear and ViewNotesPanel keep their own natural
+      height (top-aligned in the row) instead of stretching to match each
+      other — stretching isn't needed for the guarantee above and would
+      make Clear's box oddly tall for no visual reason.
+
+      Below row 2, UserPickerPanel vs. RetailerPickerPanel/CustomerContext
+      Panel go back to ordinary per-column `space-y-6` wrappers on purpose:
+      the right side can render one or two panels there depending on
+      whether a retailer is picked, the left always renders exactly one —
+      row-for-row grid alignment does not apply once the two columns can
+      hold different numbers of items.
+    -->
+    <div class="mb-6 grid items-start gap-6 lg:grid-cols-[minmax(0,340px)_1fr]">
+      <button
+        type="button"
+        class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+        @click="handleClearPage"
+      >
+        Clear
+      </button>
+      <ViewNotesPanel :users="users" />
+
+      <HeadStockSummaryPanel ref="headStockPanelRef" />
+      <TransactionHistoryPanel
+        ref="txnHistoryPanelRef"
+        :items="items"
+        :employee-id="selectedUserId"
+        :users="users"
+      />
+
       <div class="space-y-6">
-        <HeadStockSummaryPanel ref="headStockPanelRef" />
-        <UserPickerPanel v-model="selectedUserId" />
+        <UserPickerPanel v-model="selectedUserId" :error="userSelectionError" />
       </div>
       <div class="space-y-6">
-        <ViewNotesPanel :users="users" />
-        <TransactionHistoryPanel
-          ref="txnHistoryPanelRef"
-          :items="items"
-          :employee-id="selectedUserId"
-          :users="users"
-        />
         <RetailerPickerPanel
           v-if="!selectedUserId"
           v-model="selectedRetailerId"
@@ -387,6 +480,7 @@ async function handleSubmitAll() {
           :given-to="activeCustomerId"
           :retailer-id="selectedRetailerId"
           @saved="handleStockChanged"
+          @missing-user="flagMissingUserSelection"
         />
         <NumericWastageOutPanel
           ref="numericWastageOutPanelRef"
@@ -394,6 +488,7 @@ async function handleSubmitAll() {
           :head-id="auth.user?.user_id ?? null"
           :given-to="selectedUserId"
           @saved="handleStockChanged"
+          @missing-user="flagMissingUserSelection"
         />
       </div>
 
@@ -428,6 +523,7 @@ async function handleSubmitAll() {
           :head-id="auth.user?.user_id ?? null"
           :given-by="selectedUserId"
           @saved="handleStockChanged"
+          @missing-user="flagMissingUserSelection"
         />
       </div>
     </div>
@@ -488,6 +584,7 @@ async function handleSubmitAll() {
       :user-id="selectedUserId"
       @close="closeModal"
       @saved="handleModalSaved"
+      @missing-user="flagMissingUserSelection"
     />
     <ItemConversionModal
       v-if="activeModal === 'item-conversion'"
@@ -495,6 +592,7 @@ async function handleSubmitAll() {
       :user-id="selectedUserId"
       @close="closeModal"
       @saved="handleModalSaved"
+      @missing-user="flagMissingUserSelection"
     />
     <GmsOutModal
       v-if="activeModal === 'gms-out'"
@@ -503,6 +601,7 @@ async function handleSubmitAll() {
       :given-to="selectedUserId"
       @close="closeModal"
       @saved="handleModalSaved"
+      @missing-user="flagMissingUserSelection"
     />
     <GmsInModal
       v-if="activeModal === 'gms-in'"
@@ -511,6 +610,7 @@ async function handleSubmitAll() {
       :given-by="selectedUserId"
       @close="closeModal"
       @saved="handleModalSaved"
+      @missing-user="flagMissingUserSelection"
     />
     <NumericWastageInModal
       v-if="activeModal === 'numeric-wastage-in'"
@@ -519,6 +619,7 @@ async function handleSubmitAll() {
       :given-by="selectedUserId"
       @close="closeModal"
       @saved="handleModalSaved"
+      @missing-user="flagMissingUserSelection"
     />
     <CashOutModal v-if="activeModal === 'cash-out'" :users="users" @close="closeModal" @saved="handleCashOutSaved" />
   </div>

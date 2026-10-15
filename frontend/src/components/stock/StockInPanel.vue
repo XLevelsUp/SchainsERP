@@ -37,7 +37,7 @@ import type { Item, StockInItemInput } from '@/types'
 */
 
 const props = defineProps<{ items: Item[]; headId: number | null; givenBy: number | null }>()
-const emit = defineEmits<{ saved: [] }>()
+const emit = defineEmits<{ saved: []; missingUser: [] }>()
 
 const toast = useToastStore()
 
@@ -59,15 +59,9 @@ function makeEmptyRow(): StockInItemInput {
   }
 }
 
+// Deliberately no user/sign-in gate here (2026-10 request) — see
+// StockOutPanel's comment on its own addRow for the full rationale.
 function addRow() {
-  if (props.headId === null) {
-    toast.show('You must be signed in to record a stock in.', 'error')
-    return
-  }
-  if (props.givenBy === null) {
-    toast.show('Select a user (left panel) before adding a Stock In row.', 'error')
-    return
-  }
   rows.value.push(makeEmptyRow())
 }
 
@@ -137,7 +131,14 @@ function hasRows() {
 
 async function submit(): Promise<boolean> {
   if (!validate()) return false
-  if (props.headId === null || props.givenBy === null) return false
+  if (props.headId === null) {
+    toast.show('You must be signed in to record a stock in.', 'error')
+    return false
+  }
+  if (props.givenBy === null) {
+    emit('missingUser')
+    return false
+  }
 
   isSaving.value = true
   try {

@@ -14,7 +14,9 @@ export const ordersApi = {
   get: (orderId: number) =>
     api.get<ApiResponse<Order>>(`${RESOURCE}/${orderId}`).then((r) => r.data),
 
-  // 201. No server-side validation — see the warning on the Order type.
+  // 201. customer_id/item_id/status are validated for real as of PR #48 —
+  // see the Order type's comment for what still isn't (grams, and the
+  // remarks/due_date bug).
   create: (payload: OrderCreate) =>
     api.post<ApiResponse<Order>>(RESOURCE, payload).then((r) => r.data),
 

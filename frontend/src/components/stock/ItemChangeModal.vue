@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Plus, Trash, Layers, X } from 'lucide-vue-next'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -54,7 +54,7 @@ import type { Item, ItemChangeItemInput, MetalPickerSelection } from '@/types'
 */
 
 const props = defineProps<{ items: Item[]; userId: number | null }>()
-const emit = defineEmits<{ close: []; saved: [] }>()
+const emit = defineEmits<{ close: []; saved: []; missingUser: [] }>()
 
 const toast = useToastStore()
 
@@ -173,9 +173,22 @@ function validate(): boolean {
   return true
 }
 
+// Shown as an inline banner rather than eagerly — only set once an actual
+// submit was attempted with no user picked, matching the page-wide 2026-10
+// change to stop blocking people before they've had a chance to fill
+// anything in.
+const showMissingUserWarning = ref(false)
+watch(
+  () => props.userId,
+  (v) => {
+    if (v !== null) showMissingUserWarning.value = false
+  },
+)
+
 async function handleSubmit() {
   if (props.userId === null) {
-    toast.show('Select a user (left panel) before recording an Item Change.', 'error')
+    showMissingUserWarning.value = true
+    emit('missingUser')
     return
   }
   if (!validate()) return
@@ -212,7 +225,10 @@ async function handleSubmit() {
 
 <template>
   <BaseModal title="Item Change" badge="OUT" badge-class="bg-red-600" max-width="max-w-4xl" @close="emit('close')">
-    <p v-if="userId === null" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+    <p
+      v-if="showMissingUserWarning"
+      class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+    >
       Select a user in the left panel before recording an Item Change.
     </p>
 

@@ -1,15 +1,187 @@
 # Frontend Pending Work & Backend Asks
 
-Living tracker for the frontend team. Updated as items land — tick things off
-here rather than opening a new doc.
+Living tracker for the frontend team, and **the history**. Items stay here once
+fixed, struck through, with what changed — this file is the record.
 
-**Last updated:** 2026-09-25
-**Backend baseline:** `515db79` (PR #46 — history head-scoping, role-numbering
-and report fixes)
+> ### 📋 Backend asks now live in [`BACKEND_TODO.md`](../BACKEND_TODO.md)
+>
+> As of 2026-09-30 the open backend items have their own file at the repo
+> root, written for the backend team in plain language, containing **only what
+> is still outstanding**. Items are deleted from it as they are fixed.
+>
+> **Both files get updated from now on:**
+>
+> | File | Audience | Contains |
+> |---|---|---|
+> | `BACKEND_TODO.md` | Backend team | Open items only — deleted once fixed |
+> | `PENDING_WORK.md` (this) | Frontend team | Everything, including fixed items, as history |
+>
+> When a backend item is fixed: strike it through here with the evidence, and
+> delete it from `BACKEND_TODO.md`.
+
+**Last updated:** 2026-10-08
+**Backend baseline:** `c4dd0445` (PR #50 — reminders module). PR #49
+(`531d20db`) adds relations to `AuthUser` only, 5 lines, no contract change.
+
+### PR #50 pass — 2026-10-08
+
+**Ask [#38](#38) is closed.** PR #50 (`f2161934`, "added remainder modules")
+shipped the reminders backend in 132 lines: `2026_09_30_124500_create_reminders_table.php`,
+`App\Models\Reminder`, `ReminderController`, and `apiResource('reminders')`
+inside the `auth:api` group.
+
+**The schema matched the shape this document proposed field for field** —
+`description`, `is_completed`, `added_by`, `assign_to`, `remainder_at`,
+`is_viewed`, timestamps, FKs to `user_details` with `set null` / `cascade`.
+Shipping `ViewNotesPanel` ahead of the API was the right call: only the API
+adapter needed rewriting, not the screen.
+
+Both questions the ask deliberately left open were answered by the
+implementation: `index()` returns everything unscoped, and complete/view are
+plain `PATCH` fields on `is_completed` / `is_viewed` — which is exactly what
+the frontend had assumed.
+
+**Four contract deviations**, all found by probing the running API inside a
+rolled-back transaction rather than reading the controller. The speculative
+`remindersApi` would have broken on the first three:
+
+1. **No `{success, message, data}` envelope.** Bare model/array. The only
+   endpoint in the API that does this.
+2. **`added_by` / `assign_to` change type by endpoint.** The relation methods
+   `addedBy()`/`assignTo()` snake-case onto the FK column names, and
+   `toArray()` merges relations after attributes, so an eager-loaded relation
+   overwrites the scalar. `index`/`show` give a full ~60-field user object;
+   `store`/`update` give an integer.
+3. **`created_at`, not `added_at`** — this backend's own convention elsewhere.
+4. **`remainder_at` reads a day early if sliced.** It is a `date` column cast
+   to `date`, serialised as a UTC instant of midnight in `Asia/Kolkata`
+   (`config/app.php:68`). Storing the 15th returns
+   `"2026-10-14T18:30:00.000000Z"`.
+
+`password_hash` is in `UserDetail::$hidden`, so the fat nested user leaks no
+credentials — but it does carry `rak_cash_balance` and the gram totals.
+
+**Frontend done the same day** — see [§1 Done](#done). Two new backend
+follow-ups raised (unscoped `index`, no relations on write responses), both in
+[`BACKEND_TODO.md`](../BACKEND_TODO.md) §7 along with the envelope and
+relation-naming items.
 
 Every claim below was verified against backend source at that commit, not
 against the API doc. Where the two disagree, the source wins and the
 discrepancy is listed in [§3](#3-api-doc-corrections).
+
+### Full re-derivation — 2026-09-30
+
+Every backend ask in [§2](#2-flagged-to-backend) re-checked against the current
+`schainbackend/` source from scratch rather than diffed against the last pass,
+per the standing rule. Result: **most of the list is fixed.** Of the items that
+were open going in, only six survive, and two findings are new.
+
+**Verified fixed and struck through this pass** — #9 (display flags now in the
+validation, `UserDetailController:203-285`), #10 (`order_details` migration
+exists), #11 and #12 (`store`/`destroy` added, `update()` re-loads relations),
+#13 (two CSV export routes), #14 (`head_id` accepted on both reports), #17
+(item is now a parameter with a `system_settings` fallback, hardcoded `2`
+gone), #19 and #35 (override now checks `role->role === 'HEAD'`, the right
+column and the right role, and accepts `view_as`), #22 (head scoping applied),
+#23/#24/#25 (combined pagination, own `amount` field, `Y-m-d H:i:s`), #29 and
+#31 (`whereRaw` instead of the alias, plus `is_hided` filtering), #36
+(`cash_user_id` is optional, so the head-only view works).
+
+**Still open** — #2/#37, #18, #21, #32, #38, and the cosmetic #15.
+
+**Two new findings**, both authorization rather than correctness:
+
+- **The `head_id` override we asked for in #14 has no permission check.**
+  `StockDetailsController:495` and `:516` (and the two export routes at `:36`
+  and `:63`) take `head_id` from any authenticated caller. An employee can read
+  their head's full ledger, or export it. We asked for the override and got it;
+  we did not ask for it to be unrestricted.
+- **`OrderController::index()` returns `OrderDetail::all()`** — unscoped,
+  unpaginated, unfiltered. Every order to every user.
+
+**Two corrections to earlier entries in this file:**
+
+- #18 was recorded as a "one-line fix" for the MySQL syntax. The `IFNULL` and
+  backticks are indeed gone, but the branch still fails — `havingRaw` at
+  `ReportService:855` references a SELECT alias, which PostgreSQL rejects in
+  `HAVING`. Same bug class as #29, which *was* fixed correctly twenty lines
+  away in `StockDetailsController:738`. The new code comment claiming
+  "(PostgreSQL safe)" is wrong.
+- #21 was filed as a seeder/numbering mismatch. Re-reading the code, its real
+  cost is larger than recorded: `StockInService:71,74` and
+  `StockOutService:74,77` gate the *wastage balance adjustment* on
+  `role_id != 1`. With role 1 = CUSTOMER and HEAD = 3, wastage is credited to
+  the wrong party on every stock transaction that carries one. Promoted to the
+  top of `BACKEND_TODO.md`.
+
+**Frontend consequences of this pass** (not yet built, added to
+[§1 Pending](#pending)):
+
+- The Live Metal Balance banner about #19 is now stale — the "View as" override
+  genuinely works for HEAD users, and `view_as` is accepted alongside
+  `user_id`.
+- Server-side export exists, so the client-side CSV on both report screens can
+  be replaced. Note these routes stream a file rather than returning JSON, so
+  they need a blob fetch with the bearer header, not `lib/api.ts`.
+- One Day Action's response shape changed: `records` replaces the separate
+  stock and cash lists, and cash rows now carry `amount` with `grams: null`.
+
+### PR #48 pass — 2026-09-30
+
+Two merges since the last full audit: **#47** (`5cde92b9`) and **#48**
+(`353cef11`, backend commits `9f64dc94`/`cf1eea98`†). This pass covers **#48
+only**, at the user's specific request — **#47 is still unaudited**, flagged
+here so it isn't silently skipped.
+
+† `cf1eea98` ("ui updated bug fix") is our own earlier frontend work
+(ViewNotesPanel/RetailerPickerPanel/StockOutPanel etc.), not backend content
+— it landed in this commit range because the Backend branch merged `main`
+into itself before this PR closed. The real backend diff is 8 files, verified
+with `git diff 5cde92b9..353cef11 -- schainbackend/`, not by reading the
+merge commit's full file list.
+
+> #### ✅ The biggest item on this list, closed — see [§2 Blockers](#blockers)
+>
+> The unauthenticated `/run-seeders`/`/run-migrations` routes are deleted.
+> **But the five weak-password accounts they could recreate are still live
+> right now** — checked directly against the database during this pass, not
+> assumed. Two are HEAD-role. This is still the highest-priority item here;
+> see ask [#28](#28)'s update.
+
+Verified against backend source **and** against the live Render database
+(migrations, route table, and two findings below confirmed with a real
+tinker session — one of them a rolled-back transaction so nothing was
+written). `php artisan route:list` resolves all routes with no missing
+classes; `php artisan migrate:status` shows nothing pending (no schema
+changes in this PR).
+
+**Closed by this PR:**
+
+| Ask | What changed | Frontend |
+|---|---|---|
+| [§2 Blockers](#blockers) (routes) | `GET /run-seeders`/`/run-migrations` deleted from `routes/web.php` outright — not patched, gone. | None needed. **Account half of this ask is still open — see below.** |
+| [#33](#33) | `login()`/`me()` return the **full** `UserDetail` model (`role` eager-loaded) instead of 5 hand-picked fields. All 44 feature flags and the role name now ride on both responses. | Unblocks phase 2 of the feature-flags work (nav-gating) without the `user-details/{id}` round trip that ask used to require. Not yet built — see [§1 Pending](#pending). |
+| [#30](#30) | `POST /stock/unhide` exists now, symmetric with hide (unhides the parent lot too). | Not yet built — `TransactionHistoryPanel`'s "no way to un-hide" copy is now stale. See [§1 Pending](#pending). |
+| [#31](#31) | `getAvailableStockLots` filters `is_hided = 0` now. | None needed — the lot picker just stops showing hidden lots. |
+| [#26](#26) / [#27](#27) | `PhoneBookResource` reads the correct `role` column; `phone-book` is `->only(['index','show'])`, so the unsafe hardcoded-password write routes are gone rather than patched; `index()` filters `is_delete`; the resource gained `address`/`remarks`/`role_id` and a resolved `profile_image` URL. | None needed for the fix itself — `phoneBookApi.ts` never called the removed routes. Two stale "always null"/"reads —" comments corrected in `types/phoneBook.ts` and `PhoneBookView.vue`. |
+| [#34](#34) | `OrderController` validates `customer_id`/`item_id` (existence) and `status` (real enum: `PENDING,PROCESSING,COMPLETED,CANCELLED`) — **but see the new bug below.** | `ORDER_STATUSES` had guessed `IN_PROGRESS`; corrected to the real `PROCESSING` in `types/order.ts` and `OrdersView.vue`. This was a live regression risk: after this PR, submitting the old guessed value would 422. |
+
+**New bug this PR introduced** (not a pre-existing issue — confirmed by
+reading the migration and testing live): `OrderController`'s new validation
+also accepts `remarks`/`due_date`, but `order_details` has neither column.
+Sending either now crashes with an uncaught `QueryException` — verified in a
+rolled-back transaction against the live database, not just read from code.
+Full write-up under ask [#34](#34) and in `types/order.ts`. Our Orders screen
+never sends these fields, so it hasn't hit this, but don't add them until the
+backend fixes it.
+
+**Also fixed, worth knowing:** `getAvailableStockLots`'s date+time branch
+changed `havingRaw('grams - used_grams > 0')` to a `whereRaw` repeating the
+full subquery — the old form referenced a `selectRaw` alias inside `HAVING`
+with no `GROUP BY`, which strict Postgres doesn't reliably support the way
+MySQL does. Same bug family as ask #18 (a different endpoint entirely), not
+something we had flagged for this one specifically.
 
 ### PR #46 pass — 2026-09-23
 
@@ -141,7 +313,16 @@ Full UI breakdown in [§1 Pending](#pending).
 
 ### PR #38–#42 pass — 2026-09-16
 
-> #### 🔴 READ FIRST — two unauthenticated routes are live in production
+> #### ✅ RESOLVED in PR #48 (2026-09-30) — see below for what this used to say
+>
+> Both routes are gone from `routes/web.php` — confirmed in the diff, not
+> assumed: the entire "Dev Utility Routes" block (`GET /run-seeders`,
+> `GET /run-migrations`, both outside every middleware group) was deleted,
+> leaving only the `/` welcome route. `https://api.lensnstories.com` no
+> longer has an unauthenticated way to seed or migrate the live database.
+> Kept below for the record of how long this was live and why it mattered.
+
+> #### 🔴 (Historical) two unauthenticated routes were live in production
 >
 > PR #38 added `GET /run-seeders` and `GET /run-migrations` to
 > `routes/web.php`, outside every middleware group. PR #41 patched them but
@@ -383,12 +564,29 @@ Practical consequences for us:
 | Live Metal Balance — stale warning banners removed for the two bugs PR #46 fixed (#18 Postgres SQL, #19 admin override) | `views/LiveMetalBalanceView.vue`, `types/liveMetalBalance.ts` |
 | `api.ts` `get()` accepts a headers argument, matching `post`/`postForm` (needed to send `X-User-ID` on a GET) | `lib/api.ts` |
 | Transaction History print — isolated to a real slip (row receipt / table report) instead of printing the whole page | `components/stock/TransactionHistoryPanel.vue` |
-| View Notes — built against no backend at all (ask #38), banner explains why every action 404s | `components/stock/ViewNotesPanel.vue`, `lib/remindersApi.ts`, `types/reminder.ts` |
+| ~~View Notes — built against no backend at all (ask #38), banner explains why every action 404s~~ **Now live against the real API (PR #50)** — banner removed, adapter rewritten for the real contract | `components/stock/ViewNotesPanel.vue`, `lib/remindersApi.ts`, `types/reminder.ts`, `lib/date.ts` (`toDateInputValue`) |
+| Order status vocabulary corrected (`PROCESSING`, not the guessed `IN_PROGRESS`) to match PR #48's real validation | `types/order.ts`, `views/OrdersView.vue` |
+| Phone Book "always null" role/comments corrected now that PR #48 fixed the backend field | `types/phoneBook.ts`, `views/PhoneBookView.vue` |
 
 **Every endpoint shipped in PRs #29–#32 now has a frontend**, PR #37's two
-new endpoints have one as of 2026-09-11, and everything PRs #38–#42 exposed
-has one as of 2026-09-16. What remains below is cleanup, deferred polish,
-and work blocked on backend gaps.
+new endpoints have one as of 2026-09-11, everything PRs #38–#42 exposed has
+one as of 2026-09-16, and PR #50's reminders module as of 2026-10-08. What
+remains below is cleanup, deferred polish, and work blocked on backend gaps.
+
+How the View Notes adapter handles PR #50's contract, since it is the one
+place in the app that departs from the house pattern:
+
+- **`remindersApi` does not unwrap `.data`.** That endpoint sends bare JSON.
+  Making it match the other api modules would break it.
+- **`normaliseReminder()` accepts `added_by` as either an integer or a user
+  object** and flattens both to `added_by` + `added_by_name`, so the panel
+  never sees the difference between a list response and a save response.
+- **`toDateInputValue()` (new, in `lib/date.ts`) undoes the UTC shift** on
+  `remainder_at`. The obvious `value.slice(0, 10)` returns the previous day.
+  It assumes the viewer's clock matches the server's `Asia/Kolkata`, which
+  holds for these operators; the real fix is the backend sending a bare date.
+- **Display uses `formatDateOnly`, not `formatDateTime`** — `remainder_at` is
+  a DATE column, so showing a time would show a `00:00` nobody typed.
 
 Notes on the PR #38–#42 screens, all of them consequences of the backend
 contract rather than choices:
@@ -433,14 +631,77 @@ amber banners rather than hidden:
   it. Grams and rupees are totalled separately since cash amounts arrive in
   the `grams` field ([#24](#24)), and `added_at` is parsed locally because
   it is the one endpoint using `DD-MM-YYYY` ([#25](#25)).
-- **Phone Book is read-only.** `store`/`update`/`destroy` are registered
-  and were deliberately not wrapped in `lib/phoneBookApi.ts` — creating a
-  contact mints a real ERP login with a hardcoded shared password, and
-  deleting one deactivates the shared `user_details` row ([#27](#27)).
-  Contacts are created and edited on the Users screen, which goes through
-  `UserDetailController` and sets real credentials.
+- **Phone Book is read-only.** `store`/`update`/`destroy` were registered
+  and deliberately not wrapped in `lib/phoneBookApi.ts` — creating a
+  contact minted a real ERP login with a hardcoded shared password, and
+  deleting one deactivated the shared `user_details` row ([#27](#27)). As
+  of PR #48 those three routes are gone server-side too (`->only(['index',
+  'show'])`), so this is no longer just our own caution — the backend
+  agrees. Contacts are created and edited on the Users screen, which goes
+  through `UserDetailController` and sets real credentials.
 
 ### Pending
+
+#### New work from the 2026-09-30 full re-derivation
+
+- [ ] **Drop the stale "View as does nothing" warning on Live Metal Balance.**
+      Ask #19/#35 is closed: `ReportController:152` now checks
+      `strtoupper(optional($actingUser->role)->role) === 'HEAD'` — the real
+      column and the real role — so the override works for HEAD accounts.
+      `LiveMetalBalanceView`'s amber banner still tells operators it has no
+      effect. It also accepts **`view_as`** now, checked before `user_id`;
+      `reportApi` sends `user_id`, which still works, but `view_as` is the
+      clearer name to move to.
+
+      The same banner's other half (#18, the as-of date/time filter) is still
+      accurate — keep that sentence, drop the override one.
+
+- [ ] **Use the real export endpoints.** Ask #13 is closed:
+      `GET /stock/reports/items-obcb/export` and
+      `/stock/reports/consolidated/export` both exist and stream a CSV of the
+      full filtered set, not just the loaded page. `ItemsObcbReportView` and
+      `ConsolidatedReportView` still build CSV client-side from whatever is
+      paged in.
+
+      One wrinkle worth planning for: these return a **file download**, not the
+      `{success, message, data}` envelope, so they cannot go through
+      `lib/api.ts` as-is. Fetch as a blob with the `Authorization` header and
+      trigger the save from an object URL — a plain `<a href>` cannot carry the
+      bearer token. Probably worth a small `downloadApi` helper rather than
+      bending `api.ts`.
+
+- [ ] **Re-check One Day Action against its new response shape.** PR #46
+      restructured it while closing asks #22–#25: `records` is now a single
+      combined, correctly-paginated list rather than separate stock and cash
+      arrays; cash rows carry `amount` with `grams: null` instead of cash
+      amounts in the `grams` field; and `added_at` is `Y-m-d H:i:s` rather than
+      `DD-MM-YYYY`. `types/oneDayAction.ts` and `OneDayActionView`'s local
+      date parsing and separate grams/rupees totalling were all written against
+      the old shape and need revisiting.
+
+- [ ] **A settings screen for the display flags is now buildable.** Ask #9 is
+      closed — `UserDetailController` validates the `is_*_shown` /
+      `is_*_need_to_shown` columns in both `store()` and `update()`, so they
+      can finally be written. See the two-part note further down about editing
+      them versus honouring them in `lib/nav.ts`.
+
+#### New work from PR #48 (added 2026-09-30)
+
+- [ ] **Add an Unhide action.** Ask #30 is closed server-side —
+      `POST /stock/unhide` exists, same `stock_ids` payload shape as hide,
+      symmetric parent-lot handling. `TransactionHistoryPanel`'s hide
+      confirmation still says *"There is no way to un-hide from this app"*
+      — that's now false and should either be removed or repointed at a
+      real Unhide action. Smallest version: a filter/toggle to show hidden
+      rows plus a per-row (or bulk, matching the existing hide checkbox
+      selection) Unhide button.
+
+- [ ] **Feature-flag nav-gating is now buildable.** Ask #33 is closed —
+      `/me` returns the full user including all 44 flags, no second
+      request needed. This was the blocker recorded against the "Decide
+      what to do with the 44 per-user feature flags" item below; phase 1
+      (editing them on the Users form) already shipped, phase 2 (gating
+      `lib/nav.ts`/route guards on them) can now be scoped for real.
 
 #### New work from PRs #43–#45 (added 2026-09-22)
 
@@ -703,6 +964,39 @@ the head check will not recognise.
 
 > Frontend team does not modify `schainbackend/`. These are asks, in priority
 > order.
+
+> ### ⚠️ Status as of the 2026-09-30 re-derivation — read before any entry below
+>
+> Entries in this section are **historical records**, written on the day the
+> ask was raised. Several describe code that has since changed. This table is
+> the current truth; the open ones also live in
+> [`BACKEND_TODO.md`](../BACKEND_TODO.md).
+>
+> | Ask | Status | Evidence in current source |
+> |---|---|---|
+> | 1, 3–8, 11, 26, 27, 30, 31, 33, 34 | ✅ Fixed | Struck through in place |
+> | **9** | ✅ Fixed | Display flags validated, `UserDetailController:203-285` |
+> | **10** | ✅ Fixed | `2026_09_17_120000_create_order_details_table.php` |
+> | **12** | ✅ Fixed | `CustomerTouchUserMappingController:64` re-loads relations |
+> | **13** | ✅ Fixed | `exportHistoryItemsObcb:33`, `exportConsolidatedReport:60` |
+> | **14** | ✅ Fixed | `head_id` honoured at `StockDetailsController:495`, `:516` — **but unrestricted, see new finding** |
+> | **17** | ✅ Fixed | `ReportService:816` — parameter + `system_settings` fallback, hardcoded `2` gone |
+> | **19, 35** | ✅ Fixed | `ReportController:152` checks `role->role === 'HEAD'`, accepts `view_as` |
+> | **22** | ✅ Fixed | Head scoping, `ReportService:981-985` |
+> | **23, 24, 25** | ✅ Fixed | `ReportService:1086` (`amount`), `:1094` (ISO date), `:1107-1109` (combined paging) |
+> | **29, 31** | ✅ Fixed | `StockDetailsController:738` (`whereRaw`), `:729` (`is_hided`) |
+> | **36** | ✅ Fixed | `cash_user_id` optional, `CashTxnDetailController:53-60` |
+> | **2, 37** | ❌ **Open** | Four header-only reads — now includes `ReportController:222` |
+> | **18** | ❌ **Open** | MySQL syntax fixed; `havingRaw` alias at `ReportService:855` still fails |
+> | **21** | ❌ **Open** | `StockInService:71,74`, `StockOutService:74,77` — worse than filed |
+> | **32** | ❌ **Open** | Doc covers none of PRs #38–#48 |
+> | **38** | ❌ **Open** | No reminders table, model, controller or route |
+> | **15** | 🟡 Cosmetic | One stale `sanctum` at `AuthController:112` |
+> | **28** | 🟠 Partly | Routes removed; the five weak-password accounts may remain |
+>
+> **New this pass, not yet numbered:** the `head_id` override (#14) has no
+> permission check, and `OrderController::index()` returns `OrderDetail::all()`
+> unscoped. Both written up in `BACKEND_TODO.md` §2 and §3.
 
 ### Blockers
 
@@ -1290,7 +1584,12 @@ the head check will not recognise.
 
 <a id="26"></a>
 
-26. **`role.role_name` is always null — the same `role_name` mistake as ask
+26. ~~**`role.role_name` is always null**~~ **✅ FIXED in PR #48
+    (2026-09-30)** — `PhoneBookResource` now reads `$this->role?->role`
+    (confirmed in the diff). Real role names now; no frontend change
+    needed, the JSON key `role_name` was never renamed.
+
+    Original write-up — the same `role_name` mistake as ask
     [#19](#19), now in a second file.** `PhoneBookResource:18` reads
     `$this->role?->role_name`, but the `roles` table column is `role` —
     `Role.php:15` and the `create_roles_table` migration both say so, and
@@ -1306,8 +1605,24 @@ the head check will not recognise.
 
 <a id="27"></a>
 
-27. **The three write routes are unsafe against a shared table, so the
-    frontend does not call them.** `phone-book` is `user_details` — the
+27. ~~**The three write routes are unsafe against a shared table, so the
+    frontend does not call them.**~~ **✅ FIXED in PR #48 (2026-09-30) —
+    the unsafe routes are gone, not patched.** `apiResource('phone-book')`
+    is now `->only(['index', 'show'])`, confirmed in the diff — `store()`,
+    `update()` and `destroy()` (the hardcoded-password/shared-row-mutation
+    methods below) are no longer routable at all. Matches exactly what
+    this ask was already doing: `lib/phoneBookApi.ts` never called those
+    three, so nothing here changes behaviourally — the backend simply
+    closed the door this frontend had already declined to walk through.
+
+    The two smaller issues in the same write-up are **also fixed**:
+    `index()` now filters `is_delete = false` (confirmed in the diff), and
+    `PhoneBookResource` now includes `role_id`/`address`/`remarks` and
+    resolves `profile_image` to a full URL via `url()` — closing the doc
+    mismatch noted below too. `role.role_name` populating for real is
+    ask [#26](#26), fixed in the same PR.
+
+    Original write-up, kept for context — `phone-book` is `user_details` — the
     same rows the Users and Clients screens own and every picker selects
     from — and:
 
@@ -1393,6 +1708,17 @@ the head check will not recognise.
     weak-password accounts.** Highest-priority item on this list by a wide
     margin.
 
+    **Update 2026-09-30 — routes closed, accounts NOT rotated.** PR #48
+    deleted both routes (confirmed above). But the door they could reopen
+    was never actually closed: checked all five accounts directly against
+    the live database just now — **every one still authenticates with
+    `password`**, including both HEAD-role accounts (`head_admin`,
+    `demo_head`). The route that could *recreate* them is gone; the
+    accounts it created are still sitting there right now on
+    `https://api.lensnstories.com`, reachable through completely normal
+    login. This half of the ask is still fully open and still the
+    highest-priority item here.
+
 <a id="29"></a>
 
 29. **`getAvailableStockLots`' `date`+`time` branch does not run on
@@ -1419,7 +1745,18 @@ the head check will not recognise.
 
 <a id="30"></a>
 
-30. **There is no way to un-hide stock.** `StockOutService::hideStocks`
+30. ~~**There is no way to un-hide stock.**~~ **✅ FIXED in PR #48
+    (2026-09-30).** `POST /stock/unhide` now exists
+    (`StockDetailsController::postUnhide`, `HideStockRequest`, same
+    `stock_ids` payload shape as hide) and
+    `StockOutService::unhideStocks` unhides the parent lot too — the same
+    symmetry hideStocks itself has, verified in the diff, not assumed.
+    **Frontend work still open:** `TransactionHistoryPanel`'s hide
+    confirmation still says "There is no way to un-hide from this app" —
+    that's stale now and the row-selection/confirm UI has no Unhide action
+    yet. See [§1 Pending](#pending).
+
+    Original write-up, kept for context: `StockOutService::hideStocks`
     sets `is_hided = true`; nothing anywhere sets it back to false
     (`grep is_hided app/` — the only writes are lines 833 and 840 of that
     method, both `true`). `getHistory` and `getAvailableMetals` filter on
@@ -1437,15 +1774,17 @@ the head check will not recognise.
 
 <a id="31"></a>
 
-31. **`getAvailableStockLots` does not filter `is_hided`.** Every other lot
-    query does — `getAvailableMetals` (`StockDetailsController:551`) and
-    `getHistory` (`ReportService:48`) both carry `->where('is_hided', 0)`.
-    The new one filters `stock_type = IN`, `stock_in_id IS NULL` and
-    `balance > 0`, but not this.
+31. ~~**`getAvailableStockLots` does not filter `is_hided`.**~~ **✅ FIXED
+    in PR #48 (2026-09-30)** — `getAvailableStockLots` now carries
+    `->where('is_hided', 0)` alongside its existing `stock_type = IN`/
+    `stock_in_id IS NULL` filters, confirmed in the diff. No frontend
+    change needed; the lot picker just stops showing hidden lots.
 
-    Net effect: a lot hidden through `POST /stock/hide` disappears from the
-    metal picker and from history, yet still appears in the generic lot
-    picker. Same lot, two screens, opposite answers. One `where` closes it.
+    Original write-up: every other lot query filtered `is_hided` —
+    `getAvailableMetals` (`StockDetailsController:551`) and `getHistory`
+    (`ReportService:48`) both carried `->where('is_hided', 0)`, but this
+    one didn't, so a hidden lot disappeared from the metal picker and
+    history yet still appeared in the generic lot picker.
 
 <a id="32"></a>
 
@@ -1467,34 +1806,56 @@ the head check will not recognise.
 
 <a id="33"></a>
 
-33. **`GET /me` does not return the per-user feature flags.**
-    `AuthController::me` hand-picks five fields — `user_id`, `name`,
-    `user_name`, `role_id`, `is_active`. Meanwhile PR #43–#45 added 44
-    `is_*_shown` / `is_*_needed` visibility flags to `user_details`, and
-    `UserDetail::toArray()` already exposes all of them (only
-    `password_hash`, `report_password`, `otp` are hidden).
+33. ~~**`GET /me` does not return the per-user feature flags.**~~ **✅ FIXED
+    in PR #48 (2026-09-30).** Both `login()` and `me()` now return the
+    **full** `UserDetail` model with `role` eager-loaded
+    (`$user->load('role'); ... 'data' => $user`), replacing the old
+    hand-picked 5-field payload. Confirmed safe: `UserDetail::$hidden` still
+    protects `password_hash`/`report_password`/`otp`, and the `role()`
+    relation exists, so this closes the gap completely — all 44 feature
+    flags AND the role name are now on both responses, no second request
+    needed. **Frontend work now unblocked:** phase 2 of the per-user
+    feature-flag work (gating `lib/nav.ts`/route guards on them) can be
+    built without the `user-details/{id}` workaround this ask used to
+    require. See [§1 Pending](#pending).
 
-    To gate navigation on those flags we need them on the signed-in user.
-    Today that means a second request to `user-details/{user_id}` right after
-    login on every cold boot. Returning the full model from `/me` — or the
-    five fields plus the `is_*` set — removes that round trip entirely.
-    Please also include `role` (the name), which `index()` now returns but
-    `/me` still does not.
+    Original write-up, kept for context: `AuthController::me` used to
+    hand-pick five fields — `user_id`, `name`, `user_name`, `role_id`,
+    `is_active` — while `UserDetail::toArray()` already exposed all 44
+    `is_*_shown`/`is_*_needed` flags PR #43–#45 added.
 
 <a id="34"></a>
 
-34. **`OrderController` has no validation whatsoever.** Every method pipes
-    `$request->all()` into a `$guarded = []` model:
-    `OrderDetail::create($request->all())` in `store()`, `$order->update($request->all())`
-    in `update()`. There is no `FormRequest`, no `status` enum, and no
-    existence check on `customer_id` or `item_id` — so an order can be
-    created against a customer or item that does not exist, with any string
-    at all as its status.
+34. ~~**`OrderController` has no validation whatsoever.**~~ **Mostly ✅
+    FIXED in PR #48 (2026-09-30) — with one new bug it introduced.**
+    `store()`/`update()` now validate `customer_id`/`item_id` against
+    `exists:user_details,user_id` / `exists:items,item_id` and `status`
+    against a real enum: `required|in:PENDING,PROCESSING,COMPLETED,CANCELLED`.
+    That answers our own question below — frontend updated to match
+    (`ORDER_STATUSES` had guessed `IN_PROGRESS`; corrected to `PROCESSING`,
+    the real value, in `types/order.ts`).
 
-    We will validate in the UI, but that only protects our own screen; the
-    endpoint stays open to anything else that calls it. Please confirm the
-    intended `status` values so our picker matches the backend's expectation
-    rather than inventing a vocabulary.
+    **New bug this introduced, confirmed live in a rolled-back
+    transaction:** the same validation also accepts `remarks`
+    (`nullable|string`) and `due_date` (`nullable|date`) — but
+    `order_details` has no such columns, only
+    `order_id/customer_id/item_id/grams/status/added_at`. Sending either
+    crashes with an uncaught `QueryException`
+    (`SQLSTATE[42703]: column "remarks" of relation "order_details" does
+    not exist`) — no try/catch in the controller, so it's a raw 500, and
+    since `APP_DEBUG=true` in production the SQL error text would reach
+    the client. **Ask: either add both columns via migration, or drop
+    those two validation rules until they exist.** Our frontend never
+    sends either field today (by design, not luck), so nothing has hit
+    this in production — but the vulnerability is live the moment anyone
+    (or a future frontend change) does.
+
+    `grams` also went from unvalidated to `nullable|numeric` — looser than
+    our own client-side `required`, so no action needed there.
+
+    Original write-up, kept for context — every method used to pipe
+    `$request->all()` into a `$guarded = []` model with no FormRequest, no
+    status enum, and no existence check on `customer_id` or `item_id`.
 
 <a id="35"></a>
 
@@ -1569,7 +1930,14 @@ the head check will not recognise.
 
 <a id="38"></a>
 
-38. **The "View Notes" panel (Stock Details screen's per-head task list) has
+38. ✅ **FIXED in PR #50 (2026-10-08)** — `reminders` table, `Reminder` model,
+    `ReminderController` and `apiResource('reminders')` all landed, and the
+    schema matches the proposal below almost exactly. Frontend rewired the
+    same day. Four contract deviations and two new backend follow-ups came out
+    of it; see the [PR #50 pass](#pr-50-pass--2026-10-08) at the top and
+    `BACKEND_TODO.md` §7. Original ask kept below for the record.
+
+    ~~**The "View Notes" panel (Stock Details screen's per-head task list) has
     no backend at all — not a bug, a total absence.** Asked to implement it
     from two legacy screenshots (a notes table: Sno/Description/IsCompleted/
     Added By/Remainder At/Assign To/Is Viewed/Actions, and a "Create new
@@ -1581,7 +1949,7 @@ the head check will not recognise.
     single date on one cash transaction, added by
     `2026_08_12_233141_add_remainder_and_hide_to_cash_txn_details_table`) and
     the `is_remainder_shown` per-user UI-visibility flag. Neither is a task
-    list.
+    list.~~
 
     **Built anyway**, per the standing instruction to ship UI ahead of
     backend gaps rather than hold it back: `ViewNotesPanel.vue`, wired into

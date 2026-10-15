@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Plus, Trash, Layers } from 'lucide-vue-next'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -47,7 +47,7 @@ import type { GmsInItemInput, Item, MetalPickerSelection } from '@/types'
 */
 
 const props = defineProps<{ items: Item[]; headId: number | null; givenBy: number | null }>()
-const emit = defineEmits<{ close: []; saved: [] }>()
+const emit = defineEmits<{ close: []; saved: []; missingUser: [] }>()
 
 const toast = useToastStore()
 
@@ -147,13 +147,26 @@ function validate(): boolean {
   return true
 }
 
+// Shown as an inline banner rather than eagerly — only set once an actual
+// submit was attempted with no user picked, matching the page-wide 2026-10
+// change to stop blocking people before they've had a chance to fill
+// anything in.
+const showMissingUserWarning = ref(false)
+watch(
+  () => props.givenBy,
+  (v) => {
+    if (v !== null) showMissingUserWarning.value = false
+  },
+)
+
 async function handleSubmit() {
   if (props.headId === null) {
     toast.show('You must be signed in to record a GMS in.', 'error')
     return
   }
   if (props.givenBy === null) {
-    toast.show('Select a user (left panel) before recording a GMS In.', 'error')
+    showMissingUserWarning.value = true
+    emit('missingUser')
     return
   }
   if (!validate()) return
@@ -191,7 +204,10 @@ async function handleSubmit() {
 
 <template>
   <BaseModal title="GMS In" badge="IN" badge-class="bg-emerald-600" max-width="max-w-5xl" @close="emit('close')">
-    <p v-if="givenBy === null" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+    <p
+      v-if="showMissingUserWarning"
+      class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+    >
       Select a user in the left panel before recording a GMS In.
     </p>
 

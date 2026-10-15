@@ -31,7 +31,7 @@ import type { Item, NumericWastageOutItemInput } from '@/types'
 */
 
 const props = defineProps<{ items: Item[]; headId: number | null; givenTo: number | null }>()
-const emit = defineEmits<{ saved: [] }>()
+const emit = defineEmits<{ saved: []; missingUser: [] }>()
 
 const toast = useToastStore()
 
@@ -55,15 +55,9 @@ function makeEmptyRow(): NumericWastageOutItemInput {
   }
 }
 
+// Deliberately no user/sign-in gate here (2026-10 request) — see
+// StockOutPanel's comment on its own addRow for the full rationale.
 function addRow() {
-  if (props.headId === null) {
-    toast.show('You must be signed in to record a numeric wastage out.', 'error')
-    return
-  }
-  if (props.givenTo === null) {
-    toast.show('Select a user (left panel) before adding a Numeric Wastage Out row.', 'error')
-    return
-  }
   rows.value.push(makeEmptyRow())
 }
 
@@ -133,7 +127,14 @@ function hasRows() {
 
 async function submit(): Promise<boolean> {
   if (!validate()) return false
-  if (props.headId === null || props.givenTo === null) return false
+  if (props.headId === null) {
+    toast.show('You must be signed in to record a numeric wastage out.', 'error')
+    return false
+  }
+  if (props.givenTo === null) {
+    emit('missingUser')
+    return false
+  }
 
   isSaving.value = true
   try {
