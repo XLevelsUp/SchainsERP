@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('stock_in_details', function (Blueprint $table) {
-            $table->unsignedInteger('no_of_pcs')->nullable()->after('grams');
-        });
+        if (!Schema::hasColumn('stock_in_details', 'no_of_pcs')) {
+            Schema::table('stock_in_details', function (Blueprint $table) {
+                $table->unsignedInteger('no_of_pcs')->nullable()->after('grams');
+            });
+        }
     }
 
     /**

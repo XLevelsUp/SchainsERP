@@ -123,7 +123,16 @@ class UserDetailController extends Controller
                 'required|string|max:55|unique:user_details,user_name',
 
             'password' =>
-                'required|string|min:6',
+                'required_without:new_password|nullable|string|min:6',
+
+            'new_password' =>
+                'nullable|string|min:6',
+
+            'confirm_password' =>
+                'nullable|string',
+
+            'password_confirmation' =>
+                'nullable|string',
 
             'address' =>
                 'required|string|max:400',
@@ -401,6 +410,15 @@ class UserDetailController extends Controller
                 'required|integer',
         ]);
 
+        $validator->after(function ($validator) use ($request) {
+            $pwd = $request->input('password') ?? $request->input('new_password');
+            $confirmPwd = $request->input('confirm_password') 
+                ?? $request->input('password_confirmation');
+
+            if (!empty($pwd) && !empty($confirmPwd) && $pwd !== $confirmPwd) {
+                $validator->errors()->add('confirm_password', 'The password confirmation does not match.');
+            }
+        });
 
         if ($validator->fails()) {
 
@@ -422,6 +440,8 @@ class UserDetailController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
+                $plainPassword = $request->input('password') ?? $request->input('new_password');
+
                 $userData = [
 
                     'name' =>
@@ -431,7 +451,7 @@ class UserDetailController extends Controller
                         $request->user_name,
 
                     'password_hash' =>
-                        Hash::make($request->password),
+                        Hash::make($plainPassword),
 
                     'address' =>
                         $request->address,
@@ -830,6 +850,11 @@ class UserDetailController extends Controller
 
 
             $userArray = $user->toArray();
+            unset($userArray['password_hash']);
+            unset($userArray['report_password']);
+            unset($userArray['otp']);
+            $userArray['password'] = '';
+            $userArray['confirm_password'] = '';
             $userArray['gm'] = sprintf('%0.3f', $user->grams_grand_total ?? 0);
             $userArray['purity'] = sprintf('%0.3f', $user->purity_grand_total ?? 0);
             $userArray['id'] = $user->user_id;
@@ -944,6 +969,21 @@ class UserDetailController extends Controller
 
                     'password' =>
                         'nullable|string|min:6',
+
+                    'new_password' =>
+                        'nullable|string|min:6',
+
+                    'confirm_password' =>
+                        'nullable|string',
+
+                    'password_confirmation' =>
+                        'nullable|string',
+
+                    'confirm_new_password' =>
+                        'nullable|string',
+
+                    'new_password_confirmation' =>
+                        'nullable|string',
 
                     'address' =>
                         'sometimes|string|max:400',
@@ -1104,6 +1144,17 @@ class UserDetailController extends Controller
                 ]
             );
 
+            $validator->after(function ($validator) use ($request) {
+                $pwd = $request->input('password') ?? $request->input('new_password');
+                $confirmPwd = $request->input('confirm_password') 
+                    ?? $request->input('password_confirmation')
+                    ?? $request->input('confirm_new_password')
+                    ?? $request->input('new_password_confirmation');
+
+                if (!empty($pwd) && !empty($confirmPwd) && $pwd !== $confirmPwd) {
+                    $validator->errors()->add('confirm_password', 'The password confirmation does not match.');
+                }
+            });
 
             if ($validator->fails()) {
 
@@ -1276,12 +1327,10 @@ class UserDetailController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                if ($request->filled('password')) {
+                $newPassword = $request->input('password') ?? $request->input('new_password');
 
-                    $userData['password_hash'] =
-                        Hash::make(
-                            $request->password
-                        );
+                if (!empty($newPassword)) {
+                    $userData['password_hash'] = Hash::make($newPassword);
                 }
 
 

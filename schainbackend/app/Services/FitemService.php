@@ -7,6 +7,7 @@ use App\Models\UserDetail;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Exception;
+use App\Services\SystemLogService;
 
 class FitemService
 {
@@ -74,6 +75,17 @@ class FitemService
 
                 $processedStocks[] = $stockModel;
             }
+
+            SystemLogService::log(
+                'STOCK',
+                'FITEM_' . $type,
+                $actingUserId,
+                count($processedStocks) > 0 ? $processedStocks[0]->stock_id : null,
+                'stock_details',
+                "F-Item {$type} processed with " . count($processedStocks) . " items",
+                $data,
+                ['type' => $type, 'items_count' => count($processedStocks)]
+            );
 
             return $processedStocks;
         });

@@ -8,6 +8,7 @@ use App\Models\CashTxnDetail;
 use App\Models\CashTxnImage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use App\Services\SystemLogService;
 
 class CashTxnDetailService
 {
@@ -122,6 +123,17 @@ class CashTxnDetailService
                 Cache::tags(["cash_history_{$recipient->user_id}_{$sender->user_id}"])->flush();
             }
 
+            SystemLogService::log(
+                'CASH',
+                'CASH_IN',
+                $addedBy,
+                $txn->txn_id,
+                'cash_txn_details',
+                "Cash IN of {$amount} ({$paymentMethod}) from User #{$sender->user_id} to User #{$recipient->user_id}",
+                $data,
+                ['amount' => $amount, 'payment_method' => $paymentMethod, 'sender_id' => $sender->user_id, 'recipient_id' => $recipient->user_id]
+            );
+
             return $txn;
         });
     }
@@ -206,6 +218,17 @@ class CashTxnDetailService
                 Cache::tags(["cash_history_{$sender->user_id}_{$recipient->user_id}"])->flush();
                 Cache::tags(["cash_history_{$recipient->user_id}_{$sender->user_id}"])->flush();
             }
+
+            SystemLogService::log(
+                'CASH',
+                'CASH_OUT',
+                $addedBy,
+                $txn->txn_id,
+                'cash_txn_details',
+                "Cash OUT of {$amount} ({$paymentMethod}) from User #{$sender->user_id} to User #{$recipient->user_id}",
+                $data,
+                ['amount' => $amount, 'payment_method' => $paymentMethod, 'sender_id' => $sender->user_id, 'recipient_id' => $recipient->user_id]
+            );
 
             return $txn;
         });

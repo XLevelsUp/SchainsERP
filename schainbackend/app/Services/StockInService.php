@@ -11,6 +11,7 @@ use App\Models\CashTxnDetail;
 use App\Models\UserDetail;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use App\Services\SystemLogService;
 
 class StockInService extends BaseStockService
 {
@@ -155,6 +156,17 @@ class StockInService extends BaseStockService
             Cache::forget("user:{$givenBy->user_id}:balances");
             Cache::forget("user:{$givenTo->user_id}:balances");
 
+            SystemLogService::log(
+                'STOCK',
+                'STOCK_IN',
+                $addedBy,
+                count($createdStocks) > 0 ? $createdStocks[0]->stock_in_detail_id : null,
+                'stock_in_details',
+                "Stock IN registered with " . count($createdStocks) . " items from User #{$givenBy->user_id} to User #{$givenTo->user_id}",
+                $data,
+                ['items_count' => count($createdStocks), 'given_by' => $givenBy->user_id, 'given_to' => $givenTo->user_id]
+            );
+
             return $createdStocks;
         }, 5);
     }
@@ -285,6 +297,17 @@ class StockInService extends BaseStockService
 
             Cache::forget("user:{$givenBy->user_id}:balances");
             Cache::forget("user:{$givenTo->user_id}:balances");
+
+            SystemLogService::log(
+                'STOCK',
+                'GMS_IN',
+                $addedBy,
+                count($createdGms) > 0 ? $createdGms[0]->gms_in_history_id ?? $createdGms[0]->id : null,
+                'gms_in_histories',
+                "GMS IN registered with " . count($createdGms) . " items from User #{$givenBy->user_id} to User #{$givenTo->user_id}",
+                $data,
+                ['items_count' => count($createdGms), 'given_by' => $givenBy->user_id, 'given_to' => $givenTo->user_id]
+            );
 
             return $createdGms;
         }, 5);
@@ -440,6 +463,17 @@ class StockInService extends BaseStockService
 
             Cache::forget("user:{$givenBy->user_id}:balances");
             Cache::forget("user:{$givenTo->user_id}:balances");
+
+            SystemLogService::log(
+                'STOCK',
+                'NUMERIC_WASTE_IN',
+                $addedBy,
+                count($createdWastages) > 0 ? $createdWastages[0]->id : null,
+                'numeric_wastage_in_records',
+                "Numeric Wastage IN registered with " . count($createdWastages) . " items from User #{$givenBy->user_id} to User #{$givenTo->user_id}",
+                $data,
+                ['items_count' => count($createdWastages), 'given_by' => $givenBy->user_id, 'given_to' => $givenTo->user_id]
+            );
 
             return $createdWastages;
         }, 5);

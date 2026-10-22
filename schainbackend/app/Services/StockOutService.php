@@ -14,6 +14,7 @@ use App\Models\GoldConversionAlloy;
 use App\Models\UserDetail;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use App\Services\SystemLogService;
 
 class StockOutService extends BaseStockService
 {
@@ -156,6 +157,17 @@ class StockOutService extends BaseStockService
 
             Cache::forget("user:{$givenBy->user_id}:balances");
             Cache::forget("user:{$givenTo->user_id}:balances");
+
+            SystemLogService::log(
+                'STOCK',
+                'STOCK_OUT',
+                $addedBy,
+                count($createdStocks) > 0 ? $createdStocks[0]->stock_id : null,
+                'stock_details',
+                "Stock OUT registered with " . count($createdStocks) . " items from User #{$givenBy->user_id} to User #{$givenTo->user_id}",
+                $data,
+                ['items_count' => count($createdStocks), 'given_by' => $givenBy->user_id, 'given_to' => $givenTo->user_id]
+            );
 
             return $createdStocks;
         }, 5);
@@ -325,6 +337,17 @@ class StockOutService extends BaseStockService
 
             // Invalidate user balance cache
             Cache::forget("user:{$user->user_id}:balances");
+
+            SystemLogService::log(
+                'STOCK',
+                'ITEM_CHANGE',
+                $addedBy,
+                count($createdHistories) > 0 ? $createdHistories[0]->history_id ?? $createdHistories[0]->id : null,
+                'item_change_histories',
+                "Item Change executed for User #{$user->user_id} with " . count($createdHistories) . " items",
+                $data,
+                ['user_id' => $user->user_id, 'items_count' => count($createdHistories)]
+            );
 
             return $createdHistories;
         });
@@ -531,6 +554,17 @@ class StockOutService extends BaseStockService
 
             Cache::forget("user:{$user->user_id}:balances");
 
+            SystemLogService::log(
+                'STOCK',
+                'ITEM_CONVERSION',
+                $addedBy,
+                count($createdConversions) > 0 ? $createdConversions[0]->id : null,
+                'gold_conversions',
+                "Item Conversion executed for User #{$user->user_id} with " . count($createdConversions) . " items",
+                $data,
+                ['user_id' => $user->user_id, 'items_count' => count($createdConversions)]
+            );
+
             return $createdConversions;
         });
     }
@@ -662,6 +696,17 @@ class StockOutService extends BaseStockService
 
             Cache::forget("user:{$givenBy->user_id}:balances");
             Cache::forget("user:{$givenTo->user_id}:balances");
+
+            SystemLogService::log(
+                'STOCK',
+                'GMS_OUT',
+                $addedBy,
+                count($createdGms) > 0 ? $createdGms[0]->gms_history_id ?? $createdGms[0]->id : null,
+                'gms_histories',
+                "GMS OUT registered with " . count($createdGms) . " items from User #{$givenBy->user_id} to User #{$givenTo->user_id}",
+                $data,
+                ['items_count' => count($createdGms), 'given_by' => $givenBy->user_id, 'given_to' => $givenTo->user_id]
+            );
 
             return $createdGms;
         }, 5);
@@ -818,6 +863,17 @@ class StockOutService extends BaseStockService
             Cache::forget("user:{$givenBy->user_id}:balances");
             Cache::forget("user:{$givenTo->user_id}:balances");
 
+            SystemLogService::log(
+                'STOCK',
+                'NUMERIC_WASTE_OUT',
+                $addedBy,
+                count($createdWastages) > 0 ? $createdWastages[0]->id : null,
+                'numeric_wastages',
+                "Numeric Wastage OUT registered with " . count($createdWastages) . " items from User #{$givenBy->user_id} to User #{$givenTo->user_id}",
+                $data,
+                ['items_count' => count($createdWastages), 'given_by' => $givenBy->user_id, 'given_to' => $givenTo->user_id]
+            );
+
             return $createdWastages;
         }, 5);
     }
@@ -842,6 +898,16 @@ class StockOutService extends BaseStockService
                     }
                 }
             }
+
+            SystemLogService::log(
+                'STOCK',
+                'STOCK_HIDE',
+                null,
+                count($stockIds) > 0 ? $stockIds[0] : null,
+                'stock_details',
+                "Hidden " . count($stockIds) . " stock records",
+                ['stock_ids' => $stockIds]
+            );
         });
     }
 
@@ -862,6 +928,16 @@ class StockOutService extends BaseStockService
                     }
                 }
             }
+
+            SystemLogService::log(
+                'STOCK',
+                'STOCK_UNHIDE',
+                null,
+                count($stockIds) > 0 ? $stockIds[0] : null,
+                'stock_details',
+                "Unhidden " . count($stockIds) . " stock records",
+                ['stock_ids' => $stockIds]
+            );
         });
     }
 
@@ -903,6 +979,17 @@ class StockOutService extends BaseStockService
             // Invalidate user balance cache for both
             Cache::forget("user:{$givenBy->user_id}:balances");
             Cache::forget("user:{$givenTo->user_id}:balances");
+
+            SystemLogService::log(
+                'STOCK',
+                'STOCK_CASH_OUT',
+                $addedBy,
+                $cashTxn->txn_id,
+                'cash_txn_details',
+                "Stock Cash Out of {$amount} from User #{$givenBy->user_id} to User #{$givenTo->user_id}",
+                $data,
+                ['amount' => $amount, 'sender_id' => $givenBy->user_id, 'recipient_id' => $givenTo->user_id]
+            );
 
             return $cashTxn;
         });

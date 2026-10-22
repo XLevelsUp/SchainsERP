@@ -10,6 +10,7 @@ use App\Models\GmsHistory;
 use App\Models\FitemHistory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use App\Services\SystemLogService;
 
 class AutoEntryService extends BaseStockService
 {
@@ -271,6 +272,17 @@ class AutoEntryService extends BaseStockService
 
             Cache::forget("user:{$givenBy->user_id}:balances");
             Cache::forget("user:{$givenTo->user_id}:balances");
+
+            SystemLogService::log(
+                'STOCK',
+                'STOCK_AUTO_ENTRY',
+                $addedBy,
+                count($createdStocks) > 0 ? $createdStocks[0]->stock_id : null,
+                'stock_details',
+                "Stock Auto Entry ({$type}) processed with " . count($createdStocks) . " items from User #{$givenBy->user_id} to User #{$givenTo->user_id}",
+                $data,
+                ['type' => $type, 'items_count' => count($createdStocks), 'given_by' => $givenBy->user_id, 'given_to' => $givenTo->user_id]
+            );
 
             return $createdStocks;
         });

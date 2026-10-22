@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\GoldToCashController;
 use App\Http\Controllers\Api\CashCategoryController;
 use App\Http\Controllers\Api\PhoneBookController;
 use App\Http\Controllers\Api\ReminderController;
+use App\Http\Controllers\Api\SystemLogController;
 
 Route::prefix('v1')->group(function () {
     // Public routes
@@ -89,6 +90,11 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('settings', \App\Http\Controllers\Api\SystemSettingController::class)->parameters([
             'settings' => 'key'
         ]);
+
+        // System Audit Logs (Admin Panel)
+        Route::get('system-logs/filters', [SystemLogController::class, 'filters']);
+        Route::get('system-logs', [SystemLogController::class, 'index']);
+        Route::get('system-logs/{id}', [SystemLogController::class, 'show']);
     });
 });
 
