@@ -30,6 +30,9 @@ class UserDetailController extends Controller
     {
         try {
 
+            $actingUserId = $request->user()->user_id ?? ($request->header('X-User-ID') ? (int)$request->header('X-User-ID') : null);
+            $headId = $request->query('head_id') ? (int)$request->query('head_id') : $actingUserId;
+
             $query = UserDetail::with([
                 'itemMappings',
                 'headEmployeeMappings',
@@ -37,6 +40,34 @@ class UserDetailController extends Controller
                 'role'
             ])
             ->orderBy('user_id', 'desc');
+
+            $module = $request->query('module', 'stock'); // Default to stock
+            $isAll = $request->boolean('all') || $request->boolean('unfiltered');
+
+            // Apply mapped users filter for Head / Mapped queries
+            if (!$isAll && $headId) {
+                $actingUser = UserDetail::find($headId);
+                $isHead = $actingUser && (strtoupper(optional($actingUser->role)->role) === 'HEAD' || $actingUser->role_id == 3);
+
+                if ($isHead || $request->has('head_id') || $request->boolean('mapped_only')) {
+                    if (strtolower($module) === 'cash') {
+                        $mappedIds = CashHeadEmployeeMapping::where('head_id', $headId)->pluck('employee_id')->toArray();
+                    } else {
+                        $mappedIds = HeadEmployeeMapping::where('head_id', $headId)->pluck('employee_id')->toArray();
+                    }
+
+                    if ($request->has('type')) {
+                        $requestedType = strtoupper($request->type);
+                        if ($requestedType === 'EMPLOYEE' || $requestedType === 'WORKER') {
+                            $query->whereIn('user_id', $mappedIds);
+                        } elseif ($requestedType === 'HEAD') {
+                            $query->where('user_id', $headId);
+                        }
+                    } else {
+                        $query->whereIn('user_id', array_unique(array_merge([$headId], $mappedIds)));
+                    }
+                }
+            }
 
             // Filter by type if provided (e.g., ?type=EMPLOYEE or ?type=HEAD)
             if ($request->has('type')) {
@@ -52,8 +83,6 @@ class UserDetailController extends Controller
             }
 
             $users = $query->get();
-
-            $module = $request->query('module', 'stock'); // Default to stock
 
             $formattedUsers = $users->map(function ($user) use ($module) {
                 $data = [
