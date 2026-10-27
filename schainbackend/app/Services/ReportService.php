@@ -59,6 +59,9 @@ class ReportService
             }
         }
 
+        $mappedEmployeeIds = \App\Models\HeadEmployeeMapping::where('head_id', $headId)->pluck('employee_id')->toArray();
+        $allMappedIds = array_unique(array_merge([$headId], $mappedEmployeeIds));
+
         $query = StockDetails::with(['item', 'givenTo', 'givenBy', 'toItem'])
             ->where('is_hided', 0)
             ->where('is_freezed', 0);
@@ -80,7 +83,7 @@ class ReportService
         $inQuery = clone $query;
 
         // Apply OUT Conditions
-        $outQuery->where(function ($q) use ($userId, $retailerId) {
+        $outQuery->where(function ($q) use ($userId, $retailerId, $allMappedIds) {
             if ($retailerId) {
                 $q->where(function ($q2) use ($retailerId) {
                     $q2->where('retailer_id', $retailerId)
@@ -93,7 +96,10 @@ class ReportService
                            ->where('is_receiver_completed', 0);
                     })->orWhere(function ($q4) {
                         $q4->where('entry_type', '!=', 'EMPTOEMP')
-                           ->where('is_completed', 0);
+                           ->where(function ($q5) {
+                               $q5->where('is_completed', 0)
+                                  ->orWhereIn('type', ['ITEMCHANGE', 'ITEMCONVERSION']);
+                           });
                     });
                 });
                 $q->where('entry_type', '!=', 'EMPTOHEAD');
@@ -120,7 +126,10 @@ class ReportService
                            ->where('is_receiver_completed', 0);
                     })->orWhere(function ($q4) {
                         $q4->where('entry_type', '!=', 'EMPTOEMP')
-                           ->where('is_completed', 0);
+                           ->where(function ($q5) {
+                               $q5->where('is_completed', 0)
+                                  ->orWhereIn('type', ['ITEMCHANGE', 'ITEMCONVERSION']);
+                           });
                     });
                 });
                 $q->where('entry_type', '!=', 'EMPTOHEAD');
@@ -135,6 +144,11 @@ class ReportService
                     $q3->where('entry_type', '!=', 'HEADTOHEAD')
                        ->orWhere('given_to', $userId);
                 });
+            } else {
+                $q->where(function ($q2) use ($allMappedIds) {
+                    $q2->whereIn('given_to', $allMappedIds)
+                       ->orWhereIn('given_by', $allMappedIds);
+                });
             }
             
             $outEntryTypes = ['NORMAL', 'CashToGold', 'OUT_CASH_CONVERTER', 'IN_CASH_CONVERTER', 'GOLDCASHCONVERSION'];
@@ -147,7 +161,7 @@ class ReportService
         });
 
         // Apply IN Conditions
-        $inQuery->where(function ($q) use ($userId, $retailerId) {
+        $inQuery->where(function ($q) use ($userId, $retailerId, $allMappedIds) {
             if ($retailerId) {
                 $q->where(function ($q2) use ($retailerId) {
                     $q2->where('retailer_id', $retailerId)
@@ -160,7 +174,10 @@ class ReportService
                            ->where('is_receiver_completed', 0);
                     })->orWhere(function ($q4) {
                         $q4->where('entry_type', '!=', 'EMPTOEMP')
-                           ->where('is_completed', 0);
+                           ->where(function ($q5) {
+                               $q5->where('is_completed', 0)
+                                  ->orWhereIn('type', ['ITEMCHANGE', 'ITEMCONVERSION']);
+                           });
                     });
                 });
                 $q->where(function ($q3) use ($retailerId) {
@@ -179,12 +196,20 @@ class ReportService
                            ->where('is_receiver_completed', 0);
                     })->orWhere(function ($q4) {
                         $q4->where('entry_type', '!=', 'EMPTOEMP')
-                           ->where('is_completed', 0);
+                           ->where(function ($q5) {
+                               $q5->where('is_completed', 0)
+                                  ->orWhereIn('type', ['ITEMCHANGE', 'ITEMCONVERSION']);
+                           });
                     });
                 });
                 $q->where(function ($q3) use ($userId) {
                     $q3->where('entry_type', '!=', 'HEADTOHEAD')
                        ->orWhere('given_to', $userId);
+                });
+            } else {
+                $q->where(function ($q2) use ($allMappedIds) {
+                    $q2->whereIn('given_to', $allMappedIds)
+                       ->orWhereIn('given_by', $allMappedIds);
                 });
             }
             
@@ -220,11 +245,11 @@ class ReportService
         }
 
         // DB-level Aggregation Function (Memory efficient for large datasets)
-        $calculateTotals = function ($query, $isOut) use ($userId, $retailerId) {
+        $calculateTotals = function ($query, $isOut) use ($userId, $retailerId, $headId) {
             // PostgreSQL requires proper casting or type checking in CASE WHEN.
             // Since we added columns to DB, we can do raw SQL aggregation safely.
             
-            $targetId = $retailerId ?: $userId;
+            $targetId = $retailerId ?: ($userId ?: $headId);
             $idColumn = $retailerId ? 'retailer_id' : ($isOut ? 'given_to' : 'given_by');
 
             $totals = $query->selectRaw("
@@ -266,10 +291,15 @@ class ReportService
                 'page_no' => $pageNoOut,
                 'page_size' => $pageSize,
                 'records' => $outRecords->map(function ($record) {
+                    $itemName = $record->item ? $record->item->item_name : null;
+                    if (in_array($record->type, ['ITEMCHANGE', 'ITEMCONVERSION']) && $record->toItem) {
+                        $itemName = "{$itemName} => {$record->toItem->item_name}";
+                    }
                     return [
                         'stock_id' => $record->stock_id,
                         'entry_type' => $record->entry_type,
                         'stock_type' => $record->stock_type,
+                        'type' => $record->type,
                         'grams' => $record->grams,
                         'touch' => $record->touch,
                         'purity' => $record->purity,
@@ -277,7 +307,9 @@ class ReportService
                         'added_at' => $record->added_at,
                         'remarks' => $record->remarks,
                         'item_id' => $record->item_id,
-                        'item_name' => $record->item ? $record->item->item_name : null,
+                        'item_name' => $itemName,
+                        'to_item_id' => $record->to_item_id,
+                        'to_item_name' => $record->toItem ? $record->toItem->item_name : null,
                         'given_by_name' => $record->givenBy ? $record->givenBy->name : null,
                         'given_to_name' => $record->givenTo ? $record->givenTo->name : null,
                     ];
@@ -288,10 +320,15 @@ class ReportService
                 'page_no' => $pageNoIn,
                 'page_size' => $pageSize,
                 'records' => $inRecords->map(function ($record) {
+                    $itemName = $record->item ? $record->item->item_name : null;
+                    if (in_array($record->type, ['ITEMCHANGE', 'ITEMCONVERSION']) && $record->toItem) {
+                        $itemName = "{$itemName} <= {$record->toItem->item_name}";
+                    }
                     return [
                         'stock_id' => $record->stock_id,
                         'entry_type' => $record->entry_type,
                         'stock_type' => $record->stock_type,
+                        'type' => $record->type,
                         'grams' => $record->grams,
                         'touch' => $record->touch,
                         'purity' => $record->purity,
@@ -299,7 +336,9 @@ class ReportService
                         'added_at' => $record->added_at,
                         'remarks' => $record->remarks,
                         'item_id' => $record->item_id,
-                        'item_name' => $record->item ? $record->item->item_name : null,
+                        'item_name' => $itemName,
+                        'to_item_id' => $record->to_item_id,
+                        'to_item_name' => $record->toItem ? $record->toItem->item_name : null,
                         'given_by_name' => $record->givenBy ? $record->givenBy->name : null,
                         'given_to_name' => $record->givenTo ? $record->givenTo->name : null,
                     ];
@@ -412,6 +451,9 @@ class ReportService
         $query = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo', 'bill'])
             ->where('is_freezed', false);
 
+        $mappedEmployeeIds = \App\Models\HeadEmployeeMapping::where('head_id', $headId)->pluck('employee_id')->toArray();
+        $allMappedIds = array_unique(array_merge([$headId], $mappedEmployeeIds));
+
         // 1. User-wise / Retailer-wise filter
         if ($userId) {
             $query->where(function (Builder $q) use ($userId) {
@@ -422,9 +464,9 @@ class ReportService
                 $q->where('retailer_id', $retailerId)->orWhere('to_retailer_id', $retailerId);
             });
         } else {
-            // General HEAD perspective filter
-            $query->where(function (Builder $q) use ($headId) {
-                $q->where('given_by', $headId)->orWhere('given_to', $headId);
+            // General HEAD perspective filter: scope to Head and mapped users
+            $query->where(function (Builder $q) use ($allMappedIds) {
+                $q->whereIn('given_by', $allMappedIds)->orWhereIn('given_to', $allMappedIds);
             })->where('remarks', '!=', 'CASH_TO_GOLD');
         }
 
@@ -525,23 +567,38 @@ class ReportService
             if (is_array($snapshot)) {
                 if ($userId) {
                     $side = ($stock->given_by == $userId) ? 'given_by_details' : 'given_to_details';
-                    $obGrams = $snapshot[$side]['ob']['item_details']['ob_grams'] ?? 0;
-                    $cbGrams = $snapshot[$side]['cb']['item_details']['cb_grams'] ?? 0;
-                    $obPurity = $snapshot[$side]['ob']['item_details']['ob_purity'] ?? 0;
-                    $cbPurity = $snapshot[$side]['cb']['item_details']['cb_purity'] ?? 0;
                 } elseif ($retailerId) {
                     $side = ($stock->retailer_id == $retailerId) ? 'retailer' : 'to_retailer';
+                } else {
+                    // Default HEAD view
+                    $side = ($stock->given_by == $headId) ? 'given_by_details' : 'given_to_details';
+                }
+
+                if (!isset($snapshot[$side])) {
+                    $side = isset($snapshot['given_by_details']) ? 'given_by_details' : (isset($snapshot['given_to_details']) ? 'given_to_details' : array_key_first($snapshot));
+                }
+
+                if ($retailerId && isset($snapshot[$side]['ob']['tot_ob_grams'])) {
                     $obGrams = $snapshot[$side]['ob']['tot_ob_grams'] ?? 0;
                     $cbGrams = $snapshot[$side]['cb']['tot_cb_grams'] ?? 0;
                     $obPurity = $snapshot[$side]['ob']['tot_ob_purity'] ?? 0;
                     $cbPurity = $snapshot[$side]['cb']['tot_cb_purity'] ?? 0;
                 } else {
-                    // Default HEAD view
-                    $side = ($stock->given_by == $headId) ? 'given_by_details' : 'given_to_details';
-                    $obGrams = $snapshot[$side]['ob']['item_details']['ob_grams'] ?? 0;
-                    $cbGrams = $snapshot[$side]['cb']['item_details']['cb_grams'] ?? 0;
-                    $obPurity = $snapshot[$side]['ob']['item_details']['ob_purity'] ?? 0;
-                    $cbPurity = $snapshot[$side]['cb']['item_details']['cb_purity'] ?? 0;
+                    // Check whether this record corresponds to to_item_details in snapshot
+                    $useToItem = false;
+                    if (isset($snapshot[$side]['ob']['to_item_details']['item_id']) && 
+                        $snapshot[$side]['ob']['to_item_details']['item_id'] == $stock->item_id) {
+                        $useToItem = true;
+                    } elseif (in_array($stock->type, ['ITEMCHANGE', 'ITEMCONVERSION']) && $stock->stock_type === 'IN') {
+                        $useToItem = true;
+                    }
+
+                    $itemKey = ($useToItem && isset($snapshot[$side]['ob']['to_item_details'])) ? 'to_item_details' : 'item_details';
+
+                    $obGrams = $snapshot[$side]['ob'][$itemKey]['ob_grams'] ?? 0;
+                    $cbGrams = $snapshot[$side]['cb'][$itemKey]['cb_grams'] ?? 0;
+                    $obPurity = $snapshot[$side]['ob'][$itemKey]['ob_purity'] ?? 0;
+                    $cbPurity = $snapshot[$side]['cb'][$itemKey]['cb_purity'] ?? 0;
                 }
             } else {
                 // Fallback to columns if no snapshot exists
@@ -564,6 +621,7 @@ class ReportService
                 'given_to_name' => $stock->givenTo->name ?? '-',
                 'stock_type' => $displayStockType,
                 'entry_type' => $stock->entry_type,
+                'type' => $stock->type,
                 'item_name' => $stock->item->item_name ?? '-',
                 'to_item_name' => $stock->toItem->item_name ?? null,
                 'grams' => (float) $stock->grams,
@@ -704,28 +762,58 @@ class ReportService
         $type = $filters['type'] ?? null;
         $perPage = $filters['page_size'] ?? 10;
         
-        $query = StockDetails::with(['item', 'givenBy', 'givenTo', 'addedBy'])
-            ->where('is_completed', 0)
-            ->where('is_freezed', 0)
-            ->where(function($q) use ($headId) {
-                $q->where('given_by', $headId)->orWhere('given_to', $headId);
-            });
+        $mappedEmployeeIds = \App\Models\HeadEmployeeMapping::where('head_id', $headId)->pluck('employee_id')->toArray();
+        $allMappedIds = array_unique(array_merge([$headId], $mappedEmployeeIds));
+
+        $query = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo', 'addedBy'])
+            ->where('is_freezed', 0);
             
         if ($employeeId) {
             $query->where(function($q) use ($employeeId) {
                 $q->where('given_by', $employeeId)->orWhere('given_to', $employeeId);
             });
+        } else {
+            $query->where(function($q) use ($allMappedIds) {
+                $q->whereIn('given_by', $allMappedIds)->orWhereIn('given_to', $allMappedIds);
+            });
         }
         
         if ($itemId) {
-            $query->where('item_id', $itemId);
+            $query->where(function($q) use ($itemId) {
+                $q->where('item_id', $itemId)
+                  ->orWhere('to_item_id', $itemId);
+            });
         }
         
         if ($type) {
-            if ($type == 'OUT') {
-                $query->where('given_by', $headId);
-            } elseif ($type == 'IN') {
-                $query->where('given_to', $headId);
+            if ($employeeId) {
+                if ($type === 'OUT') {
+                    $query->where(function($q) use ($employeeId) {
+                        $q->where('stock_type', 'OUT')
+                          ->orWhere(function($sub) use ($employeeId) {
+                              $sub->where('given_by', $employeeId)->where('given_to', '!=', $employeeId);
+                          });
+                    });
+                } elseif ($type === 'IN') {
+                    $query->where(function($q) use ($employeeId) {
+                        $q->where('stock_type', 'IN')
+                          ->orWhere(function($sub) use ($employeeId) {
+                              $sub->where('given_to', $employeeId)->where('given_by', '!=', $employeeId);
+                          });
+                    });
+                }
+            } else {
+                if ($type === 'OUT') {
+                    $query->where(function($q) use ($headId) {
+                        $q->where('stock_type', 'OUT')
+                          ->orWhere('given_by', $headId);
+                    });
+                } elseif ($type === 'IN') {
+                    $query->where(function($q) use ($headId) {
+                        $q->where('stock_type', 'IN')
+                          ->orWhere('given_to', $headId);
+                    });
+                }
             }
         }
         
@@ -746,20 +834,47 @@ class ReportService
         $paginated = $query->orderBy('stock_id', 'desc')->paginate($perPage);
 
         // Format the output specifically for the frontend Transaction History table
-        $paginated->getCollection()->transform(function ($txn) use ($headId) {
-            $stockType = '';
+        $paginated->getCollection()->transform(function ($txn) use ($headId, $employeeId) {
+            $stockType = $txn->stock_type ?: 'OUT';
             $userName = '';
             $userId = null;
             $remarks = $txn->remarks;
             
-            if ($txn->given_by == $headId) {
-                $stockType = 'OUT';
-                $userName = $txn->givenTo ? $txn->givenTo->name : $txn->remarks;
-                $userId = $txn->given_to;
-            } elseif ($txn->given_to == $headId) {
-                $stockType = 'IN';
-                $userName = $txn->givenBy ? $txn->givenBy->name : $txn->remarks;
-                $userId = $txn->given_by;
+            if ($txn->type === 'ITEMCHANGE' || $txn->type === 'ITEMCONVERSION') {
+                $stockType = $txn->stock_type ?: 'OUT';
+                $user = $txn->givenBy ?: $txn->givenTo;
+                $userName = $user ? $user->name : '';
+                $userId = $user ? $user->user_id : null;
+            } elseif ($employeeId) {
+                if ($txn->given_by == $employeeId && $txn->given_to != $employeeId) {
+                    $stockType = 'OUT';
+                    $userName = $txn->givenTo ? $txn->givenTo->name : $txn->remarks;
+                    $userId = $txn->given_to;
+                } elseif ($txn->given_to == $employeeId && $txn->given_by != $employeeId) {
+                    $stockType = 'IN';
+                    $userName = $txn->givenBy ? $txn->givenBy->name : $txn->remarks;
+                    $userId = $txn->given_by;
+                } else {
+                    $stockType = $txn->stock_type ?: 'IN';
+                    $user = $txn->givenTo ?: $txn->givenBy;
+                    $userName = $user ? $user->name : '';
+                    $userId = $user ? $user->user_id : null;
+                }
+            } else {
+                if ($txn->given_by == $headId && $txn->given_to != $headId) {
+                    $stockType = 'OUT';
+                    $userName = $txn->givenTo ? $txn->givenTo->name : $txn->remarks;
+                    $userId = $txn->given_to;
+                } elseif ($txn->given_to == $headId && $txn->given_by != $headId) {
+                    $stockType = 'IN';
+                    $userName = $txn->givenBy ? $txn->givenBy->name : $txn->remarks;
+                    $userId = $txn->given_by;
+                } else {
+                    $stockType = $txn->stock_type ?: ($txn->given_by == $headId ? 'OUT' : 'IN');
+                    $user = ($stockType === 'OUT') ? ($txn->givenTo ?: $txn->givenBy) : ($txn->givenBy ?: $txn->givenTo);
+                    $userName = $user ? $user->name : $txn->remarks;
+                    $userId = $user ? $user->user_id : null;
+                }
             }
 
             // Clean up remarks if they were used for the User column (e.g., MELTING)
@@ -771,12 +886,15 @@ class ReportService
             if ($txn->type === 'ITEMCHANGE' || $txn->type === 'ITEMCONVERSION') {
                 $toItemName = $txn->toItem ? $txn->toItem->item_name : '';
                 if ($toItemName) {
-                    $itemName = $itemName . ' => ' . $toItemName;
+                    if ($stockType === 'OUT') {
+                        $itemName = $itemName . ' (OUT => ' . $toItemName . ')';
+                    } else {
+                        $itemName = $itemName . ' (IN <= ' . $toItemName . ')';
+                    }
                 }
                 
                 $fromUser = $txn->givenBy ? $txn->givenBy->name : '';
                 $toUser = $txn->givenTo ? $txn->givenTo->name : '';
-                // Append conversion remarks if it's a direct transfer
                 $remarks = $remarks ?: "From : {$fromUser} => To : {$toUser}";
             }
 
@@ -784,6 +902,7 @@ class ReportService
                 'id' => $txn->stock_id,
                 'item_name' => $itemName,
                 'stock_type' => $stockType,
+                'type' => $txn->type,
                 'grams' => round((float)$txn->grams, 3),
                 'pcs' => (int)$txn->no_of_pcs,
                 'touch' => round((float)$txn->touch, 3),

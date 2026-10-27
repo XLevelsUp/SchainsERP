@@ -7,6 +7,7 @@ use App\Models\CashTxnImage;
 use App\Models\UserDetail;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use App\Services\SystemLogService;
 
 class CashAutoEntryService
 {
@@ -120,6 +121,17 @@ class CashAutoEntryService
 
                 $createdTransactions[] = $txn->load(['images']);
             }
+
+            SystemLogService::log(
+                'CASH',
+                'CASH_AUTO_ENTRY',
+                $addedBy,
+                count($createdTransactions) > 0 ? $createdTransactions[0]->txn_id : null,
+                'cash_txn_details',
+                "Cash Auto Entry executed with " . count($createdTransactions) . " transactions",
+                $data,
+                ['total_transactions' => count($createdTransactions)]
+            );
 
             return $createdTransactions;
         });

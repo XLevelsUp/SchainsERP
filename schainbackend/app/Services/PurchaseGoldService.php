@@ -11,6 +11,7 @@ use App\Models\UserDetail;
 use App\Models\BankDetail;
 use Illuminate\Support\Facades\DB;
 use App\Models\CashTxnImage;
+use App\Services\SystemLogService;
 
 class PurchaseGoldService extends BaseStockService
 {
@@ -321,6 +322,17 @@ class PurchaseGoldService extends BaseStockService
                     }
                 }
             }
+
+            SystemLogService::log(
+                'CASH',
+                'PURCHASE_GOLD',
+                $addedBy,
+                $record->purchase_gold_id ?? $record->id,
+                'purchase_golds',
+                "Purchase Gold of {$record->total_grams}g for {$record->total_cash} (Touch: {$record->touch})",
+                $data,
+                ['total_cash' => $record->total_cash, 'total_grams' => $record->total_grams, 'touch' => $record->touch]
+            );
 
             return $record->load(['amountSources', 'cashTxnDetails', 'head', 'customer', 'item']);
         });

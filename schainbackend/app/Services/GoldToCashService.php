@@ -11,6 +11,7 @@ use App\Models\StockDetails;
 use App\Models\UserDetail;
 use Illuminate\Support\Facades\DB;
 use App\Models\CashTxnImage;
+use App\Services\SystemLogService;
 
 class GoldToCashService extends BaseStockService
 {
@@ -264,6 +265,17 @@ class GoldToCashService extends BaseStockService
                     }
                 }
             }
+
+            SystemLogService::log(
+                'CASH',
+                'GOLD_TO_CASH',
+                $addedBy,
+                $record->cash_to_gold_id,
+                'cash_to_golds',
+                "Gold to Cash of {$record->total_grams}g for {$record->total_cash} (Touch: {$record->touch})",
+                $data,
+                ['total_cash' => $record->total_cash, 'total_grams' => $record->total_grams, 'touch' => $record->touch]
+            );
 
             return $record->load(['amountSources', 'cashTxnDetails', 'head', 'customer', 'item']);
         });

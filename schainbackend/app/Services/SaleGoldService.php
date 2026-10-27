@@ -11,6 +11,7 @@ use App\Models\UserDetail;
 use App\Models\BankDetail;
 use Illuminate\Support\Facades\DB;
 use App\Models\CashTxnImage;
+use App\Services\SystemLogService;
 
 class SaleGoldService extends BaseStockService
 {
@@ -340,6 +341,17 @@ class SaleGoldService extends BaseStockService
                     }
                 }
             }
+
+            SystemLogService::log(
+                'CASH',
+                'SALE_GOLD',
+                $addedBy,
+                $record->sale_gold_id ?? $record->id,
+                'sale_golds',
+                "Sale Gold of {$record->total_grams}g for {$record->total_cash} (Touch: {$record->touch})",
+                $data,
+                ['total_cash' => $record->total_cash, 'total_grams' => $record->total_grams, 'touch' => $record->touch]
+            );
 
             return $record->load(['amountSources', 'cashTxnDetails', 'head', 'customer', 'item']);
         });
