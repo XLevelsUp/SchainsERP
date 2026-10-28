@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseFileInput from '@/components/ui/BaseFileInput.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { rolesApi } from '@/lib/rolesApi'
 import { ApiError } from '@/lib/api'
@@ -68,6 +69,7 @@ function makeEmptyForm(): UserDetailFormValues {
     item_mappings: [],
     head_mappings: [],
     cash_head_mappings: [],
+    aadhar_image: null,
   }
 }
 
@@ -76,22 +78,30 @@ const formError = ref('')
 const isSaving = ref(false)
 const fieldErrors = reactive<Record<string, string>>({})
 
+// Proof is one image; BaseFileInput's model is a File[] list.
+const proofFiles = computed<File[]>({
+  get: () => (form.aadhar_image ? [form.aadhar_image] : []),
+  set: (files) => {
+    form.aadhar_image = files[0] ?? null
+  },
+})
+
 function clearFieldErrors() {
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
 }
 
 // Mirrors the max-length rules enforced by UserDetailController::store().
+// Signature and mailing name are optional here — userDetailsApi's
+// toPayload() fills blanks with the placeholders store() needs.
 const requiredFields: { key: keyof UserDetailFormValues; label: string; maxLength: number }[] = [
   { key: 'name', label: 'Name', maxLength: 55 },
   { key: 'user_name', label: 'Username', maxLength: 55 },
   { key: 'address', label: 'Address', maxLength: 400 },
-  { key: 'signature', label: 'Signature', maxLength: 45 },
-  { key: 'code', label: 'Code', maxLength: 255 },
   { key: 'phone_no', label: 'Phone number', maxLength: 15 },
-  { key: 'proff', label: 'Proof', maxLength: 155 },
-  { key: 'system_id', label: 'System ID', maxLength: 255 },
-  { key: 'mailing_name', label: 'Mailing name', maxLength: 255 },
 ]
+
+// store(): aadhar_image is image|mimes:jpg,jpeg,png,webp|max:5120 (KB).
+const MAX_PROOF_BYTES = 5120 * 1024
 
 function validate(): boolean {
   clearFieldErrors()
@@ -112,6 +122,16 @@ function validate(): boolean {
 
   if (form.phone_no.trim() && !/^\d{6,15}$/.test(form.phone_no.trim())) {
     fieldErrors.phone_no = 'Phone number must be 6-15 digits.'
+  }
+
+  if (form.signature.length > 45) {
+    fieldErrors.signature = 'Signature must be 45 characters or fewer.'
+  }
+  if (form.mailing_name.length > 255) {
+    fieldErrors.mailing_name = 'Mailing name must be 255 characters or fewer.'
+  }
+  if (form.aadhar_image && form.aadhar_image.size > MAX_PROOF_BYTES) {
+    fieldErrors.aadhar_image = 'Proof image must be 5 MB or smaller.'
   }
 
   if (form.password.trim().length < 6) {
@@ -208,8 +228,8 @@ async function handleSubmit() {
         <BaseInput
           id="mailing_name"
           v-model="form.mailing_name"
-          label="Mailing name"
-          required
+          label="Mailing name (optional)"
+          placeholder="Defaults to name"
           size="sm"
           maxlength="255"
           :error="fieldErrors.mailing_name"
@@ -217,31 +237,24 @@ async function handleSubmit() {
         <BaseInput
           id="signature"
           v-model="form.signature"
-          label="Signature"
-          required
+          label="Signature (optional)"
           size="sm"
           maxlength="45"
           :error="fieldErrors.signature"
         />
-        <BaseInput id="code" v-model="form.code" label="Code" required size="sm" maxlength="255" :error="fieldErrors.code" />
-        <BaseInput
-          id="proff"
-          v-model="form.proff"
-          label="Proof"
-          required
-          size="sm"
-          maxlength="155"
-          :error="fieldErrors.proff"
-        />
-        <BaseInput
-          id="system_id"
-          v-model="form.system_id"
-          label="System ID"
-          required
-          size="sm"
-          maxlength="255"
-          :error="fieldErrors.system_id"
-        />
+        <div class="flex flex-col gap-1">
+          <BaseFileInput
+            id="aadhar_image"
+            v-model="proofFiles"
+            label="Proof image (optional)"
+            hint="JPG, PNG or WEBP, up to 5 MB."
+            compact
+            :multiple="false"
+          />
+          <p v-if="fieldErrors.aadhar_image" class="text-sm text-red-600">
+            {{ fieldErrors.aadhar_image }}
+          </p>
+        </div>
         <BaseSelect
           id="role_id"
           v-model="form.role_id"

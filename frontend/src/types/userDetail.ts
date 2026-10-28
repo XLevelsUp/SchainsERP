@@ -70,6 +70,34 @@ export interface UserDetail extends Partial<UserFeatureFlags> {
   //
   // Optional because older responses and the list endpoint's trimmed rows
   // may not carry them.
+
+  // Relations eager-loaded by GET /user-details/{id} (show()) only — absent
+  // from list rows and from store()/update() responses.
+  item_mappings?: UserItemMapping[]
+  head_employee_mappings?: UserHeadMapping[]
+  cash_head_employee_mappings?: UserHeadMapping[]
+}
+
+// users_items_mappings row as show() returns it. The totals are running
+// balances the transaction screens keep updated, sent back as decimal:4
+// strings ("90.0000").
+export interface UserItemMapping {
+  id: number
+  item_id: number
+  user_id: number
+  added_at: string
+  item_grams_total: string | null
+  item_purity_total: string | null
+  last_txn_date: string | null
+  is_primary: number
+}
+
+// head_employee_mappings / cash_head_employee_mappings row — same columns.
+export interface UserHeadMapping {
+  id: number
+  head_id: number
+  employee_id: number
+  added_at: string
 }
 
 // The 40 operator-settable feature toggles, keyed by column name.
@@ -160,4 +188,8 @@ export interface UserDetailFormValues extends UserFeatureFlags {
   item_mappings: ItemMappingInput[]
   head_mappings: HeadMappingInput[]
   cash_head_mappings: HeadMappingInput[]
+  // ID-proof image, uploaded as store()/update()'s `aadhar_image` file
+  // field. Optional so forms that never collect it (AddRetailerModal) don't
+  // have to carry it; null/absent = keep whatever is already stored.
+  aadhar_image?: File | null
 }

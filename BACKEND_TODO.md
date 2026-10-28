@@ -4,10 +4,11 @@ For the backend team. **Only things that still need doing.** Anything fixed is
 deleted from this file — the history lives in
 [`frontend/PENDING_WORK.md`](frontend/PENDING_WORK.md).
 
-**Checked against:** `schainbackend/` as it stands on **2026-10-08**, up to and
-including **PR #50** (`c4dd0445`). Read from source, and for PR #50 confirmed
-against the running API. Nothing here is copied forward untested — items get
-re-verified each pass, and anything fixed is deleted.
+**Checked against:** `schainbackend/` as it stands on **2026-10-15**. The
+backend code has not changed since **PR #50** (`c4dd0445`) — the two commits
+after it (`56a77ccb`, `dcc3b977`) are frontend-only, and `origin` was fetched
+with nothing unpulled. Every item below was still re-read from source this
+pass rather than carried forward. Anything fixed is deleted.
 
 The `#n` tags point at the matching entry in `PENDING_WORK.md` if you want the
 full history.
@@ -62,7 +63,7 @@ integer with a comment — that is what caused this.
 
 ---
 
-## 2. The metal picker is broken on every database — `system_settings` is never seeded  *(new)*
+## 2. The metal picker is broken on every database — `system_settings` is never seeded
 
 **Where:** `app/Http/Controllers/Api/StockDetailsController.php:616`,
 `app/Services/ReportService.php:818`, and the missing seeder for
@@ -103,7 +104,9 @@ hand-configured — which is all of them.
 
 **The same gap takes out a second endpoint.** `ReportService:818` reads
 `live_metal_report_items` the same way; with it unset, Live Metal Balance
-throws a validation error unless the caller passes `item_id` explicitly.
+throws a validation error unless the caller passes `item_id` explicitly. (Our
+screen always sends `item_id`, resolved by name, so it works either way — this
+bites anyone else calling the endpoint.)
 
 **Fix:** ship a seeder for `system_settings` covering at least
 `metal_popup_items` and `live_metal_report_items`, resolving the items **by
@@ -128,9 +131,9 @@ by the settings list. Those two will disagree as soon as the list holds
 anything other than exactly the items named "Metal". We will move the
 frontend onto `GET /settings`; flagging it so the drift is on the record.
 
-## 3. Any signed-in user can read any head's reports  *(new)*
+---
 
-**Where:** `app/Http/Controllers/Api/StockDetailsController.php:495` and `:516`
+## 3. Any signed-in user can read any head's books
 
 ```php
 $headId = $request->query('head_id') ?? $this->getActingUserId($request);
@@ -138,20 +141,35 @@ $headId = $request->query('head_id') ?? $this->getActingUserId($request);
 
 **The problem:** we asked for a `head_id` override so an admin could pull
 another head's report, and you added it — thank you. But there is **no check on
-who is allowed to use it.** Any authenticated user can pass
-`?head_id=<anyone>` and read that head's full Items OB/CB and Consolidated
-ledger. An employee can read their head's books.
+who is allowed to use it.** Any authenticated user can pass another user's id
+and read that ledger. An employee can read their head's books.
 
-The same applies to the two export routes (`:36`, `:63`), which hand the whole
-filtered set back as a CSV.
+Re-checking this pass found the same unchecked pattern on more than the two
+reports first listed — every one of these takes the id straight from the
+query string:
+
+| Endpoint | Where (`app/Http/Controllers/Api/…`) | Takes |
+|---|---|---|
+| `GET /stock/reports/items-obcb` | `StockDetailsController.php:495` | `head_id` |
+| `GET /stock/reports/consolidated` | `StockDetailsController.php:516` | `head_id` |
+| `GET /stock/reports/items-obcb/export` (CSV) | `StockDetailsController.php:36` | `head_id` |
+| `GET /stock/reports/consolidated/export` (CSV) | `StockDetailsController.php:63` | `head_id` |
+| `GET /stock-details/history` | `StockDetailsController.php:108` | `head_id` |
+| `GET /stock/reports/id-wise` | `StockDetailsController.php:459` | `head_id` |
+| `GET /stock-details/cash-transaction-history` | `StockDetailsController.php:537` | `head_id` |
+| `GET /stock-details/head-stocks` | `StockDetailsController.php:672` | `user_id` |
+| `GET /cash-txn-details/in-history`, `out-history` | `CashTxnDetailController.php:33`, `:103` | `head_id` |
+| `GET /cash-txn-details/print-report` | `CashTxnDetailController.php:173` | `head_id` |
 
 **Fix:** allow the override only for HEAD (or admin) accounts, the way
 `getLiveMetalBalance` does. Everyone else gets their own data regardless of
-what they pass.
+what they pass. Please keep it working *for heads* — the Stock and Cash
+Management screens deliberately pass another user's id to show that user's
+ledger to the head operating the screen.
 
 ---
 
-## 3. Every user sees every order  *(new)*
+## 4. Every user sees every order
 
 **Where:** `app/Http/Controllers/Api/OrderController.php:11`
 
@@ -175,13 +193,16 @@ paginate it, and add the filters the list screen will need — at minimum
 
 ---
 
-## 4. Five accounts share the password `password`  `#28`
+## 5. Five accounts share the password `password`  `#28`
 
 **Status:** the `/run-seeders` and `/run-migrations` routes are **gone** —
 thank you, that was the urgent half.
 
-**What is left:** the accounts those seeders created. Verified against the live
-Render database on **2026-09-16**:
+**What is left:** the accounts those seeders created. The seeders themselves
+still hash the literal `'password'` (re-checked 2026-10-15:
+`HeadUserSeeder.php:19`, `StockTestDataSeeder.php:72` and `:99`,
+`UserDetailSeeder.php` ×4), so any fresh environment gets them again.
+Verified against the live Render database on **2026-09-16**:
 
 ```
   1 head_admin    role_id=3  password = "password"
@@ -193,9 +214,9 @@ Render database on **2026-09-16**:
 
 Two of them are HEAD. The API is public at `api.lensnstories.com`.
 
-**Not re-checked today** — no database access from this session, so please
-confirm before acting. If they are still there: delete them, or set real
-passwords.
+**The live database has not been re-checked since** — please confirm before
+acting. If they are still there: delete them, or set real passwords. And
+change the seeders so new environments don't recreate them.
 
 Also worth knowing: `AuthController` blocks deactivated users at login (good),
 but a token **already issued** keeps working until it expires. So switching an
@@ -206,7 +227,7 @@ does.
 
 # 🟠 Soon
 
-## 5. Live Metal Balance still crashes with a date + time filter  `#18`
+## 6. Live Metal Balance still crashes with a date + time filter  `#18`
 
 **Where:** `app/Services/ReportService.php:855`
 
@@ -240,7 +261,7 @@ returns a 500. The frontend does not expose those filters for this reason.
 
 ---
 
-## 6. Four endpoints still read `X-User-ID` and ignore the token  `#2` `#37`
+## 7. Four endpoints still read `X-User-ID` and ignore the token  `#2` `#37`
 
 Every route sits behind `auth:api`, so `$request->user()` is always available.
 Most of the code reads it. Four places do not:
@@ -273,14 +294,15 @@ when you change this.
 
 ---
 
-## 7. Reminders: four follow-ups from PR #50  *(new)*
+## 8. Reminders: four follow-ups from PR #50
 
 The feature itself is **done** — thank you. The table, model, controller and
 `apiResource('reminders')` all landed in PR #50 and the schema matched what we
 proposed field for field. The screen is live and persisting.
 
 Four smaller things came out of wiring it up. All verified against the running
-API on 2026-10-08, not read off the controller.
+API on 2026-10-08, not read off the controller; all four still stand in
+`ReminderController` as of 2026-10-15.
 
 **a. It is the only endpoint with no response envelope.** Everything else in
 this API returns `{success, message, data}`. `ReminderController` returns the
@@ -325,27 +347,7 @@ second matches what the frontend already did.)*
 
 ---
 
-## 8. `live_metal_report_items` has no seeder  *(new)*
-
-**Where:** `app/Services/ReportService.php:816-825`
-
-Live Metal Balance now resolves its item like this: use `item_id` if given,
-otherwise read the `live_metal_report_items` system setting, otherwise throw a
-validation error.
-
-That is a good design — much better than the hardcoded `2` it replaced. But
-`system_settings` has a migration and **no seeder**, so on a fresh database the
-setting is empty and the endpoint fails unless the caller passes `item_id`.
-
-**Fix:** seed `live_metal_report_items` with the Metal item, ideally looked up
-by name so it survives differing ids between environments.
-
-(The frontend always sends `item_id` — resolved by name — so our screen works
-either way. This is for anyone else calling the endpoint.)
-
----
-
-## 9. Missing pieces for the legacy Stock Details screen  *(new)*
+## 9. Missing pieces for the legacy Stock Details screen
 
 We are rebuilding that screen against five screenshots of the old software
 (2026-10-11). Most of it maps onto endpoints you already have. Three things
@@ -358,7 +360,7 @@ each. `RoleSeeder` defines only `1 CUSTOMER · 2 EMPLOYEE · 3 HEAD ·
 
 Please add it as a new role rather than reusing PURCHASE — they are
 different things in the old system, and overloading one would make the
-numbering confusion in [§1](#1-wastage-is-added-to-the-wrong-persons-balance-21)
+numbering confusion in [§1](#1-wastage-is-added-to-the-wrong-persons-balance--21)
 worse. The frontend matches on the role **name**, so it will pick INVEST up
 automatically the moment the seeder runs; nothing needs coordinating.
 
@@ -377,23 +379,46 @@ absent.
 
 ---
 
+## 10. Editing a user silently drops its item / head / cash-head mappings
+
+`UserDetailController::show()` eager-loads `itemMappings`,
+`headEmployeeMappings` and `cashHeadEmployeeMappings`, and the Users screen
+now loads all three into the edit form. But `update()` never reads
+`item_mappings`, `head_mappings` or `cash_head_mappings` — only `store()`
+does. The frontend sends them on `PUT /user-details/{id}` in exactly the
+shape `store()` accepts (`head_mappings: [{ head_id }]`, etc.), and they are
+ignored, so any change to a user's assigned items, heads or cash heads made
+from the edit form is lost on save with a `200`.
+
+Please have `update()` apply them when the key is present — **replace** the
+set, the way `PUT /head-employee-mappings/{employee_id}` already does for
+heads, rather than re-inserting the way `store()` does (re-inserting would
+duplicate every mapping on each save). For item mappings, note that
+`item_grams_total` / `item_purity_total` are live running balances: decide
+whether an edit should be allowed to overwrite them or only add/remove rows
+and toggle `is_primary`.
+
+Until then the edit form shows an **amber banner** saying mapping changes
+are not saved, and points to the Head Employee Mappings screen for
+reports-to changes.
+
+---
+
 # 🟡 When you can
 
-## 10. The API testing doc is well behind the code  `#32`
+## 11. The API testing doc is well behind the code  `#32`
 
 `frontend/Stock Outward Module API Testing & Param.txt` was last extended on
-2026-09-11 (sections 36–52). Since then these have shipped with **no
-documentation at all**:
+2026-09-23 (`e2fe5953`). That update covered `apiResource('settings')`,
+`POST /fitems`, `POST /stock/hide`, both CSV exports, and `DELETE /orders/{id}`
+— thank you. These still have **no documentation at all**:
 
 - `GET /me`
 - `GET /stock-details/available-lots`
-- `POST /stock/hide`, `POST /stock/unhide`
+- `POST /stock/unhide`
 - `POST /stock/cash-out`
 - `GET /report/daywise-grand`
-- `GET /stock/reports/items-obcb/export`, `/consolidated/export`
-- `apiResource('settings')`
-- `apiResource('orders')`
-- `POST /fitems`
+- `apiResource('orders')` — everything except delete (list, show, create, update)
 - the login **403** for deactivated accounts
 
 And one active trap: **section 40 (Live Metal Balance) lists the query
@@ -404,11 +429,33 @@ balances under a "Metal" heading.
 Everything the frontend needed for these came from reading the request classes
 and controllers.
 
-## 11. One stale `sanctum` reference  `#15`
+## 12. One stale `sanctum` reference  `#15`
 
 `app/Http/Controllers/Api/AuthController.php:112` — the OpenAPI annotation
 still says `security={{"sanctum":{}}}`. The app uses Passport. Cosmetic, but it
 goes into the generated API docs.
+
+---
+
+## 13. User fields the screens no longer collect are still required
+
+The Users create/edit forms (and the Add User modal) no longer show **Code**
+or **System ID**, make **Mailing name** and **Signature** optional, and
+collect **Proof** as an image upload sent as `aadhar_image`, not as text.
+But `UserDetailController::store()` still validates `code`, `system_id`
+(`unique`), `signature`, `mailing_name` and `proff` as `required|string`,
+and all five columns are `NOT NULL` in `create_user_details_table`.
+
+Nothing is broken — the frontend fills blanks with the same placeholders
+`PhoneBookController::store()` already uses (`'-'` for code / signature /
+proff, the user's name for mailing name, a stamped `USER-<timestamp>` for
+system_id so `unique` passes). But those placeholders are now real rows in
+`user_details`. If you want the columns kept, please make them `nullable`
+(validation **and** migration) so the frontend can send nothing instead.
+
+Also worth confirming: is `proff` (varchar 155) the legacy slot for the
+proof document's path? If proof now lives in `aadhar_image`, `proff` could
+be dropped from `store()`'s required list entirely.
 
 ---
 
@@ -419,7 +466,8 @@ so nobody re-reports them; detail is in `PENDING_WORK.md`.
 
 | Was | Now |
 |---|---|
-| **Reminders / View Notes had no backend** (`#38`) | **PR #50** — table, model, controller, `apiResource('reminders')`. Schema matched the proposal exactly. Four polish items remain, see [§7](#7-reminders-four-follow-ups-from-pr-50-new) |
+| API doc lacked settings, `POST /fitems`, `/stock/hide`, the CSV exports, order delete | Documented in `e2fe5953` (2026-09-23). The rest is still open, see [§11](#11-the-api-testing-doc-is-well-behind-the-code--32) |
+| **Reminders / View Notes had no backend** (`#38`) | **PR #50** — table, model, controller, `apiResource('reminders')`. Schema matched the proposal exactly. Four polish items remain, see [§8](#8-reminders-four-follow-ups-from-pr-50) |
 | `/run-seeders`, `/run-migrations` public | Routes removed |
 | Login ignored `is_active` | Returns 403 |
 | No `/me` endpoint | Exists, returns feature flags too |
@@ -433,7 +481,7 @@ so nobody re-reports them; detail is in `PENDING_WORK.md`.
 | Mapping `update()` dropped relations | Now re-loads them |
 | Customer Deliver had no backend | `order_details` migration + `OrderController` |
 | No server-side export | Two CSV export routes |
-| Reports had no `head_id` override | Added — but see [#2](#2-any-signed-in-user-can-read-any-heads-reports-new) |
+| Reports had no `head_id` override | Added — but see [§3](#3-any-signed-in-user-can-read-any-heads-books) |
 | One Day Action ignored its `$headId` | Scoped properly |
 | Cash amounts returned in `grams` | Own `amount` field |
 | `added_at` in `DD-MM-YYYY` | Now `Y-m-d H:i:s` |

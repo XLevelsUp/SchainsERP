@@ -101,7 +101,7 @@ Note there is no INVEST. That's the known gap above.
 
 1. **Administration → Users → Add User**
 2. Fill in every required field — Name, Username, Password, Phone, Address,
-   Mailing name, Signature, Code, Proof, System ID, Role
+   Role (Mailing name, Signature and the Proof image are optional)
 3. Set **Role = CUSTOMER**
 4. Save
 

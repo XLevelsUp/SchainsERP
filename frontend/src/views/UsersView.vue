@@ -6,7 +6,9 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseMultiSelect from '@/components/ui/BaseMultiSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
+import BaseFileInput from '@/components/ui/BaseFileInput.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
@@ -113,6 +115,7 @@ function makeEmptyForm(): UserDetailFormValues {
     item_mappings: [],
     head_mappings: [],
     cash_head_mappings: [],
+    aadhar_image: null,
   }
 }
 
@@ -122,6 +125,17 @@ const form = reactive<UserDetailFormValues>(makeEmptyForm())
 const formError = ref('')
 const isSaving = ref(false)
 const isLoadingEditUser = ref(false)
+// Saved proof image of the user being edited (show()'s aadhar_image_url),
+// shown until a replacement is picked.
+const currentProofUrl = ref<string | null>(null)
+
+// Proof is one image; BaseFileInput's model is a File[] list.
+const proofFiles = computed<File[]>({
+  get: () => (form.aadhar_image ? [form.aadhar_image] : []),
+  set: (files) => {
+    form.aadhar_image = files[0] ?? null
+  },
+})
 
 // ----- feature flag helpers (declared after `form`, which they all read) --
 
@@ -148,6 +162,7 @@ function resetForm(values: UserDetailFormValues) {
 
 function openCreateForm() {
   editingId.value = null
+  currentProofUrl.value = null
   resetForm(makeEmptyForm())
   formError.value = ''
   clearFieldErrors()
@@ -164,19 +179,27 @@ async function openEditForm(row: UserDetailListItem) {
   clearFieldErrors()
   isFormOpen.value = true
   isLoadingEditUser.value = true
+  currentProofUrl.value = null
   try {
-    const { user } = await userDetailsApi.get(row.id)
+    const { user, aadhar_image_url } = await userDetailsApi.get(row.id)
+    currentProofUrl.value = aadhar_image_url
     resetForm({
       ...makeEmptyForm(),
       name: user.name,
       user_name: user.user_name,
       address: user.address,
       signature: user.signature,
+      // code / system_id / proff have no inputs any more, but are still
+      // loaded so update() writes the stored values back unchanged rather
+      // than toPayload() replacing them with placeholders.
       code: user.code,
       phone_no: user.phone_no,
       remarks: user.remarks ?? '',
       proff: user.proff,
-      role_id: user.role_id,
+      // UserDetail casts role_id to integer, but the Role picker's options
+      // are String(role.id) — without this the select can't match and shows
+      // empty on edit.
+      role_id: String(user.role_id),
       system_id: user.system_id,
       mailing_name: user.mailing_name,
       customer_commants: user.customer_commants ?? '',
@@ -195,7 +218,18 @@ async function openEditForm(row: UserDetailListItem) {
           user[k] as boolean,
         ]),
       ),
-      // Note: backend show() does not return mappings, so they start empty on edit.
+      // show() eager-loads all three mapping relations; map them back into
+      // the same input shapes the create form uses.
+      item_mappings: (user.item_mappings ?? []).map((m) => ({
+        item_id: m.item_id,
+        item_grams_total: m.item_grams_total ?? '0',
+        item_purity_total: m.item_purity_total ?? '0',
+        is_primary: m.is_primary ? 1 : 0,
+      })),
+      head_mappings: (user.head_employee_mappings ?? []).map((m) => ({ head_id: m.head_id })),
+      cash_head_mappings: (user.cash_head_employee_mappings ?? []).map((m) => ({
+        head_id: m.head_id,
+      })),
     })
   } catch (err) {
     isFormOpen.value = false
@@ -224,12 +258,15 @@ function addItemMapping() {
 function removeItemMapping(index: number) {
   form.item_mappings.splice(index, 1)
 }
-function addHeadMapping() {
-  form.head_mappings.push({ head_id: null })
-}
-function removeHeadMapping(index: number) {
-  form.head_mappings.splice(index, 1)
-}
+// "Reports to" is a multi-select over head ids; form.head_mappings keeps its
+// { head_id } row shape so toPayload() and the request body are unchanged.
+const headIds = computed<number[]>({
+  get: () =>
+    form.head_mappings.map((m) => m.head_id).filter((id): id is number => id !== null),
+  set: (ids) => {
+    form.head_mappings = ids.map((head_id) => ({ head_id }))
+  },
+})
 function addCashHeadMapping() {
   form.cash_head_mappings.push({ head_id: null })
 }
@@ -238,19 +275,27 @@ function removeCashHeadMapping(index: number) {
 }
 
 // Mirrors the max-length rules enforced by UserDetailController::store()/update().
+// Signature and mailing name are optional on this form — toPayload() fills
+// blanks with the placeholders store() needs — so they're length-checked
+// in validate() instead.
 const requiredFields: { key: keyof UserDetailFormValues; label: string; maxLength: number }[] = [
   { key: 'name', label: 'Name', maxLength: 55 },
   { key: 'user_name', label: 'Username', maxLength: 55 },
   { key: 'address', label: 'Address', maxLength: 400 },
-  { key: 'signature', label: 'Signature', maxLength: 45 },
-  { key: 'code', label: 'Code', maxLength: 255 },
   { key: 'phone_no', label: 'Phone number', maxLength: 15 },
-  { key: 'proff', label: 'Proof', maxLength: 155 },
-  { key: 'system_id', label: 'System ID', maxLength: 255 },
-  { key: 'mailing_name', label: 'Mailing name', maxLength: 255 },
 ]
 
+// store()/update(): aadhar_image is image|mimes:jpg,jpeg,png,webp|max:5120 (KB).
+const MAX_PROOF_BYTES = 5120 * 1024
+
 const fieldErrors = reactive<Record<string, string>>({})
+
+// The multi-select can't hold an empty row, so the only head errors left are
+// server-side ones keyed per row (head_mappings.0.head_id) — surface the
+// first under the single control.
+const headMappingsError = computed(
+  () => Object.entries(fieldErrors).find(([key]) => key.startsWith('head_mappings'))?.[1],
+)
 
 function clearFieldErrors() {
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
@@ -277,11 +322,20 @@ function validate(): boolean {
     fieldErrors.phone_no = 'Phone number must be 6-15 digits.'
   }
 
+  if (form.signature.length > 45) {
+    fieldErrors.signature = 'Signature must be 45 characters or fewer.'
+  }
+  if (form.mailing_name.length > 255) {
+    fieldErrors.mailing_name = 'Mailing name must be 255 characters or fewer.'
+  }
   if (form.remarks.length > 255) {
     fieldErrors.remarks = 'Remarks must be 255 characters or fewer.'
   }
   if (form.customer_commants.length > 1500) {
     fieldErrors.customer_commants = 'Customer comments must be 1500 characters or fewer.'
+  }
+  if (form.aadhar_image && form.aadhar_image.size > MAX_PROOF_BYTES) {
+    fieldErrors.aadhar_image = 'Proof image must be 5 MB or smaller.'
   }
 
   if (editingId.value === null && form.password.trim().length < 6) {
@@ -291,11 +345,6 @@ function validate(): boolean {
   form.item_mappings.forEach((mapping, index) => {
     if (mapping.item_id === null) {
       fieldErrors[`item_mappings.${index}`] = `Select an item for row ${index + 1} or remove it.`
-    }
-  })
-  form.head_mappings.forEach((mapping, index) => {
-    if (mapping.head_id === null) {
-      fieldErrors[`head_mappings.${index}`] = `Select a head for row ${index + 1} or remove it.`
     }
   })
   form.cash_head_mappings.forEach((mapping, index) => {
@@ -451,8 +500,8 @@ async function handleDelete(user: UserDetailListItem) {
           <BaseInput
             id="mailing_name"
             v-model="form.mailing_name"
-            label="Mailing name"
-            required
+            label="Mailing name (optional)"
+            placeholder="Defaults to name"
             size="sm"
             maxlength="255"
             :error="fieldErrors.mailing_name"
@@ -460,39 +509,38 @@ async function handleDelete(user: UserDetailListItem) {
           <BaseInput
             id="signature"
             v-model="form.signature"
-            label="Signature"
-            required
+            label="Signature (optional)"
             size="sm"
             maxlength="45"
             :error="fieldErrors.signature"
           />
-          <BaseInput
-            id="code"
-            v-model="form.code"
-            label="Code"
-            required
-            size="sm"
-            maxlength="255"
-            :error="fieldErrors.code"
-          />
-          <BaseInput
-            id="proff"
-            v-model="form.proff"
-            label="Proof"
-            required
-            size="sm"
-            maxlength="155"
-            :error="fieldErrors.proff"
-          />
-          <BaseInput
-            id="system_id"
-            v-model="form.system_id"
-            label="System ID"
-            required
-            size="sm"
-            maxlength="255"
-            :error="fieldErrors.system_id"
-          />
+          <div class="flex flex-col gap-1">
+            <BaseFileInput
+              id="aadhar_image"
+              v-model="proofFiles"
+              label="Proof image (optional)"
+              hint="JPG, PNG or WEBP, up to 5 MB."
+              compact
+              :multiple="false"
+            />
+            <a
+              v-if="currentProofUrl && !form.aadhar_image"
+              :href="currentProofUrl"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-2 text-xs text-slate-500 hover:text-brand-600"
+            >
+              <img
+                :src="currentProofUrl"
+                alt="Saved proof"
+                class="h-9 w-9 rounded-md border border-slate-200 object-cover"
+              />
+              Saved proof — view
+            </a>
+            <p v-if="fieldErrors.aadhar_image" class="text-sm text-red-600">
+              {{ fieldErrors.aadhar_image }}
+            </p>
+          </div>
 
           <BaseSelect
             id="role_id"
@@ -597,6 +645,24 @@ async function handleDelete(user: UserDetailListItem) {
           </div>
         </section>
 
+        <!--
+          Backend gap: UserDetailController::update() never reads
+          item_mappings / head_mappings / cash_head_mappings (only store()
+          does), so edits to the three sections below are dropped on save.
+          See BACKEND_TODO.md.
+        -->
+        <p
+          v-if="editingId !== null"
+          class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        >
+          Assigned items, heads and cash heads below are loaded from the saved record, but
+          <strong>Save changes</strong> does not update them yet — the server's user update ignores
+          mappings. To change who this user reports to, use
+          <RouterLink to="/head-employee-mappings" class="font-medium underline">
+            Head Employee Mappings</RouterLink
+          >.
+        </p>
+
         <!-- Item mappings -->
         <section class="border-t border-slate-200 pt-4">
           <div class="mb-3 flex items-center justify-between">
@@ -652,38 +718,16 @@ async function handleDelete(user: UserDetailListItem) {
 
         <!-- Head mappings -->
         <section class="border-t border-slate-200 pt-4">
-          <div class="mb-3 flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-slate-900">Reports to (heads)</h3>
-            <BaseButton variant="secondary" type="button" :icon="Plus" @click="addHeadMapping">
-              Add head
-            </BaseButton>
-          </div>
-          <p v-if="form.head_mappings.length === 0" class="text-sm text-slate-500">
-            No heads assigned.
-          </p>
-          <div
-            v-for="(mapping, index) in form.head_mappings"
-            :key="index"
-            class="mb-3 flex items-end gap-3"
-          >
-            <BaseSelect
-              v-model="mapping.head_id"
-              label="Head (user)"
-              size="sm"
-              class="flex-1"
-              placeholder="Select a user…"
-              :options="userOptions"
-              :error="fieldErrors[`head_mappings.${index}`]"
-            />
-            <button
-              type="button"
-              class="mb-1 rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
-              aria-label="Remove head"
-              @click="removeHeadMapping(index)"
-            >
-              <Trash class="h-4 w-4" />
-            </button>
-          </div>
+          <h3 class="mb-3 text-sm font-semibold text-slate-900">Reports to (heads)</h3>
+          <BaseMultiSelect
+            id="head_ids"
+            v-model="headIds"
+            label="Heads (users)"
+            size="sm"
+            placeholder="No heads assigned — select one or more…"
+            :options="userOptions"
+            :error="headMappingsError"
+          />
         </section>
 
         <!-- Cash head mappings -->

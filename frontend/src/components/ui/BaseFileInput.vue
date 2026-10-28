@@ -13,6 +13,9 @@ const props = withDefaults(
     // thumbnails instead of the tall dashed dropzone + stacked file list.
     // Opt-in so existing consumers keep their current footprint.
     compact?: boolean
+    // false = single-file slot (e.g. a user's proof image): picking or
+    // dropping replaces the current file instead of appending.
+    multiple?: boolean
   }>(),
   {
     label: undefined,
@@ -20,6 +23,7 @@ const props = withDefaults(
     hint: undefined,
     accept: 'image/jpeg,image/png,image/webp',
     compact: false,
+    multiple: true,
   },
 )
 
@@ -73,7 +77,13 @@ function isAccepted(file: File): boolean {
 
 function addFiles(fileList: FileList | File[]) {
   const files = Array.from(fileList).filter(isAccepted)
-  if (files.length) emit('update:modelValue', [...props.modelValue, ...files])
+  if (!files.length) return
+  if (props.multiple) {
+    emit('update:modelValue', [...props.modelValue, ...files])
+  } else {
+    props.modelValue.forEach(revokePreview)
+    emit('update:modelValue', [files[0]])
+  }
 }
 
 function onFileChange(event: Event) {
@@ -115,8 +125,16 @@ function formatSize(bytes: number) {
         @drop.prevent="onDrop"
       >
         <Upload class="h-3.5 w-3.5" />
-        {{ isDragging ? 'Drop here' : 'Add images' }}
-        <input :id="id" type="file" :accept="accept" multiple class="hidden" @change="onFileChange" />
+        {{
+          isDragging
+            ? 'Drop here'
+            : multiple
+              ? 'Add images'
+              : modelValue.length
+                ? 'Replace image'
+                : 'Add image'
+        }}
+        <input :id="id" type="file" :accept="accept" :multiple="multiple" class="hidden" @change="onFileChange" />
       </label>
 
       <div v-for="(file, index) in modelValue" :key="`${file.name}-${index}`" class="group relative h-9 w-9 shrink-0">
@@ -158,8 +176,14 @@ function formatSize(bytes: number) {
       @drop.prevent="onDrop"
     >
       <Upload class="h-4 w-4" />
-      {{ isDragging ? 'Drop to add' : 'Add receipt images, or drag and drop' }}
-      <input :id="id" type="file" :accept="accept" multiple class="hidden" @change="onFileChange" />
+      {{
+        isDragging
+          ? 'Drop to add'
+          : multiple
+            ? 'Add receipt images, or drag and drop'
+            : 'Add an image, or drag and drop'
+      }}
+      <input :id="id" type="file" :accept="accept" :multiple="multiple" class="hidden" @change="onFileChange" />
     </label>
     <p v-if="hint" class="text-xs text-slate-500">{{ hint }}</p>
 

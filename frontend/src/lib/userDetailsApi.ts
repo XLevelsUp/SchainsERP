@@ -1,8 +1,21 @@
 import { api, type ApiResponse } from './api'
+import { buildMultipartForm } from './multipartForm'
 import { USER_FEATURE_FLAG_KEYS } from './userFeatureFlags'
 import type { UserDetail, UserDetailFormValues, UserDetailListItem } from '@/types'
 
 const RESOURCE = '/user-details'
+
+// store() still validates signature/code/proff/mailing_name/system_id as
+// required (and all five columns are NOT NULL), but the Users forms no
+// longer ask for code/system_id/proof-as-text and leave signature and
+// mailing name optional. Blanks get the same placeholders
+// PhoneBookController::store() and AddRetailerModal already use — '-' for
+// free text, the user's own name for mailing name, and a stamped value for
+// system_id because it is unique:user_details. On edit the record's stored
+// values are loaded into the form, so these only apply to fields left blank.
+function newSystemId() {
+  return `USER-${Date.now()}${Math.floor(Math.random() * 90 + 10)}`
+}
 
 // Build the exact payload the backend store() validates. Drops empty optional
 // mappings and only sends fields the controller accepts.
@@ -11,14 +24,14 @@ function toPayload(form: UserDetailFormValues, includePassword = true) {
     name: form.name,
     user_name: form.user_name,
     address: form.address,
-    signature: form.signature,
-    code: form.code,
+    signature: form.signature.trim() || '-',
+    code: form.code.trim() || '-',
     phone_no: form.phone_no,
     remarks: form.remarks || null,
-    proff: form.proff,
+    proff: form.proff.trim() || '-',
     role_id: form.role_id,
-    system_id: form.system_id,
-    mailing_name: form.mailing_name,
+    system_id: form.system_id.trim() || newSystemId(),
+    mailing_name: form.mailing_name.trim() || form.name,
     customer_commants: form.customer_commants || null,
     category_name: form.category_name,
     is_active: form.is_active,
@@ -62,11 +75,23 @@ function toPayload(form: UserDetailFormValues, includePassword = true) {
   return payload
 }
 
+// JSON unless a proof image is attached — store()/update() only accept
+// aadhar_image as a real file, which needs multipart. Nulls go as '' so they
+// still clear their column: buildMultipartForm drops nulls entirely, and
+// Laravel's ConvertEmptyStringsToNull turns '' back into null server-side.
+function toMultipart(payload: Record<string, unknown>, image: File, extra: Record<string, string> = {}) {
+  const fields = Object.fromEntries(
+    Object.entries(payload).map(([key, value]) => [key, value === null ? '' : value]),
+  )
+  return buildMultipartForm({ ...fields, ...extra, aadhar_image: image })
+}
+
 // store()/show()/update() all wrap the user object one level deeper than
 // the ApiResponse envelope: { success, data: { user, profile_image_url } }.
 interface UserDetailEnvelope {
   user: UserDetail
   profile_image_url: string | null
+  aadhar_image_url: string | null
 }
 
 // PUT /user-details/{id}/update-cc echoes back only the two fields it
@@ -94,18 +119,33 @@ export const userDetailsApi = {
   get: (id: number) =>
     api.get<ApiResponse<UserDetailEnvelope>>(`${RESOURCE}/${id}`).then((r) => r.data),
 
-  create: (form: UserDetailFormValues) =>
-    api.post<ApiResponse<UserDetailEnvelope>>(RESOURCE, toPayload(form)).then((r) => r.data),
+  create: (form: UserDetailFormValues) => {
+    const payload = toPayload(form)
+    return (
+      form.aadhar_image
+        ? api.postForm<ApiResponse<UserDetailEnvelope>>(
+            RESOURCE,
+            toMultipart(payload, form.aadhar_image),
+          )
+        : api.post<ApiResponse<UserDetailEnvelope>>(RESOURCE, payload)
+    ).then((r) => r.data)
+  },
 
   // Frontend-ready for when the backend adds PUT /user-details/{id}.
-  // Password only sent if the user typed a new one.
-  update: (id: number, form: UserDetailFormValues) =>
-    api
-      .put<ApiResponse<UserDetailEnvelope>>(
-        `${RESOURCE}/${id}`,
-        toPayload(form, form.password.length > 0),
-      )
-      .then((r) => r.data),
+  // Password only sent if the user typed a new one. With a new proof image
+  // the request goes as POST + _method=PUT: PHP only parses multipart bodies
+  // on POST, and Laravel's method override still routes it to update().
+  update: (id: number, form: UserDetailFormValues) => {
+    const payload = toPayload(form, form.password.length > 0)
+    return (
+      form.aadhar_image
+        ? api.postForm<ApiResponse<UserDetailEnvelope>>(
+            `${RESOURCE}/${id}`,
+            toMultipart(payload, form.aadhar_image, { _method: 'PUT' }),
+          )
+        : api.put<ApiResponse<UserDetailEnvelope>>(`${RESOURCE}/${id}`, payload)
+    ).then((r) => r.data)
+  },
 
   remove: (id: number) => api.delete<ApiResponse<null>>(`${RESOURCE}/${id}`),
 

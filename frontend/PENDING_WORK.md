@@ -19,9 +19,34 @@ fixed, struck through, with what changed — this file is the record.
 > When a backend item is fixed: strike it through here with the evidence, and
 > delete it from `BACKEND_TODO.md`.
 
-**Last updated:** 2026-10-08
+**Last updated:** 2026-10-15
 **Backend baseline:** `c4dd0445` (PR #50 — reminders module). PR #49
 (`531d20db`) adds relations to `AuthUser` only, 5 lines, no contract change.
+
+### Re-verification — 2026-10-15
+
+No backend code has changed since PR #50: `56a77ccb` and `dcc3b977` are
+frontend-only, and a fetch of `origin` showed nothing unpulled on any branch.
+Every open item in [`BACKEND_TODO.md`](../BACKEND_TODO.md) was still re-read
+from source rather than carried forward.
+
+- **Everything is still open** except part of [#32](#32): the testing doc's
+  2026-09-23 update (`e2fe5953`) added settings, `POST /fitems`,
+  `POST /stock/hide`, both CSV exports and `DELETE /orders/{id}`. The previous
+  pass missed this and listed them as undocumented. Still missing: `/me`,
+  `available-lots`, `unhide`, `cash-out`, `daywise-grand`, the rest of
+  orders, the login 403, and `item_id` in §40.
+- **The `head_id` scoping item is wider than recorded.** Beyond the two
+  reports and their exports, the same unchecked query-string id is on
+  `stock-details/history`, `reports/id-wise`, `cash-transaction-history`,
+  `head-stocks` (`user_id`), and cash `in-history` / `out-history` /
+  `print-report`. The to-do now lists all of them.
+- **Tidied, nothing deleted:** two items were both numbered §3, and the
+  `live_metal_report_items` seeder item duplicated §2's own "second endpoint"
+  paragraph, so it was folded in there. Internal links now point at the right
+  sections.
+- **Not re-checked:** whether the five `password` accounts still exist in the
+  live database. That needs DB access; the seeders still create them.
 
 ### PR #50 pass — 2026-10-08
 
@@ -1801,6 +1826,12 @@ the head check will not recognise.
 
     Everything the frontend needed for these five endpoints came from the
     request classes and controllers, not the doc.
+
+    **Partly fixed — 2026-10-15 check.** `e2fe5953` (2026-09-23) documented
+    settings, `POST /fitems`, `POST /stock/hide`, both CSV exports and
+    `DELETE /orders/{id}`. `/me`, `available-lots`, `cash-out`, the login 403
+    and §40's missing `item_id` are still undocumented, as are `unhide`,
+    `daywise-grand` and the rest of orders.
 
 ### New in PRs #43–#45 — 2026-09-22
 
