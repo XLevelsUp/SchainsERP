@@ -20,8 +20,10 @@ class ReportController extends Controller
     {
         try {
             $query = CashTxnDetail::with([
-                'givenByUser:user_id,name,user_name,category_name',
-                'givenToUser:user_id,name,user_name,category_name',
+                'givenByUser:user_id,name,user_name,role_id',
+                'givenByUser.role:id,role',
+                'givenToUser:user_id,name,user_name,role_id',
+                'givenToUser.role:id,role',
                 'category:category_id,category_name',
                 'bank:bank_id,account_name',
                 'cashToGold' // Needed for cash-to-gold specific logic in resource

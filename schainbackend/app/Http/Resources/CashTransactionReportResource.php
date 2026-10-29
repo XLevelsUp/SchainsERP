@@ -15,13 +15,15 @@ class CashTransactionReportResource extends JsonResource
     public function toArray(Request $request): array
     {
         // Format Name (Sender => Recipient)
+        // Retailers have role 'PURCHASE' — append username in brackets when present.
+        // We check via the eager-loaded role relationship (role->role) to avoid hardcoding any integer IDs.
         $senderName = $this->givenByUser->name ?? '-';
-        if (($this->givenByUser->category_name ?? '') === 'RETAILERS' && !empty($this->givenByUser->user_name)) {
+        if (optional($this->givenByUser->role)->role === 'PURCHASE' && !empty($this->givenByUser->user_name)) {
             $senderName .= '(' . $this->givenByUser->user_name . ')';
         }
 
         $recipientName = $this->givenToUser->name ?? '-';
-        if (($this->givenToUser->category_name ?? '') === 'RETAILERS' && !empty($this->givenToUser->user_name)) {
+        if (optional($this->givenToUser->role)->role === 'PURCHASE' && !empty($this->givenToUser->user_name)) {
             $recipientName .= '(' . $this->givenToUser->user_name . ')';
         }
 

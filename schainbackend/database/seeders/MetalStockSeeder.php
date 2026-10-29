@@ -20,12 +20,14 @@ class MetalStockSeeder extends Seeder
         // Find item ID 2 (which we updated to Metal)
         $metalItem = Item::find(2);
 
-        // Find the first admin and the first customer in the DB dynamically
-        $adminUser = UserDetail::where('category_name', 'ADMIN')->first();
-        $customerUser = UserDetail::where('category_name', 'RETAILER')->first();
+        // Find the first HEAD user (role name = 'HEAD') as the admin/giver,
+        // and the first CUSTOMER (role name = 'CUSTOMER') as the test recipient.
+        // Using the role relationship avoids hardcoding any numeric role IDs.
+        $adminUser    = UserDetail::whereHas('role', fn($q) => $q->where('role', 'HEAD'))->first();
+        $customerUser = UserDetail::whereHas('role', fn($q) => $q->where('role', 'CUSTOMER'))->first();
 
         if (!$adminUser || !$customerUser) {
-            echo "Error: Need at least one ADMIN and one CUSTOMER in user_details table.\n";
+            echo "Error: Need at least one HEAD and one CUSTOMER user in user_details table.\n";
             return;
         }
 
