@@ -1,25 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ChevronLeft, ChevronRight, Printer, EyeOff } from 'lucide-vue-next'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import DirectionTag from '@/components/ui/DirectionTag.vue'
-import StockReceiptPrintModal from '@/components/stock/StockReceiptPrintModal.vue'
-import StockHistoryPrintModal from '@/components/stock/StockHistoryPrintModal.vue'
+import StockReceiptSlip from '@/components/stock/StockReceiptSlip.vue'
 import { stockHistoryApi } from '@/lib/stockHistoryApi'
 import { stockApi } from '@/lib/stockApi'
 import { ApiError } from '@/lib/api'
+import { nowTimestamp } from '@/lib/date'
+import { useStockReceiptPrint } from '@/lib/stockReceiptPrint'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
-import type {
-  Item,
-  StockHistoryQuery,
-  StockHistoryRow,
-  StockHistoryTotals,
-  UserDetailListItem,
-} from '@/types'
+import type { Item, StockHistoryRow, StockHistoryTotals, UserDetailListItem } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
@@ -31,21 +26,28 @@ import type {
 | just the current page — the backend computes this before paginating), then
 | the row-level list.
 |
-| Printing. Both buttons open a print preview that calls only the endpoint
-| that owns its data, then prints just that sheet:
-|   - the row button → StockReceiptPrintModal → GET /stock/reports/id-wise
-|     for that stock id. It is the only stock endpoint keyed by one id, and
-|     it carries what /stock-details/history lacks: the row's own added_at
-|     and both party names from given_by/given_to. The backend has no
-|     per-row OB/CB for a single id, so the legacy "Excess OB/CB" lines are
-|     still not printed (BACKEND_TODO.md §15).
-|   - the header button → StockHistoryPrintModal → GET /stock-details/history
-|     re-requested with the exact query this table last loaded (buildQuery),
-|     so it prints the page on screen.
+| Printing. Both buttons used to be a bare window.print(), which printed the
+| entire page — sidebar, other panels, everything — because there was no
+| isolation at all. Fixed the same way HeadStockSummaryPanel's slip is: a
+| print-only root, toggled by a body class so an @media print rule can hide
+| `body *` and re-show just that root, with `afterprint` clearing the class
+| again. Two separate roots/classes because this panel has two different
+| print targets: the row button prints one transaction as a receipt, the
+| header button prints the current page of the table as a report — treating
+| them as the same target would flash the wrong content for whichever button
+| gets clicked second.
 |
-| `users` (the same list StockManagementView loads for UserPickerPanel) is
-| only used to resolve the viewed-as name for the panel title and the
-| history sheet's caption.
+| The row receipt is the legacy "X TO Y" slip (StockReceiptSlip), fetched
+| when the button is pressed by useStockReceiptPrint(): GET /stock/reports/
+| id-wise for the date/time, both party names and item remarks, and
+| GET /stock/reports/items-obcb for the OB/CB lines — /stock-details/history
+| carries neither a timestamp nor balances. Pcs is the one figure only this
+| table has, so it is passed along from the row. The page report still
+| prints straight from the rows already on screen.
+|
+| The `users` prop (the list StockManagementView already loads for
+| UserPickerPanel) resolves the viewed-as name: the report caption and the
+| receipt's "<name> Bal" lines.
 |
 | Hide (POST /stock/hide) lives here because this is the only screen that
 | lists stock_ids. It is NOT a delete: the rows stay in the ledger and keep
@@ -113,26 +115,6 @@ const rangeLabel = computed(() => {
   return `${from}–${to} of ${total.value}`
 })
 
-// The table's query, also handed to the history print so it prints exactly
-// the page on screen.
-function buildQuery(sessionUserId: number): StockHistoryQuery {
-  return {
-    // Report from the picked user's perspective when one is selected — the
-    // backend derives each row's IN/OUT direction and counterparty name from
-    // head_id, so this has to follow the picker, not the session. Falls back
-    // to the logged-in head when nothing is picked. employee_id stays for an
-    // unchanged payload shape; it duplicates head_id and is a no-op filter.
-    head_id: props.employeeId ?? sessionUserId,
-    employee_id: props.employeeId ?? undefined,
-    type: typeFilter.value ?? undefined,
-    item_id: itemFilter.value ?? undefined,
-    from_date: fromDate.value || undefined,
-    to_date: toDate.value || undefined,
-    page_size: PER_PAGE,
-    page: page.value,
-  }
-}
-
 async function load() {
   if (!auth.user) return
   isLoading.value = true
@@ -142,7 +124,21 @@ async function load() {
   // into the next Hide.
   selectedIds.value = new Set()
   try {
-    const result = await stockHistoryApi.list(buildQuery(auth.user.user_id))
+    const result = await stockHistoryApi.list({
+      // Report from the picked user's perspective when one is selected — the
+      // backend derives each row's IN/OUT direction and counterparty name from
+      // head_id, so this has to follow the picker, not the session. Falls back
+      // to the logged-in head when nothing is picked. employee_id stays for an
+      // unchanged payload shape; it duplicates head_id and is a no-op filter.
+      head_id: props.employeeId ?? auth.user.user_id,
+      employee_id: props.employeeId ?? undefined,
+      type: typeFilter.value ?? undefined,
+      item_id: itemFilter.value ?? undefined,
+      from_date: fromDate.value || undefined,
+      to_date: toDate.value || undefined,
+      page_size: PER_PAGE,
+      page: page.value,
+    })
     rows.value = result.transactions.data
     lastPage.value = result.transactions.last_page
     total.value = result.transactions.total
@@ -228,18 +224,39 @@ const headName = computed(() => {
   return auth.user?.name ?? 'Head'
 })
 
-// Print previews — see the header comment for which endpoint each calls.
-// The receipt keeps the clicked row for its pcs, which id-wise does not
-// return; the history sheet gets the query as it stood when Print was hit.
-const receiptRow = ref<StockHistoryRow | null>(null)
-const historyPrintQuery = ref<StockHistoryQuery | null>(null)
+const PRINT_TABLE_CLASS = 'printing-txn-table'
 
-function printRow(row: StockHistoryRow) {
-  receiptRow.value = row
+// Stamped on the page report at print time — /stock-details/history returns
+// no per-row time to print instead.
+const printedAt = ref('')
+
+async function printWithClass(bodyClass: string) {
+  printedAt.value = nowTimestamp()
+  document.body.classList.add(bodyClass)
+  await nextTick()
+  // afterprint rather than a synchronous cleanup: window.print() blocks until
+  // the dialog closes in Chrome but returns immediately in Safari, where
+  // removing the class right after the call would strip the styling
+  // mid-print.
+  window.addEventListener('afterprint', () => document.body.classList.remove(bodyClass), {
+    once: true,
+  })
+  window.print()
 }
 
+// Row-level receipt, printed from the ledger on screen — the same
+// picked-user-else-signed-in-head fallback load() uses for head_id.
+const { receipt, printingId, printReceipt } = useStockReceiptPrint()
+
+function printRow(row: StockHistoryRow) {
+  const viewerId = props.employeeId ?? auth.user?.user_id
+  if (viewerId === undefined) return
+  printReceipt(row.id, { userId: viewerId, name: headName.value }, row.pcs || null)
+}
+
+// Header button — the current page of the table, not the whole app shell.
 function printTable() {
-  if (auth.user) historyPrintQuery.value = buildQuery(auth.user.user_id)
+  printWithClass(PRINT_TABLE_CLASS)
 }
 
 defineExpose({ refresh: load })
@@ -338,8 +355,8 @@ defineExpose({ refresh: load })
         the visible slice, so scrolling them out of view would be worse than
         the scrolling itself.
 
-        Printing is unaffected: it renders StockHistoryPrintModal's own
-        sheet, never this table.
+        Printing is unaffected: it renders .txn-print-root, a separate subtree,
+        never this table.
       -->
       <div class="max-h-60 overflow-y-auto overflow-x-auto">
         <table class="min-w-full text-sm">
@@ -423,11 +440,12 @@ defineExpose({ refresh: load })
               <td class="px-4 py-1.5 text-center">
                 <button
                   type="button"
-                  class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-ink-900"
+                  class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-ink-900 disabled:cursor-not-allowed disabled:opacity-40"
                   :aria-label="`Print transaction ${row.id}`"
+                  :disabled="printingId !== null"
                   @click="printRow(row)"
                 >
-                  <Printer class="h-4 w-4" />
+                  <Printer class="h-4 w-4" :class="printingId === row.id ? 'animate-pulse' : ''" />
                 </button>
               </td>
             </tr>
@@ -462,17 +480,120 @@ defineExpose({ refresh: load })
     </template>
   </BaseCard>
 
-  <StockReceiptPrintModal
-    v-if="receiptRow"
-    :stock-id="receiptRow.id"
-    :pcs="receiptRow.pcs"
-    @close="receiptRow = null"
-  />
+  <StockReceiptSlip v-if="receipt" :receipt="receipt" />
 
-  <StockHistoryPrintModal
-    v-if="historyPrintQuery"
-    :query="historyPrintQuery"
-    :head-name="headName"
-    @close="historyPrintQuery = null"
-  />
+  <!--
+    Print-only report for the current page of the table. Same isolation
+    pattern as the row receipt (StockReceiptSlip) but a different body class,
+    so the two can never both be visible for the same print.
+  -->
+  <div class="txn-print-root txn-print-table hidden">
+    <table>
+      <caption>
+        Transaction History — {{ headName }}
+        <span class="tp-stamp">Printed {{ printedAt }}</span>
+      </caption>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Type</th>
+          <th>Grams</th>
+          <th>Pcs</th>
+          <th>Touch</th>
+          <th>Wastage</th>
+          <th>Purity</th>
+          <th>Party</th>
+          <th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="row in rows" :key="row.id">
+          <td>{{ row.item_name || '—' }}</td>
+          <td>{{ row.stock_type === 'IN' ? 'In' : 'Out' }}</td>
+          <td class="tp-num">{{ formatNumber(row.grams) }}</td>
+          <td class="tp-num">{{ row.pcs ? formatNumber(row.pcs) : '' }}</td>
+          <td class="tp-num">{{ formatNumber(row.touch) }}</td>
+          <td class="tp-num">{{ formatNumber(row.wastage) }}</td>
+          <td class="tp-num">{{ formatNumber(row.purity) }}</td>
+          <td>{{ row.user || '—' }}</td>
+          <td>{{ row.remarks || '—' }}</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>Total</td>
+          <td></td>
+          <td class="tp-num">{{ formatNumber(totals.grams) }}</td>
+          <td class="tp-num">{{ formatNumber(totals.pcs) }}</td>
+          <td></td>
+          <td></td>
+          <td class="tp-num">{{ formatNumber(totals.purity) }}</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
 </template>
+
+<!--
+  Not scoped: the @media print rule has to reach `body *` to hide the rest
+  of the app, which a scoped style cannot do. Everything else is namespaced
+  under .txn-print-root so nothing leaks onto the normal page.
+-->
+<style>
+.txn-print-root table {
+  border-collapse: collapse;
+  color: #000;
+  font-size: 11px;
+}
+
+.txn-print-root th,
+.txn-print-root td {
+  border: 1px solid #000;
+  padding: 2px 6px;
+}
+
+.txn-print-root .tp-stamp {
+  text-align: center;
+  font-weight: 700;
+}
+
+.txn-print-root .tp-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.txn-print-root.txn-print-table caption {
+  caption-side: top;
+  margin-bottom: 6px;
+  text-align: left;
+  font-weight: 700;
+}
+
+.txn-print-root.txn-print-table .tp-stamp {
+  display: block;
+  font-weight: 400;
+  font-size: 10px;
+}
+
+@media print {
+  body.printing-txn-table * {
+    visibility: hidden;
+  }
+
+  body.printing-txn-table .txn-print-root.txn-print-table,
+  body.printing-txn-table .txn-print-root.txn-print-table * {
+    visibility: visible;
+  }
+
+  /* Beats Tailwind's `.hidden` on specificity, so the report only ever
+     appears for its own print and never on screen. */
+  body.printing-txn-table .txn-print-root.txn-print-table {
+    display: block;
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+  }
+}
+</style>

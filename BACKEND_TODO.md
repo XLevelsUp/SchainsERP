@@ -404,13 +404,12 @@ reports-to changes.
 
 ---
 
-## 15. Printed receipts are missing their balance lines  `#40`
+## 15. Printed receipts are missing data — stock has no print endpoint  `#40`
 
 *(Numbered out of order so the links to §11–14 keep working.)*
 
-Every print button now opens a preview filled from the one endpoint that
-owns its data, re-checked against the code on 2026-10-29.
-`GET /cash-txn-details/print-report` is still the only print endpoint.
+Re-checked against the code on 2026-10-29, on every remote branch:
+`GET /cash-txn-details/print-report` is still the **only** print endpoint.
 
 **a. Cash receipt: Bal OB and Ex. CB always print blank.**
 `CashTxnDetailController.php:201` and `:205` (`getPrintReport`, the `?id=`
@@ -421,25 +420,41 @@ are not columns. The model has `sender_opening_cash` / `sender_opening_rtgs`
 cash + RTGS for its opening and closing balance. Please do the same here, or
 tell us if the receipt should show cash only.
 
-**b. Stock receipts have no print endpoint, so no OB/CB and no pcs.** The
-stock row receipt (Transaction History, and the ID Wise screen) uses
-`GET /stock/reports/id-wise?stock_id=`. It is the only stock endpoint keyed
-by a single id, and it gives the date and both party names. It does not give:
+**b. Stock receipts are pieced together from two reports.** The stock row
+print (Transaction History and the ID Wise screen) now reproduces the
+legacy slip: `"<from> TO <to>"`, date, `<name> Bal OB`,
+Time / Items / Pcs / Gms / % / Purity, Total, `<name> Bal CB`. With no stock
+print endpoint, each print makes two calls:
 
-- the legacy slip's **"Excess OB / CB"** lines. No endpoint returns OB/CB for
-  a single stock id. `getItemsObcbReport` already works them out from
-  `obcb_details` per row, but it can't be filtered by id.
-- **`no_of_pcs`**. id-wise leaves it out. The Transaction History receipt
-  takes it from the history row instead, so the ID Wise receipt has no Pcs line.
+1. `GET /stock/reports/id-wise?stock_id=` for the date and time, both
+   party names, and the item plus its `item_remarks`.
+2. `GET /stock/reports/items-obcb`, narrowed to that exact second
+   (`from_date`/`from_time` = `to_date`/`to_time` = `added_at`) and to
+   `employee_id=user_<viewed-as user>`, for OB/CB. It's then matched on
+   `stock_id`.
 
-Either of these fixes it:
+What that still can't give:
 
-- a `GET /stock-details/print-report?id=` that mirrors the cash one. It
-  would return heading, given_by / given_to names, date, item, grams, pcs,
-  touch, wastage, purity, OB/CB grams and purity for the giving side, and
-  remarks.
-- add `no_of_pcs` and `ob_grams` / `cb_grams` / `ob_purity` / `cb_purity`
-  to each id-wise `transactions` row.
+- **OB/CB when the row doesn't involve the viewed-as user.** For example, a
+  head printing a mapped employee's entry: items-obcb doesn't return that
+  row, so OB/CB print `—`.
+- **`no_of_pcs`.** Neither report returns it. The Transaction History print
+  takes it from the history row, so the ID Wise print leaves Pcs blank.
+- **The suffix in the heading.** The old slip reads `NIHAA(RAMESH) TO …`.
+  We don't know what goes in the brackets (retailer? user type?), and
+  neither report returns it.
+
+A `GET /stock-details/print-report?id=` that mirrors the cash one would
+replace both calls. It should return:
+
+- the heading names, with suffix
+- date and time
+- item with remarks
+- pcs, grams, touch, purity
+- OB/CB purity for the party the legacy slip shows
+
+Please also confirm whose balance the legacy slip shows on the
+`<name> Bal` line: the giver's, or the head's.
 
 **c. Question: what is the bulk branch of `print-report` for?** Without
 `?id=`, it returns raw `CashTxnDetail` models filtered by `head_id` /

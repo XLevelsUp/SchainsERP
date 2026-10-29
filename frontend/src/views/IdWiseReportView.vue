@@ -5,11 +5,12 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import IdWiseReportPrintModal from '@/components/stock/IdWiseReportPrintModal.vue'
-import StockReceiptPrintModal from '@/components/stock/StockReceiptPrintModal.vue'
+import StockReceiptSlip from '@/components/stock/StockReceiptSlip.vue'
 import { stockReportsApi } from '@/lib/stockReportsApi'
 import { formatDateTime } from '@/lib/date'
 import { ApiError } from '@/lib/api'
+import { useStockReceiptPrint } from '@/lib/stockReceiptPrint'
+import { useAuthStore } from '@/stores/auth'
 import type { IdWiseReportResult, IdWiseTransaction } from '@/types'
 
 /*
@@ -21,14 +22,13 @@ import type { IdWiseReportResult, IdWiseTransaction } from '@/types'
 | points at it), alongside a received/consumed/balance reconciliation.
 | Mirrors the legacy "Stock ID Wise details" screen as its own menu item.
 |
-| `transactions` now holds the lot row itself plus every drawdown
-| (ReportService selects stock_id = lot OR stock_in_id = lot), so the
-| queried row is always in it — StockReceiptPrintModal relies on that.
+| `transactions` holds the lot row itself plus every drawdown (ReportService
+| selects stock_id = lot OR stock_in_id = lot), so any queried row is always
+| in it.
 |
-| Printing: the header button previews the whole report
-| (IdWiseReportPrintModal), a row button previews that one transaction as a
-| receipt (StockReceiptPrintModal). Both re-request this same endpoint — no
-| other API is involved — instead of window.print()-ing the whole page.
+| Printing: the header button prints the page as before; a row's button
+| prints that transaction's legacy receipt (StockReceiptSlip) from the
+| signed-in user's ledger, same as Transaction History's row button.
 |
 | The endpoint 404s for an unknown stock_id and 422s for a non-numeric one
 | — both arrive as ApiError.message and are shown inline, same as every
@@ -133,8 +133,16 @@ onBeforeUnmount(() => {
   if (autoSearchTimer) clearTimeout(autoSearchTimer)
 })
 
-const reportPrintId = ref<number | null>(null)
-const receiptStockId = ref<number | null>(null)
+function printReport() {
+  window.print()
+}
+
+const auth = useAuthStore()
+const { receipt, printingId, printReceipt } = useStockReceiptPrint()
+
+function printRow(row: IdWiseTransaction) {
+  if (auth.user) printReceipt(row.id, { userId: auth.user.user_id, name: auth.user.name })
+}
 </script>
 
 <template>
@@ -243,8 +251,7 @@ const receiptStockId = ref<number | null>(null)
           type="button"
           class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
           aria-label="Print report"
-          title="Print report"
-          @click="reportPrintId = report.stock_summary.queried_id"
+          @click="printReport"
         >
           <Printer class="h-4 w-4" />
         </button>
@@ -291,12 +298,12 @@ const receiptStockId = ref<number | null>(null)
               <td class="px-3 py-2 text-center">
                 <button
                   type="button"
-                  class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
                   :aria-label="`Print transaction ${row.id}`"
-                  title="Print receipt"
-                  @click="receiptStockId = row.id"
+                  :disabled="printingId !== null"
+                  @click="printRow(row)"
                 >
-                  <Printer class="h-4 w-4" />
+                  <Printer class="h-4 w-4" :class="printingId === row.id ? 'animate-pulse' : ''" />
                 </button>
               </td>
             </tr>
@@ -319,15 +326,6 @@ const receiptStockId = ref<number | null>(null)
       Enter a stock ID above to view its lot details and transaction lineage.
     </p>
 
-    <IdWiseReportPrintModal
-      v-if="reportPrintId !== null"
-      :stock-id="reportPrintId"
-      @close="reportPrintId = null"
-    />
-    <StockReceiptPrintModal
-      v-if="receiptStockId !== null"
-      :stock-id="receiptStockId"
-      @close="receiptStockId = null"
-    />
+    <StockReceiptSlip v-if="receipt" :receipt="receipt" />
   </div>
 </template>
