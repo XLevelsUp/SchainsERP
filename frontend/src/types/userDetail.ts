@@ -181,7 +181,9 @@ export interface UserDetailFormValues extends UserFeatureFlags {
   system_id: string
   mailing_name: string
   customer_commants: string
-  category_name: CategoryName
+  // null until the head picks one — create forms have no default, and each
+  // form's validation blocks submit while it is unset (store() requires it).
+  category_name: CategoryName | null
   is_active: boolean
   is_delete: boolean
   is_billable: boolean

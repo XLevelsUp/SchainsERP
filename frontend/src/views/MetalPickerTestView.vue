@@ -64,6 +64,15 @@ async function loadData() {
 }
 onMounted(loadData)
 
+// Dropdown reload buttons: each re-fetches one master with the same call
+// loadData() makes, leaving isLoading/loadError alone.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list(undefined, 'stock')
+}
+async function reloadItems() {
+  items.value = await itemsApi.list()
+}
+
 const resultColumns: DataTableColumn<MetalPickerSelection>[] = [
   { key: 'id', label: 'Stock ID' },
   { key: 'party_name', label: 'Party' },
@@ -116,6 +125,7 @@ function handleConfirm(rows: MetalPickerSelection[]) {
             size="sm"
             placeholder="Select a user…"
             :options="userOptions"
+            :reload="reloadUsers"
           />
           <BaseSelect
             id="metal-item"
@@ -124,6 +134,7 @@ function handleConfirm(rows: MetalPickerSelection[]) {
             size="sm"
             placeholder="Select an item…"
             :options="itemOptions"
+            :reload="reloadItems"
           />
         </div>
         <p v-if="itemId !== null && !selectedItemIsMetal" class="mt-3 text-xs text-amber-700">

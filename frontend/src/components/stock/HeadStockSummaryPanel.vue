@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Printer } from 'lucide-vue-next'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import HeadStockPrintModal from '@/components/stock/HeadStockPrintModal.vue'
 import { headStocksApi } from '@/lib/headStocksApi'
 import { ApiError } from '@/lib/api'
-import { nowTimestamp } from '@/lib/date'
 import { useAuthStore } from '@/stores/auth'
 import type { HeadStockSummary } from '@/types'
 
@@ -19,14 +19,10 @@ import type { HeadStockSummary } from '@/types'
 | balance as of that moment (head_txn_from_date/head_txn_from_time);
 | left blank, the backend returns live totals.
 |
-| The printer button prints a compact slip — head name, timestamp, and an
-| Item Name/Grams/Purity table — not the whole page. It renders from the
-| same `summary` object as the on-screen table, so the two can never
-| disagree; only the presentation differs (the on-screen "%" column is
-| dropped, and zero-purity rows print blank rather than "0.000", matching
-| the legacy slip). Isolation follows ThermalPrintModal's pattern: an
-| @media print block hides `body *` and re-shows one print root, rather
-| than a second window that popup blockers would eat.
+| The printer button opens HeadStockPrintModal: a preview of the legacy
+| slip (head name, timestamp, Item Name/Grams/Purity), fetched from this
+| same endpoint with this panel's as-of filters when it opens, then printed
+| on its own rather than with the whole page.
 |--------------------------------------------------------------------------
 */
 
@@ -74,42 +70,7 @@ watch([asOfDate, asOfTime], load)
 // rather than inventing a suffix.
 const printTitle = computed(() => auth.user?.name || auth.user?.user_name || '')
 
-// Blank, not "0.000": non-metal items (stone, f-items) carry no purity and
-// the legacy slip leaves that cell empty so the column reads as gold only.
-function formatPurity(value: number) {
-  return value === 0 ? '' : formatNumber(value)
-}
-
-// Cash and active orders print as plain figures, without the 3-decimal
-// weight formatting the gram columns use.
-function formatPlain(value: number) {
-  return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : '0'
-}
-
-// Stamped when the button is pressed. With an as-of filter set, the slip is
-// labelled with that moment rather than "now" — otherwise a replayed
-// balance would print under the wrong time.
-const printedAt = ref('')
-
-// The print isolation is keyed off a body class rather than applying to
-// every print. TransactionHistoryPanel sits on this same page and prints
-// the whole page by design — an unconditional `body * { visibility:hidden }`
-// would silently turn its print into this slip.
-const PRINT_BODY_CLASS = 'printing-head-stock'
-
-async function printPanel() {
-  printedAt.value = asOfDate.value ? `${asOfDate.value} ${asOfTime.value || '00:00'}:00` : nowTimestamp()
-  document.body.classList.add(PRINT_BODY_CLASS)
-  // Let the stamp render before the browser snapshots the page.
-  await nextTick()
-  // afterprint rather than a synchronous cleanup: window.print() blocks
-  // until the dialog closes in Chrome but returns immediately in Safari,
-  // where removing the class here would strip the styling mid-print.
-  window.addEventListener('afterprint', () => document.body.classList.remove(PRINT_BODY_CLASS), {
-    once: true,
-  })
-  window.print()
-}
+const isPrintOpen = ref(false)
 
 defineExpose({ refresh: load })
 </script>
@@ -124,7 +85,7 @@ defineExpose({ refresh: load })
         aria-label="Print head stocks"
         title="Print head stocks slip"
         :disabled="!summary"
-        @click="printPanel"
+        @click="isPrintOpen = true"
       >
         <Printer class="h-4 w-4" />
       </button>
@@ -217,103 +178,12 @@ defineExpose({ refresh: load })
     </div>
   </BaseCard>
 
-  <!--
-    Print-only slip. Hidden on screen (`hidden`), laid out only for print
-    (`print:block`) — the @media block below then hides everything else on
-    the page so this is all that reaches the printer.
-  -->
-  <div v-if="summary" class="head-stock-print-root hidden">
-    <table>
-      <tbody>
-        <tr>
-          <td colspan="3" class="hs-title">{{ printTitle }}</td>
-        </tr>
-        <tr>
-          <td colspan="3" class="hs-stamp">{{ printedAt }}</td>
-        </tr>
-        <tr>
-          <th>Item Name</th>
-          <th>Grams</th>
-          <th>Purity</th>
-        </tr>
-        <tr v-for="item in summary.items" :key="item.item_id">
-          <td class="hs-name">{{ item.item_name }}</td>
-          <td class="hs-num">{{ formatNumber(item.grams) }}</td>
-          <td class="hs-num">{{ formatPurity(item.purity) }}</td>
-        </tr>
-        <tr>
-          <td class="hs-name">Total</td>
-          <td class="hs-num">{{ formatNumber(summary.totals.grams) }}</td>
-          <td class="hs-num">{{ formatNumber(summary.totals.purity) }}</td>
-        </tr>
-        <tr>
-          <td colspan="2" class="hs-name">Cash</td>
-          <td class="hs-num">{{ formatPlain(summary.cash_balance) }}</td>
-        </tr>
-        <tr>
-          <td colspan="2" class="hs-name">Active Orders</td>
-          <td class="hs-num">{{ formatPlain(summary.active_orders) }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <HeadStockPrintModal
+    v-if="isPrintOpen && auth.user"
+    :user-id="auth.user.user_id"
+    :title="printTitle"
+    :as-of-date="asOfDate"
+    :as-of-time="asOfTime"
+    @close="isPrintOpen = false"
+  />
 </template>
-
-<!--
-  Not scoped: the @media print rule has to reach `body *` to hide the rest
-  of the app, which a scoped style cannot do. Every other selector is
-  namespaced under .head-stock-print-root so nothing leaks.
--->
-<style>
-.head-stock-print-root table {
-  border-collapse: collapse;
-  width: 2.9in;
-  color: #000;
-  font-size: 11px;
-}
-
-.head-stock-print-root th,
-.head-stock-print-root td {
-  border: 1px solid #000;
-  padding: 2px 6px;
-}
-
-.head-stock-print-root th,
-.head-stock-print-root .hs-title,
-.head-stock-print-root .hs-stamp,
-.head-stock-print-root .hs-name {
-  text-align: center;
-  font-weight: 700;
-}
-
-.head-stock-print-root .hs-num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-/*
-  Scoped to the body class set by printPanel(), so this only takes effect
-  for *this* panel's print button. Any other print on the page (Transaction
-  History prints the whole page) is left exactly as it was.
-*/
-@media print {
-  body.printing-head-stock * {
-    visibility: hidden;
-  }
-
-  body.printing-head-stock .head-stock-print-root,
-  body.printing-head-stock .head-stock-print-root * {
-    visibility: visible;
-  }
-
-  /* Beats Tailwind's `.hidden` on specificity, so the slip only ever
-     appears for its own print and never on screen. */
-  body.printing-head-stock .head-stock-print-root {
-    display: block;
-    position: fixed;
-    inset: 0;
-    margin: 0;
-    padding: 0;
-  }
-}
-</style>

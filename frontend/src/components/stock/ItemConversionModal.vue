@@ -50,7 +50,7 @@ import type {
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ items: Item[]; userId: number | null }>()
+const props = defineProps<{ items: Item[]; userId: number | null; reloadItems?: () => unknown }>()
 const emit = defineEmits<{ close: []; saved: []; missingUser: [] }>()
 
 const toast = useToastStore()
@@ -297,6 +297,7 @@ async function handleSubmit() {
                 size="sm"
                 placeholder="Select item…"
                 :options="itemOptions"
+                :reload="reloadItems"
                 :error="fieldErrors[`${index}.source_item_id`]"
                 @update:model-value="(v) => onSourceItemSelect(row, index, v as number | null)"
               />
@@ -330,6 +331,7 @@ async function handleSubmit() {
               size="sm"
               placeholder="Select item…"
               :options="itemOptions"
+              :reload="reloadItems"
               :error="fieldErrors[`${index}.target_item_id`]"
               @update:model-value="(v) => (row.target_item_id = v as number | null)"
             />
@@ -381,14 +383,14 @@ async function handleSubmit() {
             <BaseInput
               :id="`remarks_${index}`"
               :model-value="row.remarks"
-              label="Remarks (optional)"
+              label="Remarks"
               size="sm"
               @update:model-value="(v) => (row.remarks = v)"
             />
             <BaseInput
               :id="`item_remarks_${index}`"
               :model-value="row.item_remarks"
-              label="Item remarks (optional)"
+              label="Item remarks"
               size="sm"
               @update:model-value="(v) => (row.item_remarks = v)"
             />
@@ -396,7 +398,7 @@ async function handleSubmit() {
 
           <div class="mt-3 rounded-md border border-slate-100 bg-slate-50 p-2">
             <div class="mb-2 flex items-center justify-between">
-              <span class="text-xs font-semibold tracking-wide text-slate-500 uppercase">Alloys (optional)</span>
+              <span class="text-xs font-semibold tracking-wide text-slate-500 uppercase">Alloys</span>
               <BaseButton variant="secondary" type="button" :icon="Plus" @click="addAlloyRow(row)">
                 Add alloy
               </BaseButton>
@@ -414,6 +416,7 @@ async function handleSubmit() {
                 size="sm"
                 placeholder="Select item…"
                 :options="itemOptions"
+                :reload="reloadItems"
                 :error="fieldErrors[`${index}.alloys.${alloyIndex}.alloy_item_id`]"
                 @update:model-value="(v) => (alloy.alloy_item_id = v as number | null)"
               />

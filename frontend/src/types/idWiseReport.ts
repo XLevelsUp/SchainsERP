@@ -1,9 +1,10 @@
 // GET /stock/reports/id-wise?stock_id= — StockDetailsController::
 // getIdWiseReport -> ReportService::getIdWiseStockReport (PR #33).
 //
-// Traces a stock row back to its parent lot and lists every child
-// transaction drawn from that lot (rows whose stock_in_id points at it).
-// Cached server-side for an hour per stock_id.
+// Traces a stock row back to its parent lot and lists the lot row itself
+// plus every transaction drawn from it (rows whose stock_in_id points at
+// it), so the queried row is always somewhere in `transactions`. Not cached
+// server-side (re-checked 2026-10-29).
 
 export interface IdWiseStockSummary {
   queried_id: number

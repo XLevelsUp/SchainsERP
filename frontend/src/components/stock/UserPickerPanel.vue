@@ -4,6 +4,7 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
+import { categoryShowsPurity } from '@/lib/userCategory'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/lib/api'
 import type { UserDetailListItem } from '@/types'
@@ -66,8 +67,9 @@ function formatShortDate(value?: string | null) {
   return `${String(date.getDate()).padStart(2, '0')}-${months[date.getMonth()]}`
 }
 
+// P follows the user's category: a GRAMS-only user reads 0 here.
 function formatUserLabel(user: UserDetailListItem) {
-  const purity = user.purity ?? '0.000'
+  const purity = categoryShowsPurity(user.category_name) ? (user.purity ?? '0.000') : '0.000'
   const date = formatShortDate(user.last_txn_date)
   return `${user.full_name}(${user.type ?? '—'}, ${user.phone_number}) ==> P = ${purity}, D = ${date} | Order Tot : 0  P : 0`
 }
@@ -94,6 +96,12 @@ async function load() {
 
 onMounted(load)
 
+// The dropdown's reload button: same fetch as load(), but without the
+// disabled/loading state or panel error, so the open picker stays usable.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list(undefined, 'stock')
+}
+
 watch(selectedUserId, (id) => {
   const user = selectableUsers.value.find((u) => u.id === id)
   phoneSearch.value = user?.phone_number ?? ''
@@ -117,6 +125,7 @@ defineExpose({ refresh: load })
         label="Users"
         placeholder="Choose User"
         :options="userOptions"
+        :reload="reloadUsers"
         :disabled="isLoading"
         :error="props.error"
       />

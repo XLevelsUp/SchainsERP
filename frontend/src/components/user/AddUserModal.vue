@@ -6,11 +6,12 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
-import { rolesApi } from '@/lib/rolesApi'
+import { isRoleActive, rolesApi } from '@/lib/rolesApi'
 import { ApiError } from '@/lib/api'
 import { emptyUserFeatureFlags } from '@/lib/userFeatureFlags'
 import { useToastStore } from '@/stores/toast'
-import type { CategoryName, Role, UserDetailFormValues } from '@/types'
+import { userCategoryOptions } from '@/lib/userCategory'
+import type { Role, UserDetailFormValues } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
@@ -35,16 +36,19 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 const toastStore = useToastStore()
 
 const roles = ref<Role[]>([])
+// Also the Role dropdown's reload button, which surfaces a failure itself
+// instead of blanking the list the way the first load does.
+async function reloadRoles() {
+  roles.value = await rolesApi.list()
+}
 async function loadRoles() {
   try {
-    roles.value = await rolesApi.list()
+    await reloadRoles()
   } catch {
     roles.value = []
   }
 }
 onMounted(loadRoles)
-
-const categories: CategoryName[] = ['GRAMS', 'PURITY', 'BOTH']
 
 function makeEmptyForm(): UserDetailFormValues {
   return {
@@ -61,7 +65,8 @@ function makeEmptyForm(): UserDetailFormValues {
     system_id: '',
     mailing_name: '',
     customer_commants: '',
-    category_name: 'GRAMS',
+    // No default — the head picks one (see lib/userCategory.ts).
+    category_name: null,
     is_active: true,
     is_delete: false,
     is_billable: false,
@@ -118,6 +123,9 @@ function validate(): boolean {
 
   if (!String(form.role_id).trim()) {
     fieldErrors.role_id = 'Role is required.'
+  }
+  if (!form.category_name) {
+    fieldErrors.category_name = 'Category is required.'
   }
 
   if (form.phone_no.trim() && !/^\d{6,15}$/.test(form.phone_no.trim())) {
@@ -228,7 +236,7 @@ async function handleSubmit() {
         <BaseInput
           id="mailing_name"
           v-model="form.mailing_name"
-          label="Mailing name (optional)"
+          label="Mailing name"
           placeholder="Defaults to name"
           size="sm"
           maxlength="255"
@@ -237,7 +245,7 @@ async function handleSubmit() {
         <BaseInput
           id="signature"
           v-model="form.signature"
-          label="Signature (optional)"
+          label="Signature"
           size="sm"
           maxlength="45"
           :error="fieldErrors.signature"
@@ -246,7 +254,7 @@ async function handleSubmit() {
           <BaseFileInput
             id="aadhar_image"
             v-model="proofFiles"
-            label="Proof image (optional)"
+            label="Proof image"
             hint="JPG, PNG or WEBP, up to 5 MB."
             compact
             :multiple="false"
@@ -262,7 +270,12 @@ async function handleSubmit() {
           required
           size="sm"
           placeholder="Select a role…"
-          :options="roles.map((role) => ({ value: String(role.id), label: role.role }))"
+          :options="
+            roles
+              .filter(isRoleActive)
+              .map((role) => ({ value: String(role.id), label: role.role }))
+          "
+          :reload="reloadRoles"
           :error="fieldErrors.role_id"
         />
         <BaseSelect
@@ -271,7 +284,9 @@ async function handleSubmit() {
           label="Category"
           required
           size="sm"
-          :options="categories.map((cat) => ({ value: cat, label: cat }))"
+          placeholder="Select a category…"
+          :options="userCategoryOptions"
+          :error="fieldErrors.category_name"
         />
       </section>
 

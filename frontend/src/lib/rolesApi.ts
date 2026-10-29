@@ -3,6 +3,10 @@ import type { Role, RoleFormValues } from '@/types'
 
 const RESOURCE = '/roles'
 
+// A role the backend has not given a status counts as active, so pickers keep
+// every role until `is_active` is actually returned (see types/role.ts).
+export const isRoleActive = (role: Role) => role.is_active !== false
+
 export const rolesApi = {
   list: () => api.get<ApiResponse<Role[]>>(RESOURCE).then((r) => r.data),
 

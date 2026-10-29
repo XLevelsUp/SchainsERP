@@ -83,6 +83,12 @@ async function loadUsers() {
   }
 }
 
+// The "view as" dropdown's reload button: same fetch as loadUsers(), but a
+// failure surfaces instead of being swallowed.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list()
+}
+
 // Fatal to this screen, unlike loadUsers: without the id the report would
 // silently fall back to the backend's wrong default. runSearch refuses to
 // run until this resolves.
@@ -183,6 +189,7 @@ onMounted(async () => {
           size="sm"
           placeholder="Yourself…"
           :options="userOptions"
+          :reload="reloadUsers"
         />
         <div class="flex items-end gap-2">
           <BaseButton variant="secondary" type="button" :disabled="isLoading" @click="clearFilters">

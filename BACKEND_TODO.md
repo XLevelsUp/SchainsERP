@@ -404,6 +404,51 @@ reports-to changes.
 
 ---
 
+## 15. Printed receipts are missing their balance lines  `#40`
+
+*(Numbered out of order so the links to §11–14 keep working.)*
+
+Every print button now opens a preview filled from the one endpoint that
+owns its data, re-checked against the code on 2026-10-29.
+`GET /cash-txn-details/print-report` is still the only print endpoint.
+
+**a. Cash receipt: Bal OB and Ex. CB always print blank.**
+`CashTxnDetailController.php:201` and `:205` (`getPrintReport`, the `?id=`
+branch) read `$transaction->sender_ob` and `$transaction->sender_cb`. Those
+are not columns. The model has `sender_opening_cash` / `sender_opening_rtgs`
+/ `sender_closing_cash` / `sender_closing_rtgs`, so both fields come back
+`null` on every receipt. `CashTransactionReportResource` already adds
+cash + RTGS for its opening and closing balance. Please do the same here, or
+tell us if the receipt should show cash only.
+
+**b. Stock receipts have no print endpoint, so no OB/CB and no pcs.** The
+stock row receipt (Transaction History, and the ID Wise screen) uses
+`GET /stock/reports/id-wise?stock_id=`. It is the only stock endpoint keyed
+by a single id, and it gives the date and both party names. It does not give:
+
+- the legacy slip's **"Excess OB / CB"** lines. No endpoint returns OB/CB for
+  a single stock id. `getItemsObcbReport` already works them out from
+  `obcb_details` per row, but it can't be filtered by id.
+- **`no_of_pcs`**. id-wise leaves it out. The Transaction History receipt
+  takes it from the history row instead, so the ID Wise receipt has no Pcs line.
+
+Either of these fixes it:
+
+- a `GET /stock-details/print-report?id=` that mirrors the cash one. It
+  would return heading, given_by / given_to names, date, item, grams, pcs,
+  touch, wastage, purity, OB/CB grams and purity for the giving side, and
+  remarks.
+- add `no_of_pcs` and `ob_grams` / `cb_grams` / `ob_purity` / `cb_purity`
+  to each id-wise `transactions` row.
+
+**c. Question: what is the bulk branch of `print-report` for?** Without
+`?id=`, it returns raw `CashTxnDetail` models filtered by `head_id` /
+`cash_user_id` / `from_date` / `to_date`. No screen has a print button for
+it. If it matches a legacy print (for example, a head/user cash statement),
+tell us which one and we will add the button.
+
+---
+
 # 🟡 When you can
 
 ## 11. The API testing doc is well behind the code  `#32`
@@ -456,6 +501,37 @@ system_id so `unique` passes). But those placeholders are now real rows in
 Also worth confirming: is `proff` (varchar 155) the legacy slot for the
 proof document's path? If proof now lives in `aadhar_image`, `proff` could
 be dropped from `store()`'s required list entirely.
+
+## 14. Roles cannot be activated or deactivated  `#39`
+
+**Where:** `database/migrations/2026_07_23_125520_create_roles_table.php`,
+`app/Models/Role.php`, `app/Http/Controllers/Api/RoleController.php`
+
+The Roles screen now has an Active / Inactive toggle, but the backend has
+nowhere to keep it. The `roles` table has only `id`, `role`, `added_at` and
+`touch`; `Role::$fillable` has no status; and `store()` / `update()` validate
+only `role`, `added_at` and `touch`. So `PUT /roles/{id}` with
+`{ "is_active": false }` answers **200** and changes nothing — `validate()`
+silently drops the field.
+
+**What the frontend sends and expects** — the same shape items, cash
+categories and bank details already use:
+
+- a new migration adding `$table->boolean('is_active')->default(true);` to `roles`
+- `Role`: `is_active` in `$fillable`, cast to `boolean`
+- `store()` and `update()`: `'is_active' => 'sometimes|boolean'`
+- `index()`, `show()` and both write responses return `is_active`
+- `index()` keeps returning **all** roles, inactive included — the Users,
+  Phone Book and Cash Management filters still need them
+
+Nothing else is needed from the frontend once that lands: the on-screen
+warning on Roles disappears by itself, the toggle starts saving, and inactive
+roles drop out of the Role picker when creating or editing a user or client
+(someone already on an inactive role keeps it).
+
+Open question: should deactivating a role do anything to the users already
+on it (block login, hide them)? The frontend currently only stops *new*
+assignments.
 
 ---
 

@@ -31,7 +31,12 @@ import type { Item, NumericWastageOutItemInput } from '@/types'
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ items: Item[]; headId: number | null; givenTo: number | null }>()
+const props = defineProps<{
+  items: Item[]
+  headId: number | null
+  givenTo: number | null
+  reloadItems?: () => unknown
+}>()
 const emit = defineEmits<{ saved: []; missingUser: [] }>()
 
 const toast = useToastStore()
@@ -208,6 +213,7 @@ defineExpose({ addRow, submit, clear, hasRows, totals })
                 size="sm"
                 placeholder="Select an item…"
                 :options="itemOptions"
+                :reload="reloadItems"
                 :error="fieldErrors[`${index}.item_id`]"
                 @update:model-value="(v) => onItemSelect(row, v as number | null)"
               />

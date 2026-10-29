@@ -3,17 +3,20 @@ import { onMounted, reactive, ref } from 'vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { rolesApi } from '@/lib/rolesApi'
 import { emptyUserFeatureFlags } from '@/lib/userFeatureFlags'
+import { userCategoryOptions } from '@/lib/userCategory'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
-import type { UserDetailFormValues } from '@/types'
+import type { CategoryName, UserDetailFormValues } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
-| Create new Retailer — matches the legacy dialog exactly: Name + Phone
-| Number, nothing else.
+| Create new Retailer — the legacy dialog's Name + Phone Number, plus
+| Category: it used to be hardcoded to GRAMS here, and category now has no
+| default anywhere — the head picks one (see lib/userCategory.ts).
 |--------------------------------------------------------------------------
 | There is no "Retailer" entity in this backend — same fact AddUserModal's
 | own comment documents — a retailer is just a user_details row that later
@@ -52,7 +55,7 @@ const emit = defineEmits<{ close: []; saved: [userId: number] }>()
 
 const toast = useToastStore()
 
-const form = reactive({ name: '', phone_no: '' })
+const form = reactive({ name: '', phone_no: '', category_name: null as CategoryName | null })
 const formError = ref('')
 const isSaving = ref(false)
 
@@ -80,6 +83,10 @@ function validate(): boolean {
     formError.value = 'Phone number must be 6-15 digits.'
     return false
   }
+  if (!form.category_name) {
+    formError.value = 'Category is required.'
+    return false
+  }
   return true
 }
 
@@ -102,7 +109,7 @@ function synthesizeFormValues(): UserDetailFormValues {
     system_id: `RETAILER-${stamp}`,
     mailing_name: form.name.trim(),
     customer_commants: '',
-    category_name: 'GRAMS',
+    category_name: form.category_name,
     is_active: true,
     is_delete: false,
     is_billable: false,
@@ -156,6 +163,13 @@ async function handleSubmit() {
     <form class="flex flex-col gap-5" @submit.prevent="handleSubmit">
       <BaseInput v-model="form.name" label="Name" required maxlength="55" />
       <BaseInput v-model="form.phone_no" label="Phone Number" required maxlength="15" />
+      <BaseSelect
+        v-model="form.category_name"
+        label="Category"
+        required
+        placeholder="Select a category…"
+        :options="userCategoryOptions"
+      />
 
       <div class="flex items-center justify-end gap-3 border-t border-slate-200 pt-4">
         <BaseButton variant="secondary" type="button" :disabled="isSaving" @click="emit('close')">

@@ -10,7 +10,8 @@ import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { clientsApi } from '@/lib/clientsApi'
-import { rolesApi } from '@/lib/rolesApi'
+import { isRoleActive, rolesApi } from '@/lib/rolesApi'
+import { userCategoryOptions } from '@/lib/userCategory'
 import { ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/date'
 import type { Client, ClientFormValues, DataTableColumn, Role } from '@/types'
@@ -57,6 +58,12 @@ async function loadRoles() {
 onMounted(loadClients)
 onMounted(loadRoles)
 
+// The Role dropdown's reload button: same fetch as loadRoles(), but a failure
+// surfaces instead of blanking the list.
+async function reloadRoles() {
+  roles.value = await rolesApi.list()
+}
+
 const filteredClients = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   if (!query) return clients.value
@@ -79,7 +86,7 @@ const emptyForm: ClientFormValues = {
   proff: '',
   role_id: '',
   mailing_name: '',
-  category_name: 'BOTH',
+  category_name: null,
   system_id: '',
   is_active: true,
 }
@@ -125,6 +132,10 @@ function closeForm() {
 }
 
 async function handleSubmit() {
+  if (!form.category_name) {
+    formError.value = 'Category is required.'
+    return
+  }
   isSaving.value = true
   formError.value = ''
   try {
@@ -220,7 +231,12 @@ async function handleDelete(client: Client) {
           required
           size="sm"
           placeholder="Select a role…"
-          :options="roles.map((role) => ({ value: String(role.id), label: role.role }))"
+          :options="
+            roles
+              .filter((role) => isRoleActive(role) || String(role.id) === form.role_id)
+              .map((role) => ({ value: String(role.id), label: role.role }))
+          "
+          :reload="reloadRoles"
         />
         <BaseInput id="system_id" v-model="form.system_id" label="System ID" required size="sm" />
 
@@ -230,11 +246,8 @@ async function handleDelete(client: Client) {
           label="Category"
           required
           size="sm"
-          :options="[
-            { value: 'GRAMS', label: 'Grams' },
-            { value: 'PURITY', label: 'Purity' },
-            { value: 'BOTH', label: 'Both' },
-          ]"
+          placeholder="Select a category…"
+          :options="userCategoryOptions"
         />
 
         <BaseInput

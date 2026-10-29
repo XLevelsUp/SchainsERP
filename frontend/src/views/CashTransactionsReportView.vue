@@ -148,6 +148,15 @@ async function loadLookups() {
   }
 }
 
+// Dropdown reload buttons: each re-fetches one lookup with the same call
+// loadLookups() makes; the report itself is not re-run.
+async function reloadCategories() {
+  categories.value = await cashCategoriesApi.list()
+}
+async function reloadBanks() {
+  banks.value = await bankDetailsApi.list()
+}
+
 // Shared by runSearch and loadMore so a "load more" can never page against a
 // different filter set than the search that started it. txn_id_search is
 // deliberately absent — it filters loaded rows client-side, it is not a
@@ -272,6 +281,7 @@ onMounted(async () => {
           size="sm"
           placeholder="All categories"
           :options="categoryOptions"
+          :reload="reloadCategories"
           @update:model-value="(v) => (filters.category_id = v as number | null)"
         />
         <BaseSelect
@@ -290,6 +300,7 @@ onMounted(async () => {
           size="sm"
           placeholder="All banks"
           :options="bankOptions"
+          :reload="reloadBanks"
           @update:model-value="(v) => (filters.bank_id = v as number | null)"
         />
         <BaseInput id="report-txn-id" v-model="filters.txn_id_search" label="Cash Txn ID" size="sm" placeholder="Filter loaded rows…" />

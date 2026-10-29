@@ -17,6 +17,7 @@ import { useToastStore } from '@/stores/toast'
 import type {
   BankDetail,
   CashTxnSourceType,
+  CategoryName,
   Item,
   SaleGoldAmountSourceInput,
   SaleGoldType,
@@ -38,6 +39,8 @@ const props = defineProps<{
   customerName: string
   items: Item[]
   banks: BankDetail[]
+  reloadItems?: () => unknown
+  reloadBanks?: () => unknown
 }>()
 
 const emit = defineEmits<{ close: []; saved: [] }>()
@@ -87,6 +90,8 @@ const totalCash = computed(() => {
 const isLoadingBalance = ref(true)
 const headBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
 const customerBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
+// Display only — PartyBalanceCards zeroes the measure the customer isn't kept in.
+const customerCategory = ref<CategoryName | null>(null)
 
 async function loadBalances() {
   isLoadingBalance.value = true
@@ -103,6 +108,7 @@ async function loadBalances() {
     customerBalance.rtgs = customerRes.user.rak_rtgs_balance
     customerBalance.grams = customerRes.user.grams_grand_total
     customerBalance.purity = customerRes.user.purity_grand_total
+    customerCategory.value = customerRes.user.category_name
   } catch {
     // Non-fatal — the form still works without the balance preview.
   } finally {
@@ -302,6 +308,7 @@ async function handleSubmit() {
         :right-ob-purity="customerBalance.purity"
         :right-cb-grams="customerCbGrams"
         :right-cb-purity="customerCbPurity"
+        :right-category="customerCategory"
         :is-loading="isLoadingBalance"
       />
     </div>
@@ -311,10 +318,11 @@ async function handleSubmit() {
         <BaseSelect
           id="item_id"
           :model-value="form.item_id"
-          label="Item (optional)"
+          label="Item"
           size="sm"
           placeholder="Select an item…"
           :options="itemOptions"
+          :reload="reloadItems"
           :error="fieldErrors.item_id"
           @update:model-value="
             (v) => {
@@ -390,7 +398,7 @@ async function handleSubmit() {
         <BaseFileInput
           id="images"
           v-model="images"
-          label="Receipt images (optional)"
+          label="Receipt images"
           hint="JPG, PNG, or WEBP, up to 5 MB each."
         />
         <p v-if="fieldErrors.images" class="mt-2 text-sm text-red-600">{{ fieldErrors.images }}</p>
@@ -445,6 +453,7 @@ async function handleSubmit() {
             size="sm"
             placeholder="Select a bank…"
             :options="bankOptions"
+            :reload="reloadBanks"
             :error="fieldErrors[`amount_sources.${index}.bank_id`]"
             @update:model-value="(v) => (source.bank_id = v as number | null)"
           />

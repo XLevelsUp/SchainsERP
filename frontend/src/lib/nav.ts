@@ -24,6 +24,7 @@ import {
   MoreHorizontal,
   SlidersHorizontal,
   ClipboardList,
+  ScrollText,
 } from 'lucide-vue-next'
 import type { NavItem } from '@/types/nav'
 
@@ -54,6 +55,7 @@ export const navItems: NavItem[] = [
       { type: 'link', label: 'Customer Touch Mappings', to: '/customer-touch-mappings', icon: Hand },
       { type: 'link', label: 'Head Employee Mappings', to: '/head-employee-mappings', icon: Network },
       { type: 'link', label: 'Bank Details', to: '/bank-details', icon: Landmark },
+      { type: 'link', label: 'System Logs', to: '/system-logs', icon: ScrollText },
     ],
   },
   {

@@ -38,7 +38,7 @@ import type { UserDetailListItem } from '@/types'
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ users: UserDetailListItem[] }>()
+const props = defineProps<{ users: UserDetailListItem[]; reloadUsers?: () => unknown }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 
 const auth = useAuthStore()
@@ -112,6 +112,7 @@ async function handleSubmit() {
         label="Given to"
         placeholder="Select recipient…"
         :options="recipientOptions"
+        :reload="reloadUsers"
         :error="fieldErrors.given_to"
         required
         searchable

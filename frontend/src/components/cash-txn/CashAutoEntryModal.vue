@@ -68,9 +68,13 @@ async function loadCashUserBalance() {
 onMounted(loadCashUserBalance)
 
 const categories = ref<CashCategory[]>([])
+// Also the Category dropdown's reload button, which surfaces a failure itself.
+async function reloadCategories() {
+  categories.value = (await cashCategoriesApi.list()).filter((c) => c.is_active)
+}
 async function loadCategories() {
   try {
-    categories.value = (await cashCategoriesApi.list()).filter((c) => c.is_active)
+    await reloadCategories()
   } catch {
     // Non-fatal — rows can still be saved with category left unset.
   }
@@ -243,6 +247,7 @@ async function handleSubmit() {
             size="sm"
             placeholder="No category"
             :options="categoryOptions"
+            :reload="reloadCategories"
             @update:model-value="(v) => (row.category_id = v as number | null)"
           />
           <BaseInput
@@ -268,7 +273,7 @@ async function handleSubmit() {
           <BaseFileInput
             :id="`images_${index}`"
             v-model="row.images"
-            label="Receipt images (optional)"
+            label="Receipt images"
             hint="JPG, PNG, or WEBP, up to 5 MB each."
             compact
           />

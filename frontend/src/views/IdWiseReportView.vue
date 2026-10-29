@@ -5,6 +5,8 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import IdWiseReportPrintModal from '@/components/stock/IdWiseReportPrintModal.vue'
+import StockReceiptPrintModal from '@/components/stock/StockReceiptPrintModal.vue'
 import { stockReportsApi } from '@/lib/stockReportsApi'
 import { formatDateTime } from '@/lib/date'
 import { ApiError } from '@/lib/api'
@@ -19,12 +21,14 @@ import type { IdWiseReportResult, IdWiseTransaction } from '@/types'
 | points at it), alongside a received/consumed/balance reconciliation.
 | Mirrors the legacy "Stock ID Wise details" screen as its own menu item.
 |
-| The queried row itself is not repeated inside `transactions` — that array
-| is child drawdowns only (StockDetails::where('stock_in_id', lot_id)). A
-| freshly-created lot with nothing drawn from it yet legitimately returns
-| an empty list; the Lot Details panel above still shows its own numbers,
-| so the screen isn't blank. Flagged to backend as a possible follow-up if
-| exact legacy parity (always at least one row) is wanted.
+| `transactions` now holds the lot row itself plus every drawdown
+| (ReportService selects stock_id = lot OR stock_in_id = lot), so the
+| queried row is always in it — StockReceiptPrintModal relies on that.
+|
+| Printing: the header button previews the whole report
+| (IdWiseReportPrintModal), a row button previews that one transaction as a
+| receipt (StockReceiptPrintModal). Both re-request this same endpoint — no
+| other API is involved — instead of window.print()-ing the whole page.
 |
 | The endpoint 404s for an unknown stock_id and 422s for a non-numeric one
 | — both arrive as ApiError.message and are shown inline, same as every
@@ -129,9 +133,8 @@ onBeforeUnmount(() => {
   if (autoSearchTimer) clearTimeout(autoSearchTimer)
 })
 
-function printReport() {
-  window.print()
-}
+const reportPrintId = ref<number | null>(null)
+const receiptStockId = ref<number | null>(null)
 </script>
 
 <template>
@@ -240,7 +243,8 @@ function printReport() {
           type="button"
           class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
           aria-label="Print report"
-          @click="printReport"
+          title="Print report"
+          @click="reportPrintId = report.stock_summary.queried_id"
         >
           <Printer class="h-4 w-4" />
         </button>
@@ -289,7 +293,8 @@ function printReport() {
                   type="button"
                   class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                   :aria-label="`Print transaction ${row.id}`"
-                  @click="printReport"
+                  title="Print receipt"
+                  @click="receiptStockId = row.id"
                 >
                   <Printer class="h-4 w-4" />
                 </button>
@@ -313,5 +318,16 @@ function printReport() {
     <p v-else-if="hasSearched === false && !loadError" class="text-sm text-slate-500">
       Enter a stock ID above to view its lot details and transaction lineage.
     </p>
+
+    <IdWiseReportPrintModal
+      v-if="reportPrintId !== null"
+      :stock-id="reportPrintId"
+      @close="reportPrintId = null"
+    />
+    <StockReceiptPrintModal
+      v-if="receiptStockId !== null"
+      :stock-id="receiptStockId"
+      @close="receiptStockId = null"
+    />
   </div>
 </template>

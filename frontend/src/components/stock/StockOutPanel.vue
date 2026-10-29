@@ -74,6 +74,7 @@ const props = withDefaults(
     // optional field alongside the required given_to, not a substitute for
     // it. null for an ordinary user transaction.
     retailerId?: number | null
+    reloadItems?: () => unknown
   }>(),
   { retailerId: null },
 )
@@ -285,6 +286,7 @@ defineExpose({ addRow, submit, clear, hasRows, totals })
                 size="sm"
                 placeholder="Select an item…"
                 :options="itemOptions"
+                :reload="reloadItems"
                 :error="fieldErrors[`${index}.item_id`]"
                 @update:model-value="(v) => onItemSelect(row, index, v as number | null)"
               />

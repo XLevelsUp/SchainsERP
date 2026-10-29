@@ -5,12 +5,16 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
-import { rolesApi } from '@/lib/rolesApi'
+import { isRoleActive, rolesApi } from '@/lib/rolesApi'
 import { ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/date'
+import { useToastStore } from '@/stores/toast'
 import type { DataTableColumn, Role, RoleFormValues } from '@/types'
+
+const toast = useToastStore()
 
 const roles = ref<Role[]>([])
 const isLoading = ref(false)
@@ -19,9 +23,18 @@ const searchQuery = ref('')
 
 const columns: DataTableColumn<Role>[] = [
   { key: 'role', label: 'Role' },
+  { key: 'is_active', label: 'Status' },
   { key: 'added_at', label: 'Added' },
   { key: 'id', label: '' },
 ]
+
+// The roles API has no status field yet (BACKEND_TODO §14): it validates only
+// role/added_at/touch, so `is_active` is dropped on write and never returned.
+// Detected from the list itself so the banner goes away once it ships.
+const isStatusUnsupported = computed(
+  () => roles.value.length > 0 && roles.value.every((role) => role.is_active === undefined),
+)
+const STATUS_NOT_STORED = 'the backend does not store role status yet.'
 
 async function loadRoles() {
   isLoading.value = true
@@ -46,6 +59,7 @@ const filteredRoles = computed(() => {
 const emptyForm: RoleFormValues = {
   role: '',
   touch: null,
+  is_active: true,
 }
 
 const isFormOpen = ref(false)
@@ -63,7 +77,7 @@ function openCreateForm() {
 
 function openEditForm(role: Role) {
   editingId.value = role.id
-  Object.assign(form, { role: role.role, touch: null })
+  Object.assign(form, { role: role.role, touch: null, is_active: isRoleActive(role) })
   formError.value = ''
   isFormOpen.value = true
 }
@@ -81,10 +95,15 @@ async function handleSubmit() {
   isSaving.value = true
   formError.value = ''
   try {
-    if (editingId.value !== null) {
-      await rolesApi.update(editingId.value, { ...form })
-    } else {
-      await rolesApi.create({ ...form })
+    const saved =
+      editingId.value !== null
+        ? await rolesApi.update(editingId.value, { ...form })
+        : await rolesApi.create({ ...form })
+    if (isRoleActive(saved) !== form.is_active) {
+      toast.show(
+        `${saved.role} was saved, but not as ${form.is_active ? 'active' : 'inactive'} — ${STATUS_NOT_STORED}`,
+        'error',
+      )
     }
     isFormOpen.value = false
     await loadRoles()
@@ -106,6 +125,41 @@ async function handleDelete(role: Role) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to delete role.'
   } finally {
     deletingId.value = null
+  }
+}
+
+// Ids currently being written, so each row disables only its own toggle.
+const savingIds = ref<number[]>([])
+const isSavingRow = (id: number) => savingIds.value.includes(id)
+
+async function toggleActive(role: Role) {
+  if (isSavingRow(role.id)) return
+  const previous = role.is_active
+  const next = !isRoleActive(role)
+
+  savingIds.value = [...savingIds.value, role.id]
+  // Optimistic: the toggle reflects the intent immediately, then settles on
+  // whatever the server echoes back.
+  role.is_active = next
+  try {
+    const saved = await rolesApi.update(role.id, { is_active: next })
+    role.is_active = saved.is_active
+    if (isRoleActive(saved) === next) {
+      toast.show(`${role.role} ${next ? 'activated' : 'deactivated'}.`, 'success')
+    } else {
+      toast.show(
+        `${role.role} was not ${next ? 'activated' : 'deactivated'} — ${STATUS_NOT_STORED}`,
+        'error',
+      )
+    }
+  } catch (err) {
+    role.is_active = previous
+    toast.show(
+      err instanceof ApiError ? err.message : 'Failed to update the role status.',
+      'error',
+    )
+  } finally {
+    savingIds.value = savingIds.value.filter((id) => id !== role.id)
   }
 }
 </script>
@@ -144,6 +198,7 @@ async function handleDelete(role: Role) {
           :error="formError"
           class="max-w-sm"
         />
+        <BaseCheckbox v-model="form.is_active" label="Active" />
 
         <div class="flex items-center gap-3">
           <BaseButton type="submit" :disabled="isSaving">
@@ -166,6 +221,15 @@ async function handleDelete(role: Role) {
     </div>
 
     <div
+      v-if="isStatusUnsupported"
+      class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+    >
+      <span class="font-semibold">Activate / deactivate is not saved yet.</span>
+      The backend roles API has no status field, so every role shows as Active and a change is
+      sent but not stored. This has been reported to the backend team.
+    </div>
+
+    <div
       v-if="loadError"
       class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
     >
@@ -185,6 +249,15 @@ async function handleDelete(role: Role) {
       :rows="filteredRoles"
       empty-message="No roles yet. Add your first role to get started."
     >
+      <template #is_active="{ row }">
+        <BaseCheckbox
+          :model-value="isRoleActive(row)"
+          :disabled="isSavingRow(row.id)"
+          :label="isRoleActive(row) ? 'Active' : 'Inactive'"
+          @update:model-value="toggleActive(row)"
+        />
+      </template>
+
       <template #added_at="{ value }">{{ formatDateTime(value as string) }}</template>
 
       <template #id="{ row }">

@@ -376,6 +376,18 @@ async function loadLookups() {
 }
 
 onMounted(loadLookups)
+
+// Dropdown reload buttons: each re-fetches one master with the same call
+// loadLookups() makes, leaving the entry rows and selections alone.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list(undefined, 'stock')
+}
+async function reloadItems() {
+  items.value = await itemsApi.list()
+}
+async function reloadBoxes() {
+  boxes.value = await fitemBoxesApi.list()
+}
 </script>
 
 <template>
@@ -404,6 +416,7 @@ onMounted(loadLookups)
             required
             placeholder="Select…"
             :options="userOptions"
+            :reload="reloadUsers"
             :error="fieldErrors.from_user_id"
           />
           <BaseSelect
@@ -413,6 +426,7 @@ onMounted(loadLookups)
             required
             placeholder="Select…"
             :options="userOptions"
+            :reload="reloadUsers"
             :error="fieldErrors.to_user_id"
           />
           <BaseSelect
@@ -422,6 +436,7 @@ onMounted(loadLookups)
             required
             placeholder="Select…"
             :options="itemOptions"
+            :reload="reloadItems"
             :error="fieldErrors.from_item_id"
           />
           <BaseSelect
@@ -431,23 +446,26 @@ onMounted(loadLookups)
             required
             placeholder="Select…"
             :options="itemOptions"
+            :reload="reloadItems"
             :error="fieldErrors.to_item_id"
           />
           <BaseSelect
             v-if="meta.fromRetailer"
             v-model="form.from_retailer_id"
-            label="From retailer (optional)"
+            label="From retailer"
             size="sm"
             placeholder="None…"
             :options="userOptions"
+            :reload="reloadUsers"
           />
           <BaseSelect
             v-if="meta.toRetailer"
             v-model="form.to_retailer_id"
-            label="To retailer (optional)"
+            label="To retailer"
             size="sm"
             placeholder="None…"
             :options="userOptions"
+            :reload="reloadUsers"
           />
         </div>
 
@@ -625,10 +643,11 @@ onMounted(loadLookups)
             <div class="grid gap-3 sm:grid-cols-3">
               <BaseSelect
                 v-model="row.box_id"
-                label="Box (optional)"
+                label="Box"
                 size="sm"
                 placeholder="None…"
                 :options="boxOptions"
+                :reload="reloadBoxes"
               />
               <BaseInput
                 :model-value="row.mtouch === null ? '' : String(row.mtouch)"
@@ -648,8 +667,8 @@ onMounted(loadLookups)
           </div>
 
           <div class="mt-2 grid gap-3 sm:grid-cols-2">
-            <BaseInput v-model="row.remarks" label="Remarks (optional)" size="sm" />
-            <BaseInput v-model="row.item_remarks" label="Item remarks (optional)" size="sm" />
+            <BaseInput v-model="row.remarks" label="Remarks" size="sm" />
+            <BaseInput v-model="row.item_remarks" label="Item remarks" size="sm" />
           </div>
 
           <p class="mt-2 text-xs text-slate-500">

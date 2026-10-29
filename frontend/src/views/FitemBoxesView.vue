@@ -58,6 +58,12 @@ async function loadData() {
 
 onMounted(loadData)
 
+// The Item dropdown's reload button: re-fetches items alone, without the
+// boxes table or its loading state.
+async function reloadItems() {
+  items.value = await itemsApi.list()
+}
+
 const filteredBoxes = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   if (!query) return boxes.value
@@ -199,6 +205,7 @@ async function handleDelete(box: FitemBox) {
           required
           placeholder="Select an item…"
           :options="items.map((item) => ({ value: item.item_id, label: item.item_name }))"
+          :reload="reloadItems"
         />
 
         <BaseCheckbox v-model="form.is_active" label="Active" class="sm:col-span-2" />

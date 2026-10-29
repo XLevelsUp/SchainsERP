@@ -32,7 +32,8 @@ export interface ClientFormValues {
   proff: string
   role_id: string
   mailing_name: string
-  category_name: ClientCategory
+  // null until picked — no default; handleSubmit blocks while unset.
+  category_name: ClientCategory | null
   system_id: string
   is_active: boolean
 }

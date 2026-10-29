@@ -114,6 +114,12 @@ async function loadRoles() {
   }
 }
 
+// The Role filter's reload button: same fetch as loadRoles(), but a failure
+// surfaces instead of being swallowed. The contact list is not re-run.
+async function reloadRoles() {
+  roles.value = await rolesApi.list()
+}
+
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 watch(
   () => filters.search,
@@ -186,6 +192,7 @@ onMounted(() => {
           size="sm"
           placeholder="All roles…"
           :options="roleOptions"
+          :reload="reloadRoles"
         />
         <BaseSelect
           v-model="filters.status"

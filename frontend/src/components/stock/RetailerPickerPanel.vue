@@ -36,7 +36,7 @@ import type { UserDetailListItem } from '@/types'
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ users: UserDetailListItem[] }>()
+const props = defineProps<{ users: UserDetailListItem[]; reloadUsers?: () => unknown }>()
 const emit = defineEmits<{ usersChanged: [] }>()
 
 const auth = useAuthStore()
@@ -86,6 +86,7 @@ function handleRetailerSaved(userId: number) {
         label="Retailer"
         placeholder="Select Retailer…"
         :options="retailerOptions"
+        :reload="reloadUsers"
       />
       <BaseInput
         v-model="phoneSearch"

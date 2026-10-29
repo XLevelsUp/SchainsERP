@@ -141,6 +141,15 @@ async function loadLookups() {
   }
 }
 
+// Dropdown reload buttons: each re-fetches one lookup with the same call
+// loadLookups() makes; the mappings table is not reloaded.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list(undefined, 'stock')
+}
+async function reloadTouches() {
+  touches.value = await customerTouchApi.list()
+}
+
 // ---------------------------------------------------------------------------
 // Inline active toggle
 // ---------------------------------------------------------------------------
@@ -358,6 +367,7 @@ onMounted(async () => {
           size="sm"
           placeholder="All users…"
           :options="userOptions"
+          :reload="reloadUsers"
           @update:model-value="loadMappings"
         />
         <BaseSelect
@@ -366,6 +376,7 @@ onMounted(async () => {
           size="sm"
           placeholder="All touches…"
           :options="touchOptions"
+          :reload="reloadTouches"
         />
         <div class="flex items-end justify-between gap-3">
           <BaseCheckbox v-model="filters.active_only" label="Active only" />
@@ -409,6 +420,7 @@ onMounted(async () => {
             required
             placeholder="Select a user…"
             :options="userOptions"
+            :reload="reloadUsers"
           />
           <BaseSelect
             v-model="editForm.customer_touch_id"
@@ -416,6 +428,7 @@ onMounted(async () => {
             required
             placeholder="Select a customer touch…"
             :options="touchOptions"
+            :reload="reloadTouches"
           />
         </div>
         <BaseCheckbox v-model="editForm.is_active" label="Active" />

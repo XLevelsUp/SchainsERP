@@ -20,6 +20,7 @@ import type {
   BankDetail,
   CashToGoldAmountSourceInput,
   CashTxnSourceType,
+  CategoryName,
   GoldToCashFormValues,
   GoldToCashRecord,
   UserDetailListItem,
@@ -73,6 +74,15 @@ async function loadData() {
 }
 
 onMounted(loadData)
+
+// Dropdown reload buttons: each re-fetches one master with the same call
+// loadData() makes, leaving isLoading/loadError and the form alone.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list(undefined, 'cash')
+}
+async function reloadBanks() {
+  banks.value = await bankDetailsApi.list()
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -168,17 +178,23 @@ const headBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
 const customerBalance = reactive({ cash: 0, rtgs: 0, grams: 0, purity: 0 })
 const isLoadingHeadBalance = ref(false)
 const isLoadingCustomerBalance = ref(false)
+// Display only — PartyBalanceCards zeroes the measure the customer isn't kept in.
+const customerCategory = ref<CategoryName | null>(null)
 
+// `category` is passed for the customer only — the head's side always
+// shows both measures.
 async function loadPartyBalance(
   userId: number | null,
   balance: typeof headBalance,
   loadingFlag: typeof isLoadingHeadBalance,
+  category?: typeof customerCategory,
 ) {
   if (userId === null) {
     balance.cash = 0
     balance.rtgs = 0
     balance.grams = 0
     balance.purity = 0
+    if (category) category.value = null
     return
   }
   loadingFlag.value = true
@@ -188,11 +204,13 @@ async function loadPartyBalance(
     balance.rtgs = user.rak_rtgs_balance
     balance.grams = user.grams_grand_total
     balance.purity = user.purity_grand_total
+    if (category) category.value = user.category_name
   } catch {
     balance.cash = 0
     balance.rtgs = 0
     balance.grams = 0
     balance.purity = 0
+    if (category) category.value = null
   } finally {
     loadingFlag.value = false
   }
@@ -204,7 +222,7 @@ watch(
 )
 watch(
   () => form.customer_id,
-  (id) => loadPartyBalance(id, customerBalance, isLoadingCustomerBalance),
+  (id) => loadPartyBalance(id, customerBalance, isLoadingCustomerBalance, customerCategory),
 )
 
 const sourcesCashTotal = computed(() =>
@@ -390,6 +408,7 @@ async function handleSubmit() {
             size="sm"
             placeholder="Select a user…"
             :options="userOptions"
+            :reload="reloadUsers"
             :error="fieldErrors.head_id"
             @update:model-value="(v) => (form.head_id = v as number | null)"
           />
@@ -401,13 +420,14 @@ async function handleSubmit() {
             size="sm"
             placeholder="Select a user…"
             :options="userOptions"
+            :reload="reloadUsers"
             :error="fieldErrors.customer_id"
             @update:model-value="(v) => (form.customer_id = v as number | null)"
           />
           <BaseInput
             id="retailer_id"
             :model-value="form.retailer_id === null ? '' : String(form.retailer_id)"
-            label="Retailer ID (optional)"
+            label="Retailer ID"
             type="number"
             step="1"
             size="sm"
@@ -504,6 +524,7 @@ async function handleSubmit() {
             :right-ob-purity="customerBalance.purity"
             :right-cb-grams="customerCbGrams"
             :right-cb-purity="customerCbPurity"
+            :right-category="customerCategory"
             :is-loading="isLoadingHeadBalance || isLoadingCustomerBalance"
           />
         </section>
@@ -513,7 +534,7 @@ async function handleSubmit() {
           <BaseFileInput
             id="images"
             v-model="images"
-            label="Receipt images (optional)"
+            label="Receipt images"
             hint="JPG, PNG, or WEBP, up to 5 MB each."
           />
           <p v-if="fieldErrors.images" class="mt-2 text-sm text-red-600">{{ fieldErrors.images }}</p>
@@ -573,6 +594,7 @@ async function handleSubmit() {
               size="sm"
               placeholder="Select a bank…"
               :options="bankOptions"
+              :reload="reloadBanks"
               :error="fieldErrors[`amount_sources.${index}.bank_id`]"
               @update:model-value="(v) => (source.bank_id = v as number | null)"
             />

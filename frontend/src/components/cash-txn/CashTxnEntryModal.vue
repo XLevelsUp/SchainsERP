@@ -33,6 +33,7 @@ const props = defineProps<{
   userName: string
   direction: 'in' | 'out'
   banks: BankDetail[]
+  reloadBanks?: () => unknown
 }>()
 
 const emit = defineEmits<{ close: []; saved: [] }>()
@@ -40,10 +41,13 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 const auth = useAuthStore()
 const toastStore = useToastStore()
 
-const bankOptions = props.banks.map((b) => ({
-  value: b.bank_id,
-  label: b.account_name || `#${b.bank_id}`,
-}))
+// Computed so a reload of `banks` in the parent reaches the dropdown.
+const bankOptions = computed(() =>
+  props.banks.map((b) => ({
+    value: b.bank_id,
+    label: b.account_name || `#${b.bank_id}`,
+  })),
+)
 
 // sender = who pays, recipient = who receives.
 const senderId = props.direction === 'out' ? props.headId : props.userId
@@ -79,9 +83,13 @@ onMounted(loadBalances)
 // against the transaction direction server-side) — showing every active
 // category avoids hiding one the user legitimately wants.
 const categories = ref<CashCategory[]>([])
+// Also the Category dropdown's reload button, which surfaces a failure itself.
+async function reloadCategories() {
+  categories.value = (await cashCategoriesApi.list()).filter((c) => c.is_active)
+}
 async function loadCategories() {
   try {
-    categories.value = (await cashCategoriesApi.list()).filter((c) => c.is_active)
+    await reloadCategories()
   } catch {
     // Non-fatal — the form still works with category left unset.
   }
@@ -247,10 +255,11 @@ async function handleSubmit() {
         <BaseSelect
           id="category_id"
           :model-value="form.category_id"
-          label="Category (optional)"
+          label="Category"
           size="sm"
           placeholder="No category"
           :options="categoryOptions"
+          :reload="reloadCategories"
           @update:model-value="(v) => (form.category_id = v as number | null)"
         />
         <BaseInput
@@ -290,6 +299,7 @@ async function handleSubmit() {
           size="sm"
           placeholder="Select a bank…"
           :options="bankOptions"
+          :reload="reloadBanks"
           :error="fieldErrors.bank_account_id"
           @update:model-value="(v) => (form.bank_account_id = v as number | null)"
         />
@@ -301,7 +311,7 @@ async function handleSubmit() {
         <BaseFileInput
           id="images"
           v-model="form.images"
-          label="Receipt images (optional)"
+          label="Receipt images"
           hint="JPG, PNG, or WEBP, up to 5 MB each."
         />
         <p v-if="fieldErrors.images" class="mt-2 text-sm text-red-600">{{ fieldErrors.images }}</p>

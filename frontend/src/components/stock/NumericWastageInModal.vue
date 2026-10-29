@@ -33,7 +33,12 @@ import type { Item, NumericWastageInItemInput } from '@/types'
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ items: Item[]; headId: number | null; givenBy: number | null }>()
+const props = defineProps<{
+  items: Item[]
+  headId: number | null
+  givenBy: number | null
+  reloadItems?: () => unknown
+}>()
 const emit = defineEmits<{ close: []; saved: []; missingUser: [] }>()
 
 const toast = useToastStore()
@@ -189,6 +194,7 @@ function formatNumber(value: number) {
                 size="sm"
                 placeholder="Select an item…"
                 :options="itemOptions"
+                :reload="reloadItems"
                 :error="fieldErrors[`${index}.item_id`]"
                 @update:model-value="(v) => onItemSelect(row, v as number | null)"
               />
@@ -273,14 +279,14 @@ function formatNumber(value: number) {
             <BaseInput
               :id="`remarks_${index}`"
               :model-value="row.remarks"
-              label="Remarks (optional)"
+              label="Remarks"
               size="sm"
               @update:model-value="(v) => (row.remarks = v)"
             />
             <BaseInput
               :id="`item_remarks_${index}`"
               :model-value="row.item_remarks"
-              label="Item remarks (optional)"
+              label="Item remarks"
               size="sm"
               @update:model-value="(v) => (row.item_remarks = v)"
             />

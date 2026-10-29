@@ -76,6 +76,18 @@ async function loadData() {
 
 onMounted(loadData)
 
+// Dropdown reload buttons: each re-fetches one master with the same call
+// loadData() makes, leaving isLoading/loadError and the form alone.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list(undefined, 'cash')
+}
+async function reloadItems() {
+  items.value = await itemsApi.list()
+}
+async function reloadBanks() {
+  banks.value = await bankDetailsApi.list()
+}
+
 /*
 |--------------------------------------------------------------------------
 | Form state
@@ -299,6 +311,7 @@ async function handleSubmit() {
             size="sm"
             placeholder="Select a user…"
             :options="userOptions"
+            :reload="reloadUsers"
             :error="fieldErrors.head_id"
             @update:model-value="(v) => (form.head_id = v as number | null)"
           />
@@ -310,16 +323,18 @@ async function handleSubmit() {
             size="sm"
             placeholder="Select a user…"
             :options="userOptions"
+            :reload="reloadUsers"
             :error="fieldErrors.customer_id"
             @update:model-value="(v) => (form.customer_id = v as number | null)"
           />
           <BaseSelect
             id="item_id"
             :model-value="form.item_id"
-            label="Item (optional)"
+            label="Item"
             size="sm"
             placeholder="Select an item…"
             :options="itemOptions"
+            :reload="reloadItems"
             :error="fieldErrors.item_id"
             @update:model-value="
               (v) => {
@@ -391,7 +406,7 @@ async function handleSubmit() {
           <BaseInput
             id="retailer_id"
             :model-value="form.retailer_id === null ? '' : String(form.retailer_id)"
-            label="Retailer ID (optional)"
+            label="Retailer ID"
             type="number"
             step="1"
             size="sm"
@@ -413,7 +428,7 @@ async function handleSubmit() {
           <BaseFileInput
             id="images"
             v-model="images"
-            label="Receipt images (optional)"
+            label="Receipt images"
             hint="JPG, PNG, or WEBP, up to 5 MB each."
           />
           <p v-if="fieldErrors.images" class="mt-2 text-sm text-red-600">{{ fieldErrors.images }}</p>
@@ -473,6 +488,7 @@ async function handleSubmit() {
               size="sm"
               placeholder="Select a bank…"
               :options="bankOptions"
+              :reload="reloadBanks"
               :error="fieldErrors[`amount_sources.${index}.bank_id`]"
               @update:model-value="(v) => (source.bank_id = v as number | null)"
             />

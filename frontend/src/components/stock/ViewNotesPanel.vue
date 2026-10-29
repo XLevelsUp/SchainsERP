@@ -80,7 +80,7 @@ import type { Reminder, UserDetailListItem } from '@/types'
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ users: UserDetailListItem[] }>()
+const props = defineProps<{ users: UserDetailListItem[]; reloadUsers?: () => unknown }>()
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -452,6 +452,7 @@ function closeView() {
         required
         placeholder="Select…"
         :options="userOptions"
+        :reload="reloadUsers"
       />
 
       <p v-if="formError" class="text-sm text-red-600">{{ formError }}</p>

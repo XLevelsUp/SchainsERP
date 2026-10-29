@@ -193,6 +193,15 @@ async function loadLookups() {
   }
 }
 
+// Dropdown reload buttons: each re-fetches one lookup with the same call
+// loadLookups() makes; the report itself is not re-run.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list(undefined, 'stock')
+}
+async function reloadItems() {
+  items.value = await itemsApi.list()
+}
+
 async function runSearch() {
   if (isLoading.value) return
   isLoading.value = true
@@ -327,6 +336,7 @@ onMounted(() => {
           size="sm"
           placeholder="Anyone…"
           :options="userOptions"
+          :reload="reloadUsers"
         />
         <BaseSelect
           v-model="filters.given_by_given_to"
@@ -334,6 +344,7 @@ onMounted(() => {
           size="sm"
           placeholder="Anyone…"
           :options="userOptions"
+          :reload="reloadUsers"
         />
         <BaseSelect
           v-model="filters.item_id"
@@ -341,6 +352,7 @@ onMounted(() => {
           size="sm"
           placeholder="All items…"
           :options="itemOptions"
+          :reload="reloadItems"
         />
         <BaseSelect
           v-model="filters.type"

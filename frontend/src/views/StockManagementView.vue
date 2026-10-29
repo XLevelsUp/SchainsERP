@@ -322,6 +322,18 @@ async function loadData() {
 
 onMounted(loadData)
 
+// Dropdown reload buttons: each re-fetches one master with the same call
+// loadData() makes, leaving isLoading/loadError and every selection alone.
+async function reloadItems() {
+  items.value = await itemsApi.list()
+}
+async function reloadUsers() {
+  users.value = await userDetailsApi.list(undefined, 'stock')
+}
+async function reloadBanks() {
+  banks.value = await bankDetailsApi.list()
+}
+
 type ActiveModal =
   | 'add-user'
   | 'item-change'
@@ -478,12 +490,13 @@ async function handleSubmitAll() {
       >
         Clear page
       </BaseButton>
-      <ViewNotesPanel :users="users" />
+      <ViewNotesPanel :users="users" :reload-users="reloadUsers" />
 
       <HeadStockSummaryPanel ref="headStockPanelRef" />
       <TransactionHistoryPanel
         ref="txnHistoryPanelRef"
         :items="items"
+        :reload-items="reloadItems"
         :employee-id="selectedUserId"
         :users="users"
       />
@@ -496,6 +509,7 @@ async function handleSubmitAll() {
           v-if="!selectedUserId"
           v-model="selectedRetailerId"
           :users="users"
+          :reload-users="reloadUsers"
           @users-changed="loadData"
         />
         <CustomerContextPanel
@@ -557,6 +571,7 @@ async function handleSubmitAll() {
         <StockOutPanel
           ref="stockOutPanelRef"
           :items="items"
+          :reload-items="reloadItems"
           :head-id="auth.user?.user_id ?? null"
           :given-to="activeCustomerId"
           :retailer-id="selectedRetailerId"
@@ -566,6 +581,7 @@ async function handleSubmitAll() {
         <NumericWastageOutPanel
           ref="numericWastageOutPanelRef"
           :items="items"
+          :reload-items="reloadItems"
           :head-id="auth.user?.user_id ?? null"
           :given-to="selectedUserId"
           @saved="handleStockChanged"
@@ -600,6 +616,7 @@ async function handleSubmitAll() {
         <StockInPanel
           ref="stockInPanelRef"
           :items="items"
+          :reload-items="reloadItems"
           :head-id="auth.user?.user_id ?? null"
           :given-by="selectedUserId"
           @saved="handleStockChanged"
@@ -616,6 +633,10 @@ async function handleSubmitAll() {
       page's left-out/right-in order; the beam on top compares pending
       purity either side of the centre (see `beam`).
 
+      From md up the row is a 1fr | figures | 1fr grid so the figures sit
+      centred in the bar with the buttons in the right column; below md it
+      wraps and centres instead.
+
       -mx-6/-mb-6 cancel AppShell's <main> p-6 so the bar runs edge to edge
       and sits flush on the bottom. -bottom-6 likewise: sticky offsets are
       measured inside the scroller's padding, so bottom-0 would float the
@@ -625,9 +646,11 @@ async function handleSubmitAll() {
       v-if="entryPanels.some((p) => p.hasRows())"
       class="z-20 -mx-6 mt-6 -mb-6 border-t border-slate-200 bg-white px-6 py-3 shadow-[0_-2px_6px_-2px_rgb(15_23_42/0.08)] md:sticky md:-bottom-6"
     >
-      <div class="flex flex-wrap items-center justify-between gap-x-10 gap-y-3">
+      <div
+        class="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 md:grid md:grid-cols-[1fr_minmax(0,36rem)_1fr] md:gap-x-6"
+      >
         <div
-          class="grid min-w-0 flex-1 grid-cols-[auto_repeat(3,minmax(4.5rem,1fr))] items-baseline gap-x-6 gap-y-0.5 sm:max-w-xl"
+          class="grid min-w-0 flex-1 grid-cols-[auto_repeat(3,minmax(4.5rem,1fr))] items-baseline gap-x-6 gap-y-0.5 sm:max-w-xl md:col-start-2"
         >
           <div
             class="relative col-span-3 col-start-2 mb-2 h-[3px] rounded-full bg-slate-100"
@@ -670,7 +693,7 @@ async function handleSubmitAll() {
           <span class="text-right font-figure text-sm tabular-nums text-slate-600">{{ formatTotal(inTotals.wastage) }}</span>
         </div>
 
-        <div class="flex gap-2">
+        <div class="flex gap-2 md:col-start-3 md:justify-self-end">
           <BaseButton variant="secondary" :disabled="isSubmittingAll" @click="handleClearAll">
             Clear rows
           </BaseButton>
@@ -690,6 +713,7 @@ async function handleSubmitAll() {
     <ItemChangeModal
       v-if="activeModal === 'item-change'"
       :items="items"
+      :reload-items="reloadItems"
       :user-id="selectedUserId"
       @close="closeModal"
       @saved="handleModalSaved"
@@ -698,6 +722,7 @@ async function handleSubmitAll() {
     <ItemConversionModal
       v-if="activeModal === 'item-conversion'"
       :items="items"
+      :reload-items="reloadItems"
       :user-id="selectedUserId"
       @close="closeModal"
       @saved="handleModalSaved"
@@ -706,6 +731,7 @@ async function handleSubmitAll() {
     <GmsOutModal
       v-if="activeModal === 'gms-out'"
       :items="items"
+      :reload-items="reloadItems"
       :head-id="auth.user?.user_id ?? null"
       :given-to="selectedUserId"
       @close="closeModal"
@@ -715,6 +741,7 @@ async function handleSubmitAll() {
     <GmsInModal
       v-if="activeModal === 'gms-in'"
       :items="items"
+      :reload-items="reloadItems"
       :head-id="auth.user?.user_id ?? null"
       :given-by="selectedUserId"
       @close="closeModal"
@@ -724,13 +751,20 @@ async function handleSubmitAll() {
     <NumericWastageInModal
       v-if="activeModal === 'numeric-wastage-in'"
       :items="items"
+      :reload-items="reloadItems"
       :head-id="auth.user?.user_id ?? null"
       :given-by="selectedUserId"
       @close="closeModal"
       @saved="handleModalSaved"
       @missing-user="flagMissingUserSelection"
     />
-    <CashOutModal v-if="activeModal === 'cash-out'" :users="users" @close="closeModal" @saved="handleCashOutSaved" />
+    <CashOutModal
+      v-if="activeModal === 'cash-out'"
+      :users="users"
+      :reload-users="reloadUsers"
+      @close="closeModal"
+      @saved="handleCashOutSaved"
+    />
     <!--
       Cash In reuses Cash Management's entry modal. Only rendered with a user
       actually picked — the button that opens it is itself behind
@@ -745,6 +779,7 @@ async function handleSubmitAll() {
       :user-name="selectedUser.full_name || selectedUser.name"
       direction="in"
       :banks="banks"
+      :reload-banks="reloadBanks"
       @close="closeModal"
       @saved="handleCashOutSaved"
     />

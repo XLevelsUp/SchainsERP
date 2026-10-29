@@ -132,9 +132,13 @@ async function loadDetail() {
   }
 }
 
+// Also the Customer Touch dropdown's reload button, which surfaces a failure.
+async function reloadTouchOptions() {
+  touchOptions.value = await customerTouchApi.list()
+}
 async function loadTouchOptions() {
   try {
-    touchOptions.value = await customerTouchApi.list()
+    await reloadTouchOptions()
   } catch {
     // Non-critical — the picker just stays empty if this fails.
   }
@@ -200,6 +204,7 @@ onMounted(loadTouchOptions)
             label="Customer Touch"
             placeholder="Select Customer Touch…"
             :options="touchOptions.map((t) => ({ value: t.item_id, label: t.item_name }))"
+            :reload="reloadTouchOptions"
           />
           <!--
             Which deliver action appears is role-driven, straight from the

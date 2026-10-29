@@ -157,6 +157,15 @@ async function loadLookups() {
   }
 }
 
+// Dropdown reload buttons: each re-fetches one lookup with the same call
+// loadLookups() makes; the orders table is not reloaded.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list(undefined, 'stock')
+}
+async function reloadItems() {
+  items.value = await itemsApi.list()
+}
+
 // ---------------------------------------------------------------------------
 // Create / edit
 // ---------------------------------------------------------------------------
@@ -330,6 +339,7 @@ onMounted(async () => {
           size="sm"
           placeholder="All customers…"
           :options="userOptions"
+          :reload="reloadUsers"
         />
         <div class="flex items-end">
           <BaseButton variant="secondary" type="button" @click="clearFilters">Clear</BaseButton>
@@ -371,6 +381,7 @@ onMounted(async () => {
             required
             placeholder="Select a customer…"
             :options="userOptions"
+            :reload="reloadUsers"
           />
           <BaseSelect
             v-model="form.item_id"
@@ -378,6 +389,7 @@ onMounted(async () => {
             required
             placeholder="Select an item…"
             :options="itemOptions"
+            :reload="reloadItems"
           />
           <BaseInput
             :model-value="form.grams === null ? '' : String(form.grams)"

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { categoryShowsGrams, categoryShowsPurity } from '@/lib/userCategory'
+import type { CategoryName } from '@/types'
 
 // OB (opening balance, fetched live) / CB (closing balance, calculated
 // client-side from the form's amount + payment method) for both parties —
@@ -37,6 +39,11 @@ const props = withDefaults(
     rightObPurity?: number
     rightCbGrams?: number | null
     rightCbPurity?: number | null
+    // The selected party's category_name, passed for that side only (never
+    // the head's): the measure they are not kept in reads 0 — see
+    // lib/userCategory.ts. Omitted shows both, as before.
+    leftCategory?: CategoryName | null
+    rightCategory?: CategoryName | null
     isLoading?: boolean
     // Which balance column the pending transaction will move — lets the
     // operator see at a glance whether Hand Cash or RTGS Cash is affected
@@ -52,6 +59,17 @@ const showGold = computed(() => props.leftObGrams !== undefined)
 
 function fmt(value: number | null | undefined) {
   return value === null || value === undefined ? '—' : value.toLocaleString()
+}
+
+const leftShowsGrams = computed(() => categoryShowsGrams(props.leftCategory))
+const leftShowsPurity = computed(() => categoryShowsPurity(props.leftCategory))
+const rightShowsGrams = computed(() => categoryShowsGrams(props.rightCategory))
+const rightShowsPurity = computed(() => categoryShowsPurity(props.rightCategory))
+
+// Display only — the parent's OB/CB maths is untouched. A CB that cannot be
+// computed yet stays "—" rather than reading 0.
+function fmtGold(value: number | null | undefined, shown: boolean) {
+  return fmt(shown || value === null || value === undefined ? value : 0)
 }
 </script>
 
@@ -104,8 +122,8 @@ function fmt(value: number | null | undefined) {
             {{ (leftObCash + leftObRtgs).toLocaleString() }}
           </td>
           <template v-if="showGold">
-            <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ fmt(leftObGrams) }}</td>
-            <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ fmt(leftObPurity) }}</td>
+            <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ fmtGold(leftObGrams, leftShowsGrams) }}</td>
+            <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ fmtGold(leftObPurity, leftShowsPurity) }}</td>
           </template>
         </tr>
         <tr class="bg-rose-50/50">
@@ -126,8 +144,8 @@ function fmt(value: number | null | undefined) {
             {{ leftCbCash === null || leftCbRtgs === null ? '—' : (leftCbCash + leftCbRtgs).toLocaleString() }}
           </td>
           <template v-if="showGold">
-            <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{{ fmt(leftCbGrams) }}</td>
-            <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{{ fmt(leftCbPurity) }}</td>
+            <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{{ fmtGold(leftCbGrams, leftShowsGrams) }}</td>
+            <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{{ fmtGold(leftCbPurity, leftShowsPurity) }}</td>
           </template>
         </tr>
       </tbody>
@@ -169,8 +187,8 @@ function fmt(value: number | null | undefined) {
             {{ rightObCash == null || rightObRtgs == null ? '—' : (rightObCash + rightObRtgs).toLocaleString() }}
           </td>
           <template v-if="showGold">
-            <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ fmt(rightObGrams) }}</td>
-            <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ fmt(rightObPurity) }}</td>
+            <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ fmtGold(rightObGrams, rightShowsGrams) }}</td>
+            <td class="px-3 py-2 text-right tabular-nums text-slate-700">{{ fmtGold(rightObPurity, rightShowsPurity) }}</td>
           </template>
         </tr>
         <tr class="bg-emerald-50/50">
@@ -191,8 +209,8 @@ function fmt(value: number | null | undefined) {
             {{ rightCbCash == null || rightCbRtgs == null ? '—' : (rightCbCash + rightCbRtgs).toLocaleString() }}
           </td>
           <template v-if="showGold">
-            <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{{ fmt(rightCbGrams) }}</td>
-            <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{{ fmt(rightCbPurity) }}</td>
+            <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{{ fmtGold(rightCbGrams, rightShowsGrams) }}</td>
+            <td class="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{{ fmtGold(rightCbPurity, rightShowsPurity) }}</td>
           </template>
         </tr>
       </tbody>

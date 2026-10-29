@@ -1,6 +1,7 @@
 <script setup lang="ts" generic="T">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { Check, ChevronDown, Search, X } from 'lucide-vue-next'
+import { Check, ChevronDown, RotateCw, Search, X } from 'lucide-vue-next'
+import { useOptionsReload } from '@/lib/optionsReload'
 
 interface SelectOption<T> {
   value: T
@@ -25,6 +26,9 @@ const props = withDefaults(
     options?: SelectOption<T>[]
     size?: 'md' | 'sm'
     disabled?: boolean
+    // Re-fetches this dropdown's master list. Shows a reload button inside
+    // the box when set; omitted, the select renders exactly as before.
+    reload?: () => unknown
   }>(),
   {
     id: undefined,
@@ -35,10 +39,13 @@ const props = withDefaults(
     options: () => [],
     size: 'md',
     disabled: false,
+    reload: undefined,
   },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [value: T] }>()
+
+const { isReloading, reloadOptions } = useOptionsReload(() => props.reload)
 
 // Master searchable-dropdown control — every picker in the app (users,
 // items, roles, banks, categories…) goes through this one component, so
@@ -207,6 +214,16 @@ onBeforeUnmount(removeListeners)
             @click="clearValue"
           >
             <X class="h-3.5 w-3.5" />
+          </span>
+          <span
+            v-if="reload && !disabled"
+            role="button"
+            aria-label="Reload list"
+            title="Reload list"
+            class="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            @click="reloadOptions"
+          >
+            <RotateCw class="h-3.5 w-3.5" :class="isReloading ? 'animate-spin' : ''" />
           </span>
           <ChevronDown class="h-4 w-4 text-slate-400" :class="isOpen ? 'rotate-180' : ''" />
         </span>

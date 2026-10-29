@@ -111,6 +111,25 @@ async function loadBaseData() {
 
 onMounted(loadBaseData)
 
+// Dropdown reload buttons: each re-fetches one master with the same call
+// loadBaseData() / onRoleFilterChange() make, leaving isLoading, loadError
+// and every selection alone.
+async function reloadHeads() {
+  allUsers.value = await userDetailsApi.list(undefined, 'cash')
+}
+async function reloadRoles() {
+  roles.value = await rolesApi.list()
+}
+async function reloadFilteredUsers() {
+  filteredUsers.value = await userDetailsApi.list(roleFilter.value || undefined, 'cash')
+}
+async function reloadBanks() {
+  banks.value = await bankDetailsApi.list()
+}
+async function reloadItems() {
+  items.value = await itemsApi.list()
+}
+
 async function onRoleFilterChange(role: string) {
   roleFilter.value = role
   userId.value = null
@@ -248,6 +267,7 @@ async function handleSaved() {
             size="sm"
             placeholder="Select a head…"
             :options="headOptions"
+            :reload="reloadHeads"
             @update:model-value="(v) => onHeadChange(v as number | null)"
           />
           <p v-if="headUser && headBalance.loading" class="text-xs text-slate-500">Loading balance…</p>
@@ -279,6 +299,7 @@ async function handleSaved() {
               label="Roles"
               size="sm"
               :options="roleOptions"
+              :reload="reloadRoles"
               @update:model-value="(v) => onRoleFilterChange(v as string)"
             />
             <BaseSelect
@@ -288,6 +309,7 @@ async function handleSaved() {
               size="sm"
               placeholder="Choose user…"
               :options="userOptions"
+              :reload="reloadFilteredUsers"
               @update:model-value="(v) => (userId = v as number | null)"
             />
           </div>
@@ -471,6 +493,7 @@ async function handleSaved() {
       :user-name="selectedUser.name"
       :direction="activeModal"
       :banks="banks"
+      :reload-banks="reloadBanks"
       @close="closeModal"
       @saved="handleSaved"
     />
@@ -482,7 +505,9 @@ async function handleSaved() {
       :customer-id="selectedUser.id"
       :customer-name="selectedUser.name"
       :items="items"
+      :reload-items="reloadItems"
       :banks="banks"
+      :reload-banks="reloadBanks"
       @close="closeModal"
       @saved="handleSaved"
     />
@@ -494,6 +519,7 @@ async function handleSaved() {
       :customer-id="selectedUser.id"
       :customer-name="selectedUser.name"
       :banks="banks"
+      :reload-banks="reloadBanks"
       @close="closeModal"
       @saved="handleSaved"
     />
@@ -505,7 +531,9 @@ async function handleSaved() {
       :customer-id="selectedUser.id"
       :customer-name="selectedUser.name"
       :items="items"
+      :reload-items="reloadItems"
       :banks="banks"
+      :reload-banks="reloadBanks"
       @close="closeModal"
       @saved="handleSaved"
     />
@@ -517,7 +545,9 @@ async function handleSaved() {
       :customer-id="selectedUser.id"
       :customer-name="selectedUser.name"
       :items="items"
+      :reload-items="reloadItems"
       :banks="banks"
+      :reload-banks="reloadBanks"
       @close="closeModal"
       @saved="handleSaved"
     />

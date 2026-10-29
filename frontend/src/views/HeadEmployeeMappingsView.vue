@@ -94,6 +94,12 @@ async function loadUsers() {
   }
 }
 
+// The user dropdowns' reload button: same fetch as loadUsers(), but a
+// failure surfaces instead of being swallowed.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list()
+}
+
 function clearFilters() {
   filters.employee_status = 'all'
   filters.head_status = 'all'
@@ -265,6 +271,7 @@ onMounted(async () => {
           required
           placeholder="Select an employee…"
           :options="userOptions"
+          :reload="reloadUsers"
           :disabled="editingEmployeeId !== null"
         />
 
@@ -287,6 +294,7 @@ onMounted(async () => {
               class="flex-1"
               placeholder="Select a user…"
               :options="userOptions"
+              :reload="reloadUsers"
             />
             <button
               type="button"

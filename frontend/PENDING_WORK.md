@@ -589,6 +589,7 @@ Practical consequences for us:
 | Live Metal Balance — stale warning banners removed for the two bugs PR #46 fixed (#18 Postgres SQL, #19 admin override) | `views/LiveMetalBalanceView.vue`, `types/liveMetalBalance.ts` |
 | `api.ts` `get()` accepts a headers argument, matching `post`/`postForm` (needed to send `X-User-ID` on a GET) | `lib/api.ts` |
 | Transaction History print — isolated to a real slip (row receipt / table report) instead of printing the whole page | `components/stock/TransactionHistoryPanel.vue` |
+| Every print button opens a preview filled from its own endpoint (#40). Head Stocks, Transaction History (row + page) and ID Wise (row + report) use new preview modals. The cash receipt moved to the shared shell, which fixes its global print CSS blanking later prints | `components/ui/PrintPreviewModal.vue`, `components/stock/{StockReceipt,HeadStock,StockHistory,IdWiseReport}PrintModal.vue`, `components/cash-txn/ThermalPrintModal.vue`, `components/stock/{HeadStockSummaryPanel,TransactionHistoryPanel}.vue`, `views/IdWiseReportView.vue` |
 | ~~View Notes — built against no backend at all (ask #38), banner explains why every action 404s~~ **Now live against the real API (PR #50)** — banner removed, adapter rewritten for the real contract | `components/stock/ViewNotesPanel.vue`, `lib/remindersApi.ts`, `types/reminder.ts`, `lib/date.ts` (`toDateInputValue`) |
 | Order status vocabulary corrected (`PROCESSING`, not the guessed `IN_PROGRESS`) to match PR #48's real validation | `types/order.ts`, `views/OrdersView.vue` |
 | Phone Book "always null" role/comments corrected now that PR #48 fixed the backend field | `types/phoneBook.ts`, `views/PhoneBookView.vue` |
@@ -2019,6 +2020,66 @@ the head check will not recognise.
     way `OrderController::index()` currently does; and whether "complete" and
     "view" are just `PATCH` with `is_completed`/`is_viewed` (what the
     frontend assumes today) or deserve their own endpoints.
+
+### Roles — no active/inactive status (2026-10-29 finding)
+
+<a id="39"></a>
+
+39. **Roles have no status at all, so activate/deactivate cannot be saved.**
+    Asked for an activate/deactivate option on the Roles screen. Checked the
+    backend first: the `roles` migration has only `id`/`role`/`added_at`/
+    `touch`, `Role::$fillable` matches, and `RoleController::store()`/
+    `update()` validate only those three writable fields — so `is_active` is
+    dropped by `validate()` and `PUT /roles/{id}` still returns 200. No later
+    migration touches `roles`. Written up for the backend team as
+    `BACKEND_TODO.md` §14.
+
+    **Built anyway**, per the standing instruction: `RolesView.vue` has a
+    Status column with an inline toggle (optimistic, settles on whatever the
+    server echoes, so today it springs back with an error toast instead of
+    pretending it saved) and an Active checkbox in the create/edit form. An
+    amber banner shows while no role in the list carries `is_active`, so it
+    clears itself once the column ships. `isRoleActive()` in `rolesApi.ts`
+    treats a missing value as active; the Role pickers in `UsersView`,
+    `ClientsView` and `AddUserModal` use it to hide inactive roles (keeping a
+    user's current role on edit). Filters in Phone Book and Cash Management
+    and the CUSTOMER lookup in `AddRetailerModal` deliberately still see every
+    role.
+
+### Print buttons — preview from the owning endpoint (2026-10-29 finding)
+
+<a id="40"></a>
+
+40. **Receipts are missing balance lines, and stock has no print endpoint.**
+    The request was for every print button to call only its own backend API
+    and show that data in a print preview. The routes and controllers were
+    re-read for this. The only print endpoint is
+    `GET /cash-txn-details/print-report`, so each button now uses the
+    endpoint that owns its data:
+
+    | Button | Endpoint called when the preview opens |
+    |---|---|
+    | Cash Management history row, Cash Transactions report row | `cash-txn-details/print-report?id={txn_id}` (unchanged; the report's `id` is `txn_id`) |
+    | Stock → Head Stocks | `stock-details/head-stocks` with the panel's as-of filters |
+    | Stock → Transaction History header | `stock-details/history` with the exact query and page on screen |
+    | Stock → Transaction History row, ID Wise row | `stock/reports/id-wise?stock_id={id}`, with the row picked out by id |
+    | ID Wise header | `stock/reports/id-wise?stock_id={queried_id}` |
+
+    Before this, the stock prints called no API. The row receipt was rebuilt
+    from the history row, which has no date and only one party name. Both ID
+    Wise buttons ran `window.print()` on the whole page, so the row button
+    printed the full report. `ThermalPrintModal`'s print CSS
+    (`body * { visibility: hidden }`) was global and stayed loaded after Cash
+    Management had been opened, which blanked every later full-page print.
+
+    All previews now share `components/ui/PrintPreviewModal.vue`, and its print
+    isolation applies only while a preview is open.
+
+    Three things were raised with the backend team (`BACKEND_TODO.md` §15):
+    - The cash receipt's OB/CB always prints blank, because the controller
+      reads `sender_ob`/`sender_cb`, which don't exist.
+    - Stock receipts can't show OB/CB or pcs from any single-id endpoint.
+    - Nothing uses the bulk branch of `print-report`.
 
 ---
 

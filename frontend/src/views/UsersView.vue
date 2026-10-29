@@ -13,7 +13,8 @@ import DataTable from '@/components/ui/DataTable.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { itemsApi } from '@/lib/itemsApi'
-import { rolesApi } from '@/lib/rolesApi'
+import { isRoleActive, rolesApi } from '@/lib/rolesApi'
+import { userCategoryOptions } from '@/lib/userCategory'
 import { userOptionLabel } from '@/lib/userLabel'
 import { ApiError } from '@/lib/api'
 import {
@@ -27,7 +28,6 @@ import type {
   DataTableColumn,
   UserDetailFormValues,
   UserDetailListItem,
-  CategoryName,
   Item,
   Role,
 } from '@/types'
@@ -80,6 +80,19 @@ async function loadRoles() {
 onMounted(loadData)
 onMounted(loadRoles)
 
+// Dropdown reload buttons: each re-fetches one master with the same call
+// loadData() / loadRoles() make, leaving isLoading/loadError and the form
+// alone. `users` also backs the table, which picks up the fresh list in place.
+async function reloadUsers() {
+  users.value = await userDetailsApi.list()
+}
+async function reloadItems() {
+  items.value = await itemsApi.list()
+}
+async function reloadRoles() {
+  roles.value = await rolesApi.list()
+}
+
 const filteredUsers = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   if (!query) return users.value
@@ -89,8 +102,6 @@ const filteredUsers = computed(() => {
 const userOptions = computed(() =>
   users.value.map((u) => ({ value: u.id, label: userOptionLabel(u) })),
 )
-
-const categories: CategoryName[] = ['GRAMS', 'PURITY', 'BOTH']
 
 function makeEmptyForm(): UserDetailFormValues {
   return {
@@ -107,7 +118,8 @@ function makeEmptyForm(): UserDetailFormValues {
     system_id: '',
     mailing_name: '',
     customer_commants: '',
-    category_name: 'GRAMS',
+    // No default — the head picks one (see lib/userCategory.ts).
+    category_name: null,
     is_active: true,
     is_delete: false,
     is_billable: false,
@@ -317,6 +329,9 @@ function validate(): boolean {
   if (!String(form.role_id).trim()) {
     fieldErrors.role_id = 'Role is required.'
   }
+  if (!form.category_name) {
+    fieldErrors.category_name = 'Category is required.'
+  }
 
   if (form.phone_no.trim() && !/^\d{6,15}$/.test(form.phone_no.trim())) {
     fieldErrors.phone_no = 'Phone number must be 6-15 digits.'
@@ -500,7 +515,7 @@ async function handleDelete(user: UserDetailListItem) {
           <BaseInput
             id="mailing_name"
             v-model="form.mailing_name"
-            label="Mailing name (optional)"
+            label="Mailing name"
             placeholder="Defaults to name"
             size="sm"
             maxlength="255"
@@ -509,7 +524,7 @@ async function handleDelete(user: UserDetailListItem) {
           <BaseInput
             id="signature"
             v-model="form.signature"
-            label="Signature (optional)"
+            label="Signature"
             size="sm"
             maxlength="45"
             :error="fieldErrors.signature"
@@ -518,7 +533,7 @@ async function handleDelete(user: UserDetailListItem) {
             <BaseFileInput
               id="aadhar_image"
               v-model="proofFiles"
-              label="Proof image (optional)"
+              label="Proof image"
               hint="JPG, PNG or WEBP, up to 5 MB."
               compact
               :multiple="false"
@@ -549,7 +564,12 @@ async function handleDelete(user: UserDetailListItem) {
             required
             size="sm"
             placeholder="Select a role…"
-            :options="roles.map((role) => ({ value: String(role.id), label: role.role }))"
+            :options="
+              roles
+                .filter((role) => isRoleActive(role) || String(role.id) === form.role_id)
+                .map((role) => ({ value: String(role.id), label: role.role }))
+            "
+            :reload="reloadRoles"
             :error="fieldErrors.role_id"
           />
 
@@ -559,13 +579,15 @@ async function handleDelete(user: UserDetailListItem) {
             label="Category"
             required
             size="sm"
-            :options="categories.map((cat) => ({ value: cat, label: cat }))"
+            placeholder="Select a category…"
+            :options="userCategoryOptions"
+            :error="fieldErrors.category_name"
           />
 
           <BaseInput
             id="remarks"
             v-model="form.remarks"
-            label="Remarks (optional)"
+            label="Remarks"
             size="sm"
             maxlength="255"
             :error="fieldErrors.remarks"
@@ -573,7 +595,7 @@ async function handleDelete(user: UserDetailListItem) {
           <BaseInput
             id="customer_commants"
             v-model="form.customer_commants"
-            label="Customer comments (optional)"
+            label="Customer comments"
             size="sm"
             maxlength="1500"
             :error="fieldErrors.customer_commants"
@@ -685,6 +707,7 @@ async function handleDelete(user: UserDetailListItem) {
               size="sm"
               placeholder="Select…"
               :options="items.map((item) => ({ value: item.item_id, label: item.item_name }))"
+              :reload="reloadItems"
               :error="fieldErrors[`item_mappings.${index}`]"
             />
             <BaseInput
@@ -726,6 +749,7 @@ async function handleDelete(user: UserDetailListItem) {
             size="sm"
             placeholder="No heads assigned — select one or more…"
             :options="userOptions"
+            :reload="reloadUsers"
             :error="headMappingsError"
           />
         </section>
@@ -753,6 +777,7 @@ async function handleDelete(user: UserDetailListItem) {
               class="flex-1"
               placeholder="Select a user…"
               :options="userOptions"
+              :reload="reloadUsers"
               :error="fieldErrors[`cash_head_mappings.${index}`]"
             />
             <button
