@@ -4,11 +4,13 @@ For the backend team. **Only things that still need doing.** Anything fixed is
 deleted from this file — the history lives in
 [`frontend/PENDING_WORK.md`](frontend/PENDING_WORK.md).
 
-**Checked against:** `schainbackend/` as it stands on **2026-10-15**. The
-backend code has not changed since **PR #50** (`c4dd0445`) — the two commits
-after it (`56a77ccb`, `dcc3b977`) are frontend-only, and `origin` was fetched
-with nothing unpulled. Every item below was still re-read from source this
-pass rather than carried forward. Anything fixed is deleted.
+**Checked against:** `schainbackend/` as it stands on **2026-11-03**, after
+**PR #51** (`93b93a89`), with `origin` fetched and nothing unpulled. The
+backend has not changed since the full re-read on 2026-10-29, when every item
+was checked from source and line numbers were updated where PR #51 moved code.
+§16–§22 are new on 2026-11-03: they come from checking the backend team's
+cash-modules document (`Schain_ERP_Cash_Modules_Documentation`, rev 2.0.0)
+against the code.
 
 The `#n` tags point at the matching entry in `PENDING_WORK.md` if you want the
 full history.
@@ -29,8 +31,8 @@ full history.
 
 ## 1. Wastage is added to the wrong person's balance  `#21`
 
-**Where:** `app/Services/StockInService.php:71` and `:74`,
-`app/Services/StockOutService.php:74` and `:77`
+**Where:** `app/Services/StockInService.php:72` and `:75`,
+`app/Services/StockOutService.php:75` and `:78`
 
 **The code:**
 
@@ -66,7 +68,7 @@ integer with a comment — that is what caused this.
 ## 2. The metal picker is broken on every database — `system_settings` is never seeded
 
 **Where:** `app/Http/Controllers/Api/StockDetailsController.php:616`,
-`app/Services/ReportService.php:818`, and the missing seeder for
+`app/Services/ReportService.php:937`, and the missing seeder for
 `2026_09_18_223934_create_system_settings_table`.
 
 **Symptom:** every call to `GET /stock-details/available-metals` returns
@@ -102,7 +104,7 @@ Stock Out, GMS In, GMS Out and Item Change all open it to draw down a metal
 lot. All of them have been dead since PR #45 on any database that was not
 hand-configured — which is all of them.
 
-**The same gap takes out a second endpoint.** `ReportService:818` reads
+**The same gap takes out a second endpoint.** `ReportService:937` reads
 `live_metal_report_items` the same way; with it unset, Live Metal Balance
 throws a validation error unless the caller passes `item_id` explicitly. (Our
 screen always sends `item_id`, resolved by name, so it works either way — this
@@ -139,14 +141,12 @@ frontend onto `GET /settings`; flagging it so the drift is on the record.
 $headId = $request->query('head_id') ?? $this->getActingUserId($request);
 ```
 
-**The problem:** we asked for a `head_id` override so an admin could pull
-another head's report, and you added it — thank you. But there is **no check on
-who is allowed to use it.** Any authenticated user can pass another user's id
-and read that ledger. An employee can read their head's books.
+**The problem:** the `head_id` override that lets a head pull another user's
+report has **no check on who is allowed to use it.** Any authenticated user
+can pass another user's id and read that ledger. An employee can read their
+head's books.
 
-Re-checking this pass found the same unchecked pattern on more than the two
-reports first listed — every one of these takes the id straight from the
-query string:
+Every one of these takes the id straight from the query string:
 
 | Endpoint | Where (`app/Http/Controllers/Api/…`) | Takes |
 |---|---|---|
@@ -160,6 +160,8 @@ query string:
 | `GET /stock-details/head-stocks` | `StockDetailsController.php:672` | `user_id` |
 | `GET /cash-txn-details/in-history`, `out-history` | `CashTxnDetailController.php:33`, `:103` | `head_id` |
 | `GET /cash-txn-details/print-report` | `CashTxnDetailController.php:173` | `head_id` |
+| `GET /report/daywise-grand` | `ReportController.php:222` → `ReportService::getDaywiseGrandReport` | `head_user_id`, `employee_id` / `user_id`, `customer_id` / `retailer_id` — and the head itself comes from the `X-User-ID` header ([§7](#7-four-endpoints-still-read-x-user-id-and-ignore-the-token--2-37)) |
+| `GET /system-logs`, `/system-logs/{id}` | `SystemLogController.php` | no id needed: every signed-in user can read every log, see [§22](#22-system-logs-only-new-entries-are-logged-and-anyone-can-read-them) |
 
 **Fix:** allow the override only for HEAD (or admin) accounts, the way
 `getLiveMetalBalance` does. Everyone else gets their own data regardless of
@@ -195,13 +197,9 @@ paginate it, and add the filters the list screen will need — at minimum
 
 ## 5. Five accounts share the password `password`  `#28`
 
-**Status:** the `/run-seeders` and `/run-migrations` routes are **gone** —
-thank you, that was the urgent half.
-
-**What is left:** the accounts those seeders created. The seeders themselves
-still hash the literal `'password'` (re-checked 2026-10-15:
+The seeders still hash the literal `'password'` (re-checked 2026-10-29:
 `HeadUserSeeder.php:19`, `StockTestDataSeeder.php:72` and `:99`,
-`UserDetailSeeder.php` ×4), so any fresh environment gets them again.
+`UserDetailSeeder.php` ×4), so any fresh environment gets these accounts.
 Verified against the live Render database on **2026-09-16**:
 
 ```
@@ -225,14 +223,54 @@ does.
 
 ---
 
+## 16. Entries may be silently thrown away until the `system_logs` migration runs
+
+*(Numbered out of order so the existing §-links keep working.)*
+
+**Where:** `app/Services/SystemLogService.php` (`log()`), called inside the
+open `DB::transaction` of every write service: `CashTxnDetailService`,
+`CashAutoEntryService`, `CashToGoldService`, `GoldToCashService`,
+`PurchaseGoldService`, `SaleGoldService`, `StockInService`, `StockOutService`,
+`AutoEntryService`, `FitemService`.
+
+**The problem:** `log()` catches any failure and returns `null`, so the
+business write carries on. On PostgreSQL that doesn't work. A failed statement
+aborts the **whole** transaction, and catching the exception in PHP doesn't
+undo that. Every later statement fails, and the final `COMMIT` quietly becomes
+a `ROLLBACK`. PDO doesn't raise on that, so the API still answers `201` with
+the new row's data, and nothing is saved.
+
+**Why it matters today:** `2026_10_22_000000_create_system_logs_table` is
+**Pending** on the Aiven database (`migrate:status`, 2026-11-03), so every log
+write fails there. On Aiven, no row has been saved in `cash_txn_details`,
+`stock_details` or `cash_to_gold` since 2026-10-22, when the logging landed;
+the newest are 2026-10-13 (cash) and 2026-10-20 (stock). That fits writes
+being rolled back, but quiet days would look the same — please confirm by
+saving one entry and checking it's there.
+
+**Fix:**
+
+1. Run the migration on every database. `docker/entrypoint.sh` runs
+   `migrate --force` on deploy, so deployed environments may already have it;
+   local and Aiven do not.
+2. Stop a failed log from taking the business write down with it. Either
+   wrap the insert in its own transaction — inside an open one, Laravel's
+   `DB::transaction()` issues a `SAVEPOINT`, so a failure rolls back only the
+   log row — or write the log with `DB::afterCommit()`. Without this, any
+   future log failure (a payload that won't encode, a column too short)
+   silently drops the entry again.
+
+Until the migration runs, the System Logs screen can only show a load error.
+
+---
+
 # 🟠 Soon
 
 ## 6. Live Metal Balance still crashes with a date + time filter  `#18`
 
-**Where:** `app/Services/ReportService.php:855`
+**Where:** `app/Services/ReportService.php:974`
 
-Half of this is genuinely fixed — `IFNULL` and the backticks are gone, replaced
-with `COALESCE`. But the query still fails, now for a different reason:
+The query fails on PostgreSQL:
 
 ```php
 ->selectRaw("... COALESCE(...) as used_grams", [$dateTime])
@@ -248,7 +286,7 @@ error is:
 SQLSTATE[42703]: Undefined column: column "used_grams" does not exist
 ```
 
-The comment on line 853 says *"(PostgreSQL safe)"* — it is not, and that
+The comment on line 972 says *"(PostgreSQL safe)"* — it is not, and that
 comment will mislead the next person.
 
 **The fix already exists in your own codebase.** `getAvailableStockLots`
@@ -268,7 +306,7 @@ Most of the code reads it. Four places do not:
 
 | File | Line | Reads |
 |---|---|---|
-| `Services/CashAutoEntryService.php` | 37 | header only ❌ |
+| `Services/CashAutoEntryService.php` | 38 | header only ❌ |
 | `Controllers/Api/CashCategoryController.php` | 44 | header only ❌ |
 | `Controllers/Api/ReportController.php` | 192 | header only ❌ (one-day-action) |
 | `Controllers/Api/ReportController.php` | 222 | header only ❌ (**daywise-grand, new**) |
@@ -296,13 +334,9 @@ when you change this.
 
 ## 8. Reminders: four follow-ups from PR #50
 
-The feature itself is **done** — thank you. The table, model, controller and
-`apiResource('reminders')` all landed in PR #50 and the schema matched what we
-proposed field for field. The screen is live and persisting.
-
-Four smaller things came out of wiring it up. All verified against the running
-API on 2026-10-08, not read off the controller; all four still stand in
-`ReminderController` as of 2026-10-15.
+Four smaller things came out of wiring up the Reminders screen. All verified
+against the running API on 2026-10-08, not read off the controller; all four
+still stand in `ReminderController` as of 2026-10-29.
 
 **a. It is the only endpoint with no response envelope.** Everything else in
 this API returns `{success, message, data}`. `ReminderController` returns the
@@ -340,10 +374,6 @@ was fixed by calling `->load([...])` before returning. Same fix here.
 returns every reminder in the system to every user. Reminders are assigned to
 named people, so this one matters more than it does for orders. Scope it to
 `added_by` **or** `assign_to` = the signed-in user, and paginate.
-
-*(The two open questions we flagged got answered by the implementation:
-`index` returns everything, and complete/view are plain `PATCH` fields. The
-second matches what the frontend already did.)*
 
 ---
 
@@ -462,6 +492,82 @@ Please also confirm whose balance the legacy slip shows on the
 it. If it matches a legacy print (for example, a head/user cash statement),
 tell us which one and we will add the button.
 
+**d. The cash receipt has no category or payment method.** The cash-modules
+doc's receipt layout (§3.17) prints Category and Payment (cash or bank), but
+the `?id=` payload carries neither. Please add the category name and the
+payment method, plus the bank name for bank entries. The amount in words
+("Rupees One Lakh Fifty Thousand Only") is now built by the frontend, so
+nothing is needed for that.
+
+---
+
+## 17. Deleting a cash entry leaves both balances as if it happened
+
+**Where:** `app/Http/Controllers/Api/CashTxnDetailController.php`: the
+`apiResource('cash-txn-details')` write methods `store()` (line 328),
+`update()` (line 879) and `destroy()` (line 1557).
+
+**The problem:** all three still use the cash table's old columns:
+`given_by`, `given_to`, `souce_type`, `bank_id`, `balance`,
+`opening_account_balance`, and so on. `cash_txn_details` now has
+`sender_id` / `recipient_id`, `payment_method`, `bank_account_id` and the
+eight opening/closing snapshots, and none of the old names are in
+`CashTxnDetail::$fillable`. What that does:
+
+- **`DELETE /cash-txn-details/{id}`** looks the user up by
+  `$transaction->given_by`, which is always null. So it skips the balance
+  restore, then deletes the row and its images and answers `200`. The entry
+  disappears from history, but both parties' `rak_cash_balance` (and the
+  bank's `ledger_balance`) stay as if it had happened.
+- **`PUT /cash-txn-details/{id}`**: the validator only knows the old names, so
+  its balance recalculation runs on nulls.
+- **`POST /cash-txn-details`**: the model drops the old names and the
+  required `sender_id` / `recipient_id` are never set, so the insert should
+  fail with a `500` (read from the code, not run). The cash-modules doc names
+  this endpoint for Internal Transfer and Cash Loan.
+
+The frontend calls none of the three, but any signed-in user can.
+
+**Fix:** rewrite them against the current schema, reversing balances the
+same way the service that wrote the entry moved them (sender and recipient,
+cash or RTGS, and the bank). Until then, register only the read routes:
+`apiResource(...)->only(['index', 'show'])`.
+
+---
+
+## 18. Cash features the cash-modules doc describes that don't exist
+
+`Schain_ERP_Cash_Modules_Documentation` (rev 2.0.0) presents these as built.
+None of them exist in `schainbackend/` as of 2026-11-03, and the frontend has
+no screen for any of them:
+
+| Doc § | Feature | What's missing |
+|---|---|---|
+| 3.3, 3.4 | Bill Cash / Payment Cash (only the customer's, or only the head's, balance moves) | `StoreCashTxnDetailRequest` accepts `amnt_transfer_to_head`, but `CashTxnDetailService` never reads it, so both parties always move. No `is_bill_cash` / `is_payment_cash` / `is_customer_affect` columns. |
+| 3.6 | Internal Transfer (cash ↔ bank, bank ↔ bank) | No `amount_transfers` table, and nothing writes `INTERNAL_TRANSFER`. The out-history filter no longer includes the type either. |
+| 3.7 | Cash Loan (16 combinations) | No columns for `cash_loan_type`, `rate_of_interest` or the arithmetic operators. Only the broken `store()` mentions them ([§17](#17-deleting-a-cash-entry-leaves-both-balances-as-if-it-happened)). |
+| 3.12 | Machine Vendor Expense | No `machine_vendors` table, model or endpoint. |
+| 3.13 | Salary advance link | `is_salary_person` exists on users, but there's no `salary_given_details` table and nothing links a payment to it. |
+| 3.14 | Category 33 / 34 (3% GST, 5% margin) | No calculation anywhere. If built, find the two categories through a setting, not by id: ids differ between environments, which is what caused the Live Metal bug (`#17`). |
+| 3.16 | Hide / Unhide cash entries | `cash_txn_details.is_hide` exists, but no endpoint sets it (`PUT` is broken, §17), and no history or report filters on it. |
+| 7 | "Mathematical validation" of the gold figures | The four gold endpoints save `total_cash`, `per_gram_cash`, `total_grams`, `touch` and `purity` exactly as sent. Nothing checks purity = grams × touch ÷ 100. A cash-against-rate check would depend on **b** below. The one check that does exist is that the payment sources add up to `total_cash`. |
+
+**Two places where the doc and the code disagree.** Please say which is right
+before either team builds on them:
+
+**a. Cash Auto Entry.** The doc says both parties' balances move and two rows
+are written. `CashAutoEntryService` takes cash only from the sender and writes
+one row per line. Its own comment says that's deliberate, copied from the
+legacy code.
+
+**b. What the rate is per gram of, for Cash To Gold and Purchase Gold.** The
+doc's worked example (₹7,20,000 at ₹7,200 a gram, 99.5% touch) gives 100 g
+gross and 99.5 g pure, so the rate is per gross gram. The screens divide cash
+by the rate to get the **pure** weight: 100 g pure, 100.503 g gross. That
+matches Gold To Cash, where the doc and the app agree the rate is per pure
+gram. The backend saves whatever figures it's sent, so the screens decide
+today. We won't change the calculation until this is confirmed.
+
 ---
 
 # 🟡 When you can
@@ -469,9 +575,7 @@ tell us which one and we will add the button.
 ## 11. The API testing doc is well behind the code  `#32`
 
 `frontend/Stock Outward Module API Testing & Param.txt` was last extended on
-2026-09-23 (`e2fe5953`). That update covered `apiResource('settings')`,
-`POST /fitems`, `POST /stock/hide`, both CSV exports, and `DELETE /orders/{id}`
-— thank you. These still have **no documentation at all**:
+2026-09-23 (`e2fe5953`). These still have **no documentation at all**:
 
 - `GET /me`
 - `GET /stock-details/available-lots`
@@ -480,6 +584,7 @@ tell us which one and we will add the button.
 - `GET /report/daywise-grand`
 - `apiResource('orders')` — everything except delete (list, show, create, update)
 - the login **403** for deactivated accounts
+- `GET /system-logs`, `/system-logs/{id}` and `/system-logs/filters` (PR #51)
 
 And one active trap: **section 40 (Live Metal Balance) lists the query
 parameters and `item_id` is not among them** — the one parameter that decides
@@ -548,39 +653,94 @@ Open question: should deactivating a role do anything to the users already
 on it (block login, hide them)? The frontend currently only stops *new*
 assignments.
 
----
+## 19. Daywise Grand: "Customer" matches retailer tags, not the customer
 
-# Recently fixed — thank you
+**Where:** `app/Services/ReportService.php`, `getDaywiseGrandReport()`.
 
-Dropped from this list after re-checking the current code. Recorded here only
-so nobody re-reports them; detail is in `PENDING_WORK.md`.
+`type4=CUSTOMER` and `type4=RETAILER` run the identical query: they match
+`customer_id` / `retailer_id` against the stock row's `retailer_id` /
+`to_retailer_id` tags. A customer's own gold movements are recorded in
+`given_by` / `given_to`, so picking a customer returns only the rows where
+they were tagged as a retailer, usually none. `type4=EMPLOYEE` is the branch
+that reads `given_by` / `given_to`, and it works for any user.
 
-| Was | Now |
-|---|---|
-| API doc lacked settings, `POST /fitems`, `/stock/hide`, the CSV exports, order delete | Documented in `e2fe5953` (2026-09-23). The rest is still open, see [§11](#11-the-api-testing-doc-is-well-behind-the-code--32) |
-| **Reminders / View Notes had no backend** (`#38`) | **PR #50** — table, model, controller, `apiResource('reminders')`. Schema matched the proposal exactly. Four polish items remain, see [§8](#8-reminders-four-follow-ups-from-pr-50) |
-| `/run-seeders`, `/run-migrations` public | Routes removed |
-| Login ignored `is_active` | Returns 403 |
-| No `/me` endpoint | Exists, returns feature flags too |
-| Auto Entry discarded the date | Top-level `added_at` validated |
-| `postHide` / `postCash` unreachable | Both routed, plus a new `unhide` |
-| No lot listing for non-metal items | `available-lots`, and it filters `is_hided` |
-| `available-lots` date+time crashed | Fixed with `whereRaw` |
-| Live Metal hardcoded to item 2 | Now a parameter with a settings fallback |
-| Live Metal admin override unreachable | Checks `role->role === 'HEAD'`, accepts `view_as` |
-| Customer touch mappings: no create/delete | `store` and `destroy` added |
-| Mapping `update()` dropped relations | Now re-loads them |
-| Customer Deliver had no backend | `order_details` migration + `OrderController` |
-| No server-side export | Two CSV export routes |
-| Reports had no `head_id` override | Added — but see [§3](#3-any-signed-in-user-can-read-any-heads-books) |
-| One Day Action ignored its `$headId` | Scoped properly |
-| Cash amounts returned in `grams` | Own `amount` field |
-| `added_at` in `DD-MM-YYYY` | Now `Y-m-d H:i:s` |
-| Paginated per source, then merged | Combined then paginated |
-| Phone book writes were unsafe | Restricted to `index` + `show` |
-| `role.role_name` always null | Uses the real `role` column |
-| Display flags not writable | Now in the validation |
-| Cash history needed `cash_user_id` | Optional — head-only view works |
+The new Daywise Grand screen offers *Me*, *A user* (`EMPLOYEE`) and
+*A retailer* (`RETAILER`), and leaves Customer out. Is CUSTOMER meant to
+behave like EMPLOYEE? If so, we'll add it back once it does.
+
+Two smaller things on the same endpoint:
+
+- **A missing id quietly becomes the head.** `type4=EMPLOYEE` without
+  `employee_id` reports the acting head's figures. The screen requires a pick
+  for that reason; a `422` would be safer for other callers.
+- **It isn't documented** ([§11](#11-the-api-testing-doc-is-well-behind-the-code--32)).
+  Everything the screen relies on was read off the service, including the
+  fact that it sums every item together and skips hidden and frozen rows.
+
+## 20. The cash-modules doc doesn't match the database
+
+`Schain_ERP_Cash_Modules_Documentation` §4 (schema) and a few other passages
+describe a different database from the one in `database/migrations`. Please
+correct the doc, since both teams build from it:
+
+- **One table, not three.** `cash_to_gold` (singular, key `cash_to_gold_id`,
+  party column `customer_id`) holds Cash To Gold, Gold To Cash, Purchase Gold
+  and Sale Gold, told apart by `type`. There are no `cash_to_golds`,
+  `purchase_golds` or `sale_golds` tables.
+- **`bank_details`** has only `account_name`, `ledger_balance` and
+  `is_active`. There is no `bank_name`, `account_number`, `ifsc_code` or
+  `current_balance`, so the doc's "updates `current_balance`" never happens.
+  If account number and IFSC are wanted, that's new work. Tell us and we'll
+  add them to the Bank Details screen.
+- **`system_logs`** columns are `reference_id`, `reference_table`,
+  `payload`, `metadata` and `description`, not `record_id` and
+  `request_payload`.
+- **Values:** Auto Entry rows are typed `AUTO_ENTRY`, not `CASH_AUTO_ENTRY`,
+  and `payment_method` is `CASH_ON_HAND` / `BANK`, not `CASH` / `BANK`.
+- **Roles:** §1 says role 4 is RETAILER, but `RoleSeeder` has 4 = PURCHASE.
+  That's the same bare-number trap as [§1](#1-wastage-is-added-to-the-wrong-persons-balance--21)
+  of this file.
+- **Daywise Grand** is described as a daily cash overview. It's a stock
+  grams/purity report ([§19](#19-daywise-grand-customer-matches-retailer-tags-not-the-customer)).
+
+## 21. The cash report never shows a retailer's name suffix
+
+**Where:** `app/Http/Resources/CashTransactionReportResource.php:19` and
+`:24`.
+
+Both lines add `(user_name)` after a party's name only when
+`category_name === 'RETAILERS'`. But `category_name` can only be `GRAMS`,
+`PURITY` or `BOTH`, so the suffix is never added. It looks like the legacy
+bracketed name (the `NIHAA(RAMESH)` heading in
+[§15b](#15-printed-receipts-are-missing-data--stock-has-no-print-endpoint--40)).
+What should decide that a user is a retailer, given there's no retailer role
+([§9a](#9-missing-pieces-for-the-legacy-stock-details-screen))? Once that's
+settled, the same rule can fill the stock receipt heading too.
+
+## 22. System logs: only new entries are logged, and anyone can read them
+
+**Where:** `app/Http/Controllers/Api/SystemLogController.php`,
+`app/Services/SystemLogService.php`.
+
+- **No permission check.** `index`, `show` and `filters` check nothing
+  beyond sign-in, so every user can read every log, including the stored
+  request payloads (parties and amounts). Please limit it to HEAD, checked by
+  role name.
+- **Coverage.** Only the write services log: stock and cash creates, plus
+  stock hide, unhide and cash-out. Nothing logs edits or deletes (cash
+  `PUT` / `DELETE`, users, roles, items, banks, categories, settings,
+  mappings, orders, reminders) or sign-in and sign-out. The legacy system's
+  missing audit trail for edits and deletes is the gap the doc says this
+  fixes.
+- **Bare role ids.** `filters()` builds its customer list from
+  `role_id = 1` or `role_id = 4`, with the comment "PURCHASE / Retailer".
+  Please resolve roles by name ([§1](#1-wastage-is-added-to-the-wrong-persons-balance--21)).
+- **Names.** Descriptions say "User #12". The screen looks names up from the
+  current user list, which breaks for deleted users. Storing the name in
+  `metadata` when the log is written would fix that.
+
+The System Logs screen has a banner telling users about the permission,
+coverage and names gaps.
 
 ---
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ArrowLeftRight, Info } from 'lucide-vue-next'
+import { ArrowLeftRight } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -40,17 +40,14 @@ import type { BankDetail, Item, Role, UserDetailListItem } from '@/types'
 | whole history section — and the Stock History panel below it — used to
 | stay gated behind picking both Head and User; `canShowHistory` now only
 | needs a Head. Coverage: out-history = EXPENSE, PURCHASE_GOLD,
-| GOLD_TO_CASH; in-history = INCOME, AUTO_ENTRY, CASH_TO_GOLD, SALE_GOLD.
-| Two things still don't show up there, both backend-side gaps rather than
-| a frontend limitation:
-|  - INTERNAL — no current endpoint accepts it as a transaction type, and
-|    no service ever writes an INTERNAL_TRANSFER row for the history
-|    filter to find. The quick-action button for it is hidden entirely
-|    (user request) rather than shown disabled.
-|  - Purchase Gold's "Out Cash Converter" and Sale Gold's "In Cash
-|    Converter" sub-types are written with those literal type values, but
-|    neither history filter includes them — those transactions are
-|    recorded successfully but won't appear in the history below.
+| GOLD_TO_CASH, OUT_CASH_CONVERTER; in-history = INCOME, AUTO_ENTRY,
+| CASH_TO_GOLD, SALE_GOLD, IN_CASH_CONVERTER (the two converter types were
+| added in backend commit 0a94a6cc).
+| INTERNAL is the one gap left, and it's backend-side: no current endpoint
+| accepts it as a transaction type, and no service ever writes an
+| INTERNAL_TRANSFER row for the history filter to find. The quick-action
+| button for it is hidden entirely (user request) rather than shown
+| disabled.
 |
 | AUTO_ENTRY is wired up (PR #16 added the endpoint) — see
 | CashAutoEntryModal.vue for the balance-direction caveat (only the head's
@@ -463,17 +460,6 @@ async function handleSaved() {
           </div>
         </div>
       </section>
-
-      <p
-        class="mt-6 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
-      >
-        <Info class="mt-px h-3.5 w-3.5 shrink-0 text-amber-700" aria-hidden="true" />
-        <span>
-          Purchase Gold's "Out Cash Converter" and Sale Gold's "In Cash Converter" are recorded
-          successfully but don't appear in the history above — the backend's history filters don't
-          include those two sub-types. This is a known backend gap, not a missing screen.
-        </span>
-      </p>
 
       <section v-if="canShowHistory" class="mt-8" aria-labelledby="stock-history-heading">
         <h2 id="stock-history-heading" class="text-sm font-semibold text-slate-900">Stock history</h2>

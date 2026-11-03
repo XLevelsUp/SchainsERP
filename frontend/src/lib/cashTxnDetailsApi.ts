@@ -88,13 +88,13 @@ export const cashTxnDetailsApi = {
       })
       .then((r) => r.data),
 
-  // type IN (INCOME, AUTO_ENTRY, CASH_TO_GOLD, SALE_GOLD) — see CashTxnHistoryType.
+  // type IN (INCOME, AUTO_ENTRY, CASH_TO_GOLD, SALE_GOLD, IN_CASH_CONVERTER) — see CashTxnHistoryType.
   getInHistory: (params: CashTxnHistoryQuery) =>
     api
       .get<ApiResponse<CashTxnHistoryPage>>(`${RESOURCE}/in-history${buildHistoryQuery(params)}`)
       .then((r) => r.data),
 
-  // type IN (EXPENSE, PURCHASE_GOLD, INTERNAL_TRANSFER, GOLD_TO_CASH).
+  // type IN (EXPENSE, PURCHASE_GOLD, GOLD_TO_CASH, OUT_CASH_CONVERTER).
   getOutHistory: (params: CashTxnHistoryQuery) =>
     api
       .get<ApiResponse<CashTxnHistoryPage>>(`${RESOURCE}/out-history${buildHistoryQuery(params)}`)

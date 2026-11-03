@@ -4,13 +4,13 @@
 // record — see CashTxnHistoryResource::toArray(). No images relation, so
 // receipts don't show up here.
 //
-// in-history filters type IN (INCOME, AUTO_ENTRY, CASH_TO_GOLD, SALE_GOLD).
-// out-history filters type IN (EXPENSE, PURCHASE_GOLD, INTERNAL_TRANSFER,
-// GOLD_TO_CASH). INTERNAL_TRANSFER is never actually written by any
-// service (matches the disabled INTERNAL button). OUT_CASH_CONVERTER /
-// IN_CASH_CONVERTER (Purchase/Sale Gold's alternate Type) are written but
-// excluded from both filters, so those transactions never appear here —
-// a backend gap, not a frontend bug.
+// in-history filters type IN (INCOME, SALE_GOLD, CASH_TO_GOLD, AUTO_ENTRY,
+// IN_CASH_CONVERTER). out-history filters type IN (EXPENSE, PURCHASE_GOLD,
+// GOLD_TO_CASH, OUT_CASH_CONVERTER). The two converter types (Purchase/Sale
+// Gold's alternate Type) were added in backend commit 0a94a6cc.
+// INTERNAL_TRANSFER stays in the union for older rows, but no service
+// writes it and neither filter includes it (matches the hidden INTERNAL
+// button).
 export type CashTxnHistoryType =
   | 'EXPENSE'
   | 'INCOME'

@@ -2,6 +2,8 @@ import { api, type ApiResponse } from './api'
 import type {
   CashTransactionReportQuery,
   CashTransactionReportResponse,
+  DaywiseGrandQuery,
+  DaywiseGrandResult,
   LiveMetalBalanceQuery,
   LiveMetalBalanceResult,
   OneDayActionQuery,
@@ -40,7 +42,7 @@ function buildLiveMetalQuery(params: LiveMetalBalanceQuery): string {
   return s ? `?${s}` : ''
 }
 
-function buildOneDayActionQuery(params: OneDayActionQuery): string {
+function buildFlatQuery(params: OneDayActionQuery | DaywiseGrandQuery): string {
   const qs = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== null && value !== '') qs.set(key, String(value))
@@ -75,7 +77,18 @@ export const reportApi = {
   // scopes to the signed-in head instead of silently defaulting to user 1.
   getOneDayAction: (params: OneDayActionQuery, actingUserId: number) =>
     api
-      .get<ApiResponse<OneDayActionResult>>(`${RESOURCE}/one-day-action${buildOneDayActionQuery(params)}`, {
+      .get<ApiResponse<OneDayActionResult>>(`${RESOURCE}/one-day-action${buildFlatQuery(params)}`, {
+        'X-User-ID': String(actingUserId),
+      })
+      .then((r) => r.data),
+
+  // GET /report/daywise-grand — per-day stock grams/purity in and out for one
+  // party (see types/daywiseGrand.ts). Like one-day-action, the controller
+  // reads the head from `X-User-ID` only and defaults to user 1 without it,
+  // so `actingUserId` is required.
+  getDaywiseGrand: (params: DaywiseGrandQuery, actingUserId: number) =>
+    api
+      .get<ApiResponse<DaywiseGrandResult>>(`${RESOURCE}/daywise-grand${buildFlatQuery(params)}`, {
         'X-User-ID': String(actingUserId),
       })
       .then((r) => r.data),

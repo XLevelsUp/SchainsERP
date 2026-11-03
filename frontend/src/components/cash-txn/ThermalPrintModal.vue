@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { X } from 'lucide-vue-next'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import { cashTxnDetailsApi } from '@/lib/cashTxnDetailsApi'
+import { amountInWords } from '@/lib/amountInWords'
 import { ApiError } from '@/lib/api'
 import type { CashTxnPrintReceipt } from '@/types'
 
@@ -47,6 +48,9 @@ function formatAmount(value: string | number | null): string {
   const n = Number(value)
   return Number.isFinite(n) ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(value)
 }
+
+// Built here from `amount`; the print payload has no words field.
+const amountWords = computed(() => (receipt.value ? amountInWords(receipt.value.amount) : null))
 
 function handlePrint() {
   window.print()
@@ -96,6 +100,7 @@ function handlePrint() {
               <p class="tabular-nums">{{ formatAmount(receipt.amount) }}</p>
             </div>
           </div>
+          <p v-if="amountWords" class="mt-1">{{ amountWords }}</p>
           <p class="mt-1 flex justify-between gap-2">
             <span>{{ receipt.cb_label }}</span>
             <span class="tabular-nums">{{ formatAmount(receipt.cb_amount) }}</span>

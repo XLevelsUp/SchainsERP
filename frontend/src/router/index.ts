@@ -112,6 +112,11 @@ const router = createRouter({
           component: () => import('@/views/OneDayActionView.vue'),
         },
         {
+          path: 'daywise-grand',
+          name: 'daywise-grand',
+          component: () => import('@/views/DaywiseGrandView.vue'),
+        },
+        {
           path: 'phone-book',
           name: 'phone-book',
           component: () => import('@/views/PhoneBookView.vue'),
