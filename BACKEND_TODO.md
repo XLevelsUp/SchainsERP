@@ -4,13 +4,16 @@ For the backend team. **Only things that still need doing.** Anything fixed is
 deleted from this file — the history lives in
 [`frontend/PENDING_WORK.md`](frontend/PENDING_WORK.md).
 
-**Checked against:** `schainbackend/` as it stands on **2026-11-03**, after
-**PR #51** (`93b93a89`), with `origin` fetched and nothing unpulled. The
-backend has not changed since the full re-read on 2026-10-29, when every item
-was checked from source and line numbers were updated where PR #51 moved code.
-§16–§22 are new on 2026-11-03: they come from checking the backend team's
-cash-modules document (`Schain_ERP_Cash_Modules_Documentation`, rev 2.0.0)
-against the code.
+**Checked against:** `schainbackend/` as it stands on **2026-11-04**, after
+**PR #52** (`2502a051`), with `origin` fetched and nothing unpulled. PR #52
+changed four backend files: `SystemLogController`, `ReportController`,
+`CashTransactionReportResource` and `MetalStockSeeder`. It closed the old
+§21 (retailer name suffix) and two of the four points in §22. Nothing else in
+the backend has changed since the full re-read on 2026-10-29, so every other
+item stands as checked then; line numbers were updated where PR #52 moved
+code. §16–§20 and §22 came from checking the backend team's cash-modules
+document (`Schain_ERP_Cash_Modules_Documentation`, rev 2.0.0) against the
+code on 2026-11-03.
 
 The `#n` tags point at the matching entry in `PENDING_WORK.md` if you want the
 full history.
@@ -160,11 +163,12 @@ Every one of these takes the id straight from the query string:
 | `GET /stock-details/head-stocks` | `StockDetailsController.php:672` | `user_id` |
 | `GET /cash-txn-details/in-history`, `out-history` | `CashTxnDetailController.php:33`, `:103` | `head_id` |
 | `GET /cash-txn-details/print-report` | `CashTxnDetailController.php:173` | `head_id` |
-| `GET /report/daywise-grand` | `ReportController.php:222` → `ReportService::getDaywiseGrandReport` | `head_user_id`, `employee_id` / `user_id`, `customer_id` / `retailer_id` — and the head itself comes from the `X-User-ID` header ([§7](#7-four-endpoints-still-read-x-user-id-and-ignore-the-token--2-37)) |
-| `GET /system-logs`, `/system-logs/{id}` | `SystemLogController.php` | no id needed: every signed-in user can read every log, see [§22](#22-system-logs-only-new-entries-are-logged-and-anyone-can-read-them) |
+| `GET /report/daywise-grand` | `ReportController.php:224` → `ReportService::getDaywiseGrandReport` | `head_user_id`, `employee_id` / `user_id`, `customer_id` / `retailer_id` — and the head itself comes from the `X-User-ID` header ([§7](#7-four-endpoints-still-read-x-user-id-and-ignore-the-token--2-37)) |
 
 **Fix:** allow the override only for HEAD (or admin) accounts, the way
-`getLiveMetalBalance` does. Everyone else gets their own data regardless of
+`getLiveMetalBalance` does. PR #52 added exactly this kind of check to the
+System Logs endpoints (`optional($authUser->role)->role !== 'HEAD'` → `403`),
+so the pattern is already in the codebase. Everyone else gets their own data regardless of
 what they pass. Please keep it working *for heads* — the Stock and Cash
 Management screens deliberately pass another user's id to show that user's
 ledger to the head operating the screen.
@@ -240,13 +244,19 @@ undo that. Every later statement fails, and the final `COMMIT` quietly becomes
 a `ROLLBACK`. PDO doesn't raise on that, so the API still answers `201` with
 the new row's data, and nothing is saved.
 
-**Why it matters today:** `2026_10_22_000000_create_system_logs_table` is
-**Pending** on the Aiven database (`migrate:status`, 2026-11-03), so every log
-write fails there. On Aiven, no row has been saved in `cash_txn_details`,
-`stock_details` or `cash_to_gold` since 2026-10-22, when the logging landed;
-the newest are 2026-10-13 (cash) and 2026-10-20 (stock). That fits writes
-being rolled back, but quiet days would look the same — please confirm by
-saving one entry and checking it's there.
+**Why it matters today:** on 2026-11-03,
+`2026_10_22_000000_create_system_logs_table` was **Pending** on the Aiven
+database (`migrate:status`), so every log write failed there. No row had been
+saved in `cash_txn_details`, `stock_details` or `cash_to_gold` since
+2026-10-22, when the logging landed; the newest were 2026-10-13 (cash) and
+2026-10-20 (stock). That fits writes being rolled back, but quiet days would
+look the same.
+
+On 2026-11-04 the Aiven host (`golderp-goldserp.f.aivencloud.com`) no longer
+exists in DNS. The service looks powered off or deleted, so this couldn't be
+re-checked. Whichever database replaces it needs the migration, and the fix
+below applies regardless. Please confirm by saving one entry and checking
+it's there.
 
 **Fix:**
 
@@ -308,12 +318,12 @@ Most of the code reads it. Four places do not:
 |---|---|---|
 | `Services/CashAutoEntryService.php` | 38 | header only ❌ |
 | `Controllers/Api/CashCategoryController.php` | 44 | header only ❌ |
-| `Controllers/Api/ReportController.php` | 192 | header only ❌ (one-day-action) |
-| `Controllers/Api/ReportController.php` | 222 | header only ❌ (**daywise-grand, new**) |
+| `Controllers/Api/ReportController.php` | 194 | header only ❌ (one-day-action) |
+| `Controllers/Api/ReportController.php` | 224 | header only ❌ (daywise-grand) |
 
 For comparison, these get it right:
 `StockDetailsController:151`, `CashTxnDetailController:2405` and `:2429`,
-`ReportController:143`, `FitemController:23`.
+`ReportController:145`, `FitemController:23`.
 
 **Why it matters:** all four default to **user 1** when the header is absent.
 For the two report endpoints that now means the report is silently scoped to
@@ -471,8 +481,11 @@ What that still can't give:
 - **`no_of_pcs`.** Neither report returns it. The Transaction History print
   takes it from the history row, so the ID Wise print leaves Pcs blank.
 - **The suffix in the heading.** The old slip reads `NIHAA(RAMESH) TO …`.
-  We don't know what goes in the brackets (retailer? user type?), and
-  neither report returns it.
+  PR #52 settled the rule for the cash report: a user with the PURCHASE role
+  is a retailer, and gets `(user_name)` after their name. Is the stock slip's
+  bracket the same rule? If so, please return the suffixed name from the
+  print endpoint below. Neither stock report gives the frontend the parties'
+  roles, so we can't apply it reliably ourselves.
 
 A `GET /stock-details/print-report?id=` that mirrors the cash one would
 replace both calls. It should return:
@@ -697,50 +710,35 @@ correct the doc, since both teams build from it:
   `request_payload`.
 - **Values:** Auto Entry rows are typed `AUTO_ENTRY`, not `CASH_AUTO_ENTRY`,
   and `payment_method` is `CASH_ON_HAND` / `BANK`, not `CASH` / `BANK`.
-- **Roles:** §1 says role 4 is RETAILER, but `RoleSeeder` has 4 = PURCHASE.
-  That's the same bare-number trap as [§1](#1-wastage-is-added-to-the-wrong-persons-balance--21)
+- **Roles:** §1 says role 4 is RETAILER, but `RoleSeeder` calls it
+  PURCHASE. PR #52's comments confirm PURCHASE is the retailer role, so the
+  doc should use that name, and refer to roles by name rather than number.
+  Bare numbers are the trap behind [§1](#1-wastage-is-added-to-the-wrong-persons-balance--21)
   of this file.
 - **Daywise Grand** is described as a daily cash overview. It's a stock
   grams/purity report ([§19](#19-daywise-grand-customer-matches-retailer-tags-not-the-customer)).
 
-## 21. The cash report never shows a retailer's name suffix
+## 22. System logs: only new entries are logged, by user id
 
-**Where:** `app/Http/Resources/CashTransactionReportResource.php:19` and
-`:24`.
+*(§21 was fixed in PR #52 and removed; the numbers after it are kept so links
+keep working.)*
 
-Both lines add `(user_name)` after a party's name only when
-`category_name === 'RETAILERS'`. But `category_name` can only be `GRAMS`,
-`PURITY` or `BOTH`, so the suffix is never added. It looks like the legacy
-bracketed name (the `NIHAA(RAMESH)` heading in
-[§15b](#15-printed-receipts-are-missing-data--stock-has-no-print-endpoint--40)).
-What should decide that a user is a retailer, given there's no retailer role
-([§9a](#9-missing-pieces-for-the-legacy-stock-details-screen))? Once that's
-settled, the same rule can fill the stock receipt heading too.
+**Where:** `app/Services/SystemLogService.php` and the services that call it.
 
-## 22. System logs: only new entries are logged, and anyone can read them
+PR #52 made the logs HEAD-only and moved `filters()` onto role names. Two
+points are still open:
 
-**Where:** `app/Http/Controllers/Api/SystemLogController.php`,
-`app/Services/SystemLogService.php`.
-
-- **No permission check.** `index`, `show` and `filters` check nothing
-  beyond sign-in, so every user can read every log, including the stored
-  request payloads (parties and amounts). Please limit it to HEAD, checked by
-  role name.
 - **Coverage.** Only the write services log: stock and cash creates, plus
   stock hide, unhide and cash-out. Nothing logs edits or deletes (cash
   `PUT` / `DELETE`, users, roles, items, banks, categories, settings,
   mappings, orders, reminders) or sign-in and sign-out. The legacy system's
   missing audit trail for edits and deletes is the gap the doc says this
   fixes.
-- **Bare role ids.** `filters()` builds its customer list from
-  `role_id = 1` or `role_id = 4`, with the comment "PURCHASE / Retailer".
-  Please resolve roles by name ([§1](#1-wastage-is-added-to-the-wrong-persons-balance--21)).
 - **Names.** Descriptions say "User #12". The screen looks names up from the
   current user list, which breaks for deleted users. Storing the name in
   `metadata` when the log is written would fix that.
 
-The System Logs screen has a banner telling users about the permission,
-coverage and names gaps.
+The System Logs screen has a banner telling users about both gaps.
 
 ---
 

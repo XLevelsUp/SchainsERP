@@ -19,9 +19,43 @@ fixed, struck through, with what changed — this file is the record.
 > When a backend item is fixed: strike it through here with the evidence, and
 > delete it from `BACKEND_TODO.md`.
 
-**Last updated:** 2026-10-15
-**Backend baseline:** `c4dd0445` (PR #50 — reminders module). PR #49
-(`531d20db`) adds relations to `AuthUser` only, 5 lines, no contract change.
+**Last updated:** 2026-11-04
+**Backend baseline:** `2502a051` (PR #52 — System Logs made HEAD-only, cash
+report retailer suffix fixed).
+
+### PR #52 pass — 2026-11-04
+
+PR #52 (`2502a051`, merging `4202b0cd`) is labelled as docs, but it changed
+four backend files. All four were read in full:
+
+- **System Logs is HEAD-only.** `index`, `show` and `filters` now answer
+  `403` ("Forbidden. Only HEAD administrators can access system logs.")
+  unless `auth()->user()->role->role === 'HEAD'`. `AuthUser` has the
+  `role()` relation, so the check works. This closes that point of
+  BACKEND_TODO §22.
+- **`filters()` finds roles by name** (`CUSTOMER`, `PURCHASE`) instead of
+  ids 1 and 4. This closes that point of §22.
+- **The cash report's retailer suffix works.** `CashTransactionReportResource`
+  now adds `(user_name)` for a party whose role is `PURCHASE`, instead of
+  checking `category_name === 'RETAILERS'`, which could never be true.
+  `getCashTransactionsObcb` eager-loads `givenByUser.role` /
+  `givenToUser.role` for it. This closes BACKEND_TODO §21. The backend's
+  comments name PURCHASE as the retailer role.
+- **`MetalStockSeeder`** finds its head and customer by role name instead of
+  `category_name` values that don't exist. It still hardcodes item id 2.
+
+Nothing else in the backend differs from PR #51, so every other open item
+is unchanged. `ReportController` line numbers moved by 2.
+
+**Environment:** on 2026-11-04 the Aiven host in the local `.env`
+(`golderp-goldserp.f.aivencloud.com`) no longer exists in DNS. The local
+backend has no database, and BACKEND_TODO §16 couldn't be re-checked.
+
+**Gap in this file:** it wasn't updated for PR #51 (2026-10-27) or for the
+frontend work since 2026-10-15. The backend side of that is in
+BACKEND_TODO §16–§20 and §22. The frontend work is now listed in
+[§1 Done](#done), and the two follow-ups from this pass are in
+[§1 Pending](#pending).
 
 ### Re-verification — 2026-10-15
 
@@ -593,6 +627,12 @@ Practical consequences for us:
 | ~~View Notes — built against no backend at all (ask #38), banner explains why every action 404s~~ **Now live against the real API (PR #50)** — banner removed, adapter rewritten for the real contract | `components/stock/ViewNotesPanel.vue`, `lib/remindersApi.ts`, `types/reminder.ts`, `lib/date.ts` (`toDateInputValue`) |
 | Order status vocabulary corrected (`PROCESSING`, not the guessed `IN_PROGRESS`) to match PR #48's real validation | `types/order.ts`, `views/OrdersView.vue` |
 | Phone Book "always null" role/comments corrected now that PR #48 fixed the backend field | `types/phoneBook.ts`, `views/PhoneBookView.vue` |
+| System Logs — filtered, paged list and detail view for PR #51's audit log, with a banner for the backend gaps | `views/SystemLogsView.vue`, `components/system-log/SystemLogDetailModal.vue`, `lib/systemLogsApi.ts`, `lib/systemLogLabels.ts`, `types/systemLog.ts` |
+| Per-user category (Grams / Purity / Both): the measure a party isn't kept in shows as 0 in the stock pickers and in the gold modals' balance cards (display only) | `lib/userCategory.ts`, `lib/userLabel.ts`, `components/stock/UserPickerPanel.vue`, `components/cash-txn/PartyBalanceCards.vue`, the four gold modals, `views/GoldToCashView.vue` |
+| No default category on any create form; the head must choose one (Add Retailer gained the field) | `views/UsersView.vue`, `components/user/AddUserModal.vue`, `views/ClientsView.vue`, `components/stock/AddRetailerModal.vue` |
+| Stale "Cash Converter entries don't appear in history" warning removed — backend `0a94a6cc` added both types to the history filters | `views/CashManagementView.vue`, `types/cashTxnHistory.ts` |
+| Amount in words on the cash thermal receipt ("Rupees One Lakh Fifty Thousand Only"), Indian numbering, display only | `lib/amountInWords.ts`, `components/cash-txn/ThermalPrintModal.vue` |
+| Daywise Grand report — per-day stock grams/purity in and out for me, a user, or a retailer | `views/DaywiseGrandView.vue`, `types/daywiseGrand.ts`, `lib/reportApi.ts` |
 
 **Every endpoint shipped in PRs #29–#32 now has a frontend**, PR #37's two
 new endpoints have one as of 2026-09-11, everything PRs #38–#42 exposed has
@@ -667,6 +707,29 @@ amber banners rather than hidden:
   through `UserDetailController` and sets real credentials.
 
 ### Pending
+
+#### New work from the PR #52 pass (2026-11-04)
+
+- [x] ~~**System Logs: drop the stale permission sentence, and give non-heads
+      a clear message.**~~ **Done 2026-11-04.** The banner no longer claims
+      the API is open to everyone. A `403` from either logs call now replaces
+      the banner, filters, table and pager with a plain "Only heads can view
+      system logs" notice, and hides Refresh. (`views/SystemLogsView.vue`)
+
+- [ ] **Decide whether to hide the System Logs nav link from non-heads.**
+      Not done, on purpose: it would be the first role-based navigation in the
+      app. Nothing gates by role today, and `AuthUser` carries only `role_id`,
+      so the role name would have to be looked up. A non-head who opens the
+      page sees the notice above.
+
+- [ ] **Decide what a retailer is on the frontend.** The backend now treats
+      PURCHASE-role users as retailers (the cash report suffix). The frontend
+      doesn't: `AddRetailerModal` creates its users with the CUSTOMER role,
+      and `RetailerPickerPanel` lists every user except the operator. So a
+      retailer added from the Stock page never gets the suffix. The options
+      are for Add Retailer to create PURCHASE-role users, and/or for the
+      retailer picker to list only PURCHASE-role users. Both change existing
+      behaviour, so they need a yes from the business side first.
 
 #### New work from the 2026-09-30 full re-derivation
 
