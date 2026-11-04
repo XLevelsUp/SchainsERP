@@ -15,9 +15,19 @@ class SystemLogController extends Controller
 {
     /**
      * Display a listing of the system logs with rich filtering and pagination.
+     * Restricted to HEAD role only.
      */
     public function index(Request $request): JsonResponse
     {
+        // Permission check: only HEAD role users may read audit logs
+        $authUser = auth()->user();
+        if (!$authUser || optional($authUser->role)->role !== 'HEAD') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Forbidden. Only HEAD administrators can access system logs.',
+            ], 403);
+        }
+
         try {
             $query = SystemLog::with(['user:user_id,name,user_name,role_id']);
 
@@ -174,9 +184,19 @@ class SystemLogController extends Controller
 
     /**
      * Display the specified system log.
+     * Restricted to HEAD role only.
      */
     public function show($id): JsonResponse
     {
+        // Permission check: only HEAD role users may read audit logs
+        $authUser = auth()->user();
+        if (!$authUser || optional($authUser->role)->role !== 'HEAD') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Forbidden. Only HEAD administrators can access system logs.',
+            ], 403);
+        }
+
         try {
             $log = SystemLog::with(['user:user_id,name,user_name,role_id'])->find($id);
 
@@ -204,9 +224,19 @@ class SystemLogController extends Controller
 
     /**
      * Return filter metadata options for the admin panel dropdowns.
+     * Restricted to HEAD role only.
      */
     public function filters(): JsonResponse
     {
+        // Permission check: only HEAD role users may read audit logs
+        $authUser = auth()->user();
+        if (!$authUser || optional($authUser->role)->role !== 'HEAD') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Forbidden. Only HEAD administrators can access system logs.',
+            ], 403);
+        }
+
         try {
             // 1. Available unique modules
             $modules = SystemLog::query()
@@ -245,9 +275,8 @@ class SystemLogController extends Controller
 
             // 5. Customers for dropdown (with display name, username, label, value)
             $customers = UserDetail::where('is_delete', false)
-                ->where(function ($q) {
-                    $q->where('role_id', 1)  // Role: CUSTOMER
-                      ->orWhere('role_id', 4); // Role: PURCHASE / Retailer
+                ->whereHas('role', function ($q) {
+                    $q->whereIn('role', ['CUSTOMER', 'PURCHASE']); // CUSTOMER = retail customer, PURCHASE = retailer/buyer
                 })
                 ->select('user_id', 'name', 'user_name')
                 ->orderBy('name')
