@@ -1466,6 +1466,70 @@ class UserDetailController extends Controller
                 */
 
                 $user->update($userData);
+
+                
+
+                /*
+                |--------------------------------------------------------------------------
+                | SYNC ITEM MAPPINGS (Yii2 Parity)
+                |--------------------------------------------------------------------------
+                | Replicates the Yii2 createMultiple/deleteAll sync pattern:
+                | 1. Compute IDs to delete (old - incoming)
+                | 2. Delete removed mappings
+                | 3. Update existing / Create new mappings
+                */
+
+                if ($request->has('item_mappings')) {
+
+                    $newMappings = $request->input('item_mappings', []);
+
+                    $existingIds = UsersItemsMapping::where(
+                        'user_id', $user->user_id
+                    )->pluck('id')->toArray();
+
+                    $incomingIds = array_filter(
+                        array_column($newMappings, 'id')
+                    );
+
+                    /*
+                    | Delete removed mappings
+                    */
+                    $toDelete = array_diff($existingIds, $incomingIds);
+
+                    if (!empty($toDelete)) {
+                        UsersItemsMapping::whereIn('id', $toDelete)->delete();
+                    }
+
+                    /*
+                    | Update existing / Create new mappings
+                    */
+                    foreach ($newMappings as $mapping) {
+
+                        if (!empty($mapping['id'])) {
+
+                            UsersItemsMapping::where('id', $mapping['id'])
+                                ->where('user_id', $user->user_id)
+                                ->update([
+                                    'item_id'          => $mapping['item_id'],
+                                    'item_grams_total' => $mapping['item_grams_total'] ?? '0',
+                                    'item_purity_total' => $mapping['item_purity_total'] ?? '0',
+                                    'is_primary'       => $mapping['is_primary'],
+                                    'updated_at'       => now(),
+                                ]);
+
+                        } else {
+
+                            UsersItemsMapping::create([
+                                'item_id'          => $mapping['item_id'],
+                                'user_id'          => $user->user_id,
+                                'item_grams_total' => $mapping['item_grams_total'] ?? '0',
+                                'item_purity_total' => $mapping['item_purity_total'] ?? '0',
+                                'is_primary'       => $mapping['is_primary'],
+                                'added_at'         => now(),
+                            ]);
+                        }
+                    }
+                }
             });
 
 
