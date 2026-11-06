@@ -785,35 +785,48 @@ class ReportService
             });
         }
         
+        /*
+        |--------------------------------------------------------------------------
+        | TYPE FILTER â€” Entry-Type-Aware (Yii2 Parity)
+        |--------------------------------------------------------------------------
+        | The Yii2 legacy uses entry_type-aware CASE logic to determine
+        | IN/OUT direction from a user's perspective. For auto-entry types
+        | (EMPTOHEAD, EMPTOEMP, HEADTOHEAD, ANOTHERHEADTOEMP), the DB
+        | stock_type is always 'OUT', but the display must flip based on
+        | who is the sender vs receiver (given_by / given_to).
+        |
+        | ROOT CAUSE OF BUG: The old orWhere('given_by', $headId) breaks
+        | out of the stock_type constraint entirely, pulling ALL records
+        | where head is sender regardless of stock_type.
+        */
+
         if ($type) {
-            if ($employeeId) {
-                if ($type === 'OUT') {
-                    $query->where(function($q) use ($employeeId) {
-                        $q->where('stock_type', 'OUT')
-                          ->orWhere(function($sub) use ($employeeId) {
-                              $sub->where('given_by', $employeeId)->where('given_to', '!=', $employeeId);
-                          });
+            $filterUserId = $employeeId ?: $headId;
+
+            if ($type === 'OUT') {
+                $query->where(function($q) use ($filterUserId) {
+                    $q->where(function($sub) use ($filterUserId) {
+                        // Standard entries: stock_type is directly OUT
+                        $sub->whereIn('entry_type', ['NORMAL', 'STOCKOUT', 'ITEMCHANGE', 'ITEMCONVERSION', 'NUMERICWASTAGE', 'CASHTOGOLD', 'GOLDTOCASH', 'PURCHASEGOLD', 'SALEGOLD', 'FITEMS', 'GMSOUT', 'METALOUT'])
+                             ->where('stock_type', 'OUT');
+                    })->orWhere(function($sub) use ($filterUserId) {
+                        // Auto-entry types: OUT from this user's perspective = they are the sender
+                        $sub->whereIn('entry_type', ['EMPTOHEAD', 'EMPTOEMP', 'HEADTOHEAD', 'ANOTHERHEADTOEMP'])
+                             ->where('given_by', $filterUserId);
                     });
-                } elseif ($type === 'IN') {
-                    $query->where(function($q) use ($employeeId) {
-                        $q->where('stock_type', 'IN')
-                          ->orWhere(function($sub) use ($employeeId) {
-                              $sub->where('given_to', $employeeId)->where('given_by', '!=', $employeeId);
-                          });
+                });
+            } elseif ($type === 'IN') {
+                $query->where(function($q) use ($filterUserId) {
+                    $q->where(function($sub) use ($filterUserId) {
+                        // Standard entries: stock_type is directly IN
+                        $sub->whereIn('entry_type', ['NORMAL', 'STOCKIN', 'ITEMCHANGE', 'ITEMCONVERSION', 'NUMERICWASTAGE', 'CASHTOGOLD', 'GOLDTOCASH', 'PURCHASEGOLD', 'SALEGOLD', 'FITEMS', 'GMSIN', 'METALIN'])
+                             ->where('stock_type', 'IN');
+                    })->orWhere(function($sub) use ($filterUserId) {
+                        // Auto-entry types: IN from this user's perspective = they are the receiver
+                        $sub->whereIn('entry_type', ['EMPTOHEAD', 'EMPTOEMP', 'HEADTOHEAD', 'ANOTHERHEADTOEMP'])
+                             ->where('given_to', $filterUserId);
                     });
-                }
-            } else {
-                if ($type === 'OUT') {
-                    $query->where(function($q) use ($headId) {
-                        $q->where('stock_type', 'OUT')
-                          ->orWhere('given_by', $headId);
-                    });
-                } elseif ($type === 'IN') {
-                    $query->where(function($q) use ($headId) {
-                        $q->where('stock_type', 'IN')
-                          ->orWhere('given_to', $headId);
-                    });
-                }
+                });
             }
         }
         
