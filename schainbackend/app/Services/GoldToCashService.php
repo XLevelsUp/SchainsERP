@@ -27,9 +27,9 @@ class GoldToCashService extends BaseStockService
      *  6. stock_details                 — gold stock IN + customer grams updated
      *  7. cash_to_gold (update)         — back-fill stock_id
      */
-    public function store(array $data, int $addedBy): CashToGold
+    public function store(array $data, int $addedBy, array $options = []): CashToGold
     {
-        return DB::transaction(function () use ($data, $addedBy) {
+        return DB::transaction(function () use ($data, $addedBy, $options) {
 
             // ── Lock users to prevent concurrent balance race conditions ──────
             $head = UserDetail::where('user_id', $data['head_id'])
@@ -51,7 +51,9 @@ class GoldToCashService extends BaseStockService
             }
 
             // ── Validate head has sufficient balance ──────────────────────────
-            foreach ($amountSources as $src) {
+            // Skipped for a reversal (GoldCorrectionService): it pays money
+            // back, so with its negated amounts the check would misfire.
+            foreach (empty($options['reversal']) ? $amountSources : [] as $src) {
                 if ($src['source'] === 'CASH_ON_HAND') {
                     $available = (float) $head->cash_balance;
                     if ($available < (float) $src['amount']) {

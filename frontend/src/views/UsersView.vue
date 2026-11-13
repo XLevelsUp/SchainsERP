@@ -24,6 +24,7 @@ import {
 } from '@/lib/userFeatureFlags'
 import type { UserFeatureFlagGroup } from '@/lib/userFeatureFlags'
 import { useToastStore } from '@/stores/toast'
+import { useAuthStore } from '@/stores/auth'
 import type {
   DataTableColumn,
   UserDetailFormValues,
@@ -133,6 +134,12 @@ function makeEmptyForm(): UserDetailFormValues {
 
 const isFormOpen = ref(false)
 const editingId = ref<number | null>(null)
+
+// Assigned items carry running gram/purity totals that only heads can see, so
+// only a head may change them on an existing user. The backend ignores
+// item_mappings from anyone else; the section is read-only for them here.
+const authStore = useAuthStore()
+const itemsLocked = computed(() => editingId.value !== null && !authStore.isHead)
 const form = reactive<UserDetailFormValues>(makeEmptyForm())
 const formError = ref('')
 const isSaving = ref(false)
@@ -384,7 +391,9 @@ async function handleSubmit() {
   isSaving.value = true
   try {
     if (editingId.value !== null) {
-      await userDetailsApi.update(editingId.value, { ...form })
+      await userDetailsApi.update(editingId.value, { ...form }, {
+        includeItemMappings: !itemsLocked.value,
+      })
     } else {
       await userDetailsApi.create({ ...form })
     }
@@ -668,18 +677,21 @@ async function handleDelete(user: UserDetailListItem) {
         </section>
 
         <!--
-          Backend gap: UserDetailController::update() never reads
-          item_mappings / head_mappings / cash_head_mappings (only store()
-          does), so edits to the three sections below are dropped on save.
-          See BACKEND_TODO.md.
+          Backend gaps (BACKEND_TODO.md §10): since PR #53 update() saves
+          item_mappings, overwriting the grams/purity running totals with
+          what the form sends. head_mappings / cash_head_mappings are still
+          ignored on update; only store() reads them.
         -->
         <p
           v-if="editingId !== null"
           class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
         >
-          Assigned items, heads and cash heads below are loaded from the saved record, but
-          <strong>Save changes</strong> does not update them yet — the server's user update ignores
-          mappings. To change who this user reports to, use
+          <template v-if="!itemsLocked">
+            <strong>Save changes</strong> saves assigned items and writes their grams and purity
+            totals back exactly as shown. If this user's stock has moved since you opened this
+            form, close it and reopen it first.
+          </template>
+          Heads and cash heads don't save from here yet; to change who this user reports to, use
           <RouterLink to="/head-employee-mappings" class="font-medium underline">
             Head Employee Mappings</RouterLink
           >.
@@ -689,15 +701,30 @@ async function handleDelete(user: UserDetailListItem) {
         <section class="border-t border-slate-200 pt-4">
           <div class="mb-3 flex items-center justify-between">
             <h3 class="text-sm font-semibold text-slate-900">Assigned items</h3>
-            <BaseButton variant="secondary" type="button" :icon="Plus" @click="addItemMapping">
+            <BaseButton
+              v-if="!itemsLocked"
+              variant="secondary"
+              type="button"
+              :icon="Plus"
+              @click="addItemMapping"
+            >
               Add item
             </BaseButton>
           </div>
+          <p v-if="itemsLocked" class="mb-2 text-xs text-slate-500">
+            Only a head can change assigned items, because they carry gram and purity balances.
+          </p>
           <p v-if="form.item_mappings.length === 0" class="text-sm text-slate-500">
             No items assigned.
           </p>
+          <ul v-if="itemsLocked" class="space-y-1 text-sm text-slate-700">
+            <li v-for="(mapping, index) in form.item_mappings" :key="index">
+              {{ items.find((i) => i.item_id === mapping.item_id)?.item_name ?? `#${mapping.item_id}` }}
+              <span v-if="mapping.is_primary === 1" class="ml-1 text-xs text-slate-500">· Primary</span>
+            </li>
+          </ul>
           <div
-            v-for="(mapping, index) in form.item_mappings"
+            v-for="(mapping, index) in itemsLocked ? [] : form.item_mappings"
             :key="index"
             class="mb-3 grid items-end gap-3 sm:grid-cols-[1fr_1fr_1fr_auto_auto]"
           >

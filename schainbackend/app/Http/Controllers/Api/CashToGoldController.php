@@ -56,7 +56,7 @@ class CashToGoldController extends Controller
         try {
             $record = $this->service->store(
                 $request->validated(),
-                auth()->id() ?? 1
+                (int) auth()->id()
             );
 
             return response()->json([
@@ -72,10 +72,10 @@ class CashToGoldController extends Controller
             ], 422);
 
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Transaction failed. All changes have been rolled back.',
-                'error'   => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }
@@ -103,7 +103,7 @@ class CashToGoldController extends Controller
     public function destroy(int $id): JsonResponse
     {
         try {
-            $this->service->delete($id, auth()->id() ?? 1);
+            $this->service->delete($id, (int) auth()->id());
             return response()->json([
                 'success' => true,
                 'message' => 'Cash To Gold record deleted and all balances reversed.',
@@ -111,10 +111,10 @@ class CashToGoldController extends Controller
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Record not found.'], 404);
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Delete failed. All changes have been rolled back.',
-                'error'   => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }

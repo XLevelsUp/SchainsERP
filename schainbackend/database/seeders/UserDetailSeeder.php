@@ -2,9 +2,9 @@
 
 namespace Database\Seeders;
 
+use Database\Seeders\Support\SeedPassword;
 use Illuminate\Database\Seeder;
 use App\Models\UserDetail;
-use Illuminate\Support\Facades\Hash;
 
 class UserDetailSeeder extends Seeder
 {
@@ -14,7 +14,7 @@ class UserDetailSeeder extends Seeder
             [
                 'user_name'     => 'head_admin',
                 'name'          => 'Head Admin',
-                'password_hash' => Hash::make('password'),
+                'password_hash' => SeedPassword::hash($this->command),
                 'address'       => 'Office',
                 'signature'     => 'HA',
                 'code'          => 'HA001',
@@ -30,7 +30,7 @@ class UserDetailSeeder extends Seeder
             [
                 'user_name'     => 'employee_one',
                 'name'          => 'Employee One',
-                'password_hash' => Hash::make('password'),
+                'password_hash' => SeedPassword::hash($this->command),
                 'address'       => 'Branch',
                 'signature'     => 'E1',
                 'code'          => 'E001',
@@ -46,7 +46,7 @@ class UserDetailSeeder extends Seeder
             [
                 'user_name'     => 'customer_one',
                 'name'          => 'Customer One',
-                'password_hash' => Hash::make('password'),
+                'password_hash' => SeedPassword::hash($this->command),
                 'address'       => 'Chennai',
                 'signature'     => 'C1',
                 'code'          => 'C001',
@@ -62,7 +62,7 @@ class UserDetailSeeder extends Seeder
             [
                 'user_name'     => 'retailer_one',
                 'name'          => 'Retailer One',
-                'password_hash' => Hash::make('password'),
+                'password_hash' => SeedPassword::hash($this->command),
                 'address'       => 'Coimbatore',
                 'signature'     => 'R1',
                 'code'          => 'R001',

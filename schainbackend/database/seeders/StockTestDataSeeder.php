@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use Database\Seeders\Support\SeedPassword;
 use App\Models\UserDetail;
 use App\Models\Item;
 use App\Models\UsersItemsMapping;
@@ -69,7 +70,7 @@ class StockTestDataSeeder extends Seeder
             [
                 'name' => 'Head Admin',
                 'user_name' => 'head_admin',
-                'password_hash' => \Illuminate\Support\Facades\Hash::make('password'),
+                'password_hash' => SeedPassword::hash($this->command),
                 'address' => 'Office',
                 'signature' => 'HA',
                 'code' => 'HA001',
@@ -96,7 +97,7 @@ class StockTestDataSeeder extends Seeder
             [
                 'name' => 'Employee One',
                 'user_name' => 'employee_one',
-                'password_hash' => \Illuminate\Support\Facades\Hash::make('password'),
+                'password_hash' => SeedPassword::hash($this->command),
                 'address' => 'Branch',
                 'signature' => 'E1',
                 'code' => 'E001',

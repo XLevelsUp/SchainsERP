@@ -11,6 +11,7 @@ import DataTable from '@/components/ui/DataTable.vue'
 import { systemSettingsApi } from '@/lib/systemSettingsApi'
 import { formatDateTime } from '@/lib/date'
 import { ApiError } from '@/lib/api'
+import { forgetMetalItemIds } from '@/lib/metalItem'
 import { useToastStore } from '@/stores/toast'
 import type { DataTableColumn, SystemSetting } from '@/types'
 
@@ -186,6 +187,8 @@ async function saveForm() {
       if (index !== -1) settings.value[index] = updated
       toast.show(`Setting "${updated.setting_key}" saved.`, 'success')
     }
+    // The stock screens cache the metal item list; make them re-read it.
+    forgetMetalItemIds()
     closeForm()
   } catch (err) {
     if (err instanceof ApiError) {
@@ -212,6 +215,7 @@ async function handleDelete(row: SystemSetting) {
   try {
     await systemSettingsApi.remove(row.setting_key)
     settings.value = settings.value.filter((s) => s.setting_key !== row.setting_key)
+    forgetMetalItemIds()
     if (editingKey.value === row.setting_key) closeForm()
     toast.show(`Setting "${row.setting_key}" deleted.`, 'success')
   } catch (err) {

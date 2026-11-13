@@ -8,10 +8,17 @@ import type { UserDetailListItem } from '@/types'
 // pickers, gm/purity for 'stock' pickers (or callers that didn't pass a
 // module at all, kept as the fallback for backward compatibility).
 // Gm/Purity follow the user's own category — see lib/userCategory.ts.
+//
+// Only heads get other users' balances (the API leaves hand_cash/rtgs_cash/
+// gm/purity out otherwise), so a row without any of them gets name and role
+// only, rather than a misleading "0.000".
 export function userOptionLabel(user: UserDetailListItem): string {
   const type = user.type ?? '—'
   if (user.hand_cash !== undefined && user.rtgs_cash !== undefined) {
     return `${user.name} (${type}) — Hand Cash ${user.hand_cash} · RTGS Cash ${user.rtgs_cash}`
+  }
+  if (user.gm === undefined && user.purity === undefined) {
+    return `${user.name} (${type})`
   }
   const gm = categoryShowsGrams(user.category_name) ? (user.gm ?? '0.000') : '0.000'
   const purity = categoryShowsPurity(user.category_name) ? (user.purity ?? '0.000') : '0.000'

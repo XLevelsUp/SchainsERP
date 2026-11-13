@@ -42,6 +42,28 @@ class UsersItemsMapping extends Model
         'is_primary' => 'integer',
     ];
 
+    /** Item running totals: hidden from non-heads unless the mapping is theirs. */
+    public const BALANCE_FIELDS = [
+        'item_grams_total',
+        'item_purity_total',
+        'stone_cost_grand_total',
+        'beads_cost_grand_total',
+        'beads_stone_cost_grand_total',
+    ];
+
+    public function toArray()
+    {
+        $data = parent::toArray();
+
+        if (!\App\Support\BalanceVisibility::canSeeBalancesOf($this->user_id)) {
+            foreach (self::BALANCE_FIELDS as $field) {
+                unset($data[$field]);
+            }
+        }
+
+        return $data;
+    }
+
     public function item()
     {
         return $this->belongsTo(Item::class, 'item_id', 'item_id');

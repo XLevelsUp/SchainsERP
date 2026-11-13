@@ -62,6 +62,36 @@ class CashTxnDetail extends Model
         'cash_to_gold_id' => 'integer',
     ];
 
+    /**
+     * The opening/closing snapshots are each party's balance at the time.
+     * A non-head only receives their own side (App\Support\BalanceVisibility).
+     */
+    public function toArray()
+    {
+        $data = parent::toArray();
+
+        $hide = function (string $side) use (&$data) {
+            foreach (['opening_cash', 'opening_rtgs', 'closing_cash', 'closing_rtgs'] as $suffix) {
+                unset($data["{$side}_{$suffix}"]);
+            }
+        };
+
+        $seeSender = \App\Support\BalanceVisibility::canSeeBalancesOf($this->sender_id);
+        $seeRecipient = \App\Support\BalanceVisibility::canSeeBalancesOf($this->recipient_id);
+
+        if (!$seeSender) {
+            $hide('sender');
+        }
+        if (!$seeRecipient) {
+            $hide('recipient');
+        }
+        if (!$seeSender || !$seeRecipient) {
+            unset($data['balance_after_txn']);
+        }
+
+        return $data;
+    }
+
     public function givenByUser(): BelongsTo
     {
         return $this->belongsTo(UserDetail::class, 'sender_id', 'user_id');

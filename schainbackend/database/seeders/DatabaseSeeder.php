@@ -34,6 +34,7 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             UserDetailSeeder::class,
             ItemSeeder::class,
+            SystemSettingSeeder::class,
             CashCategorySeeder::class,
             BankDetailSeeder::class,
             HeadEmployeeMappingSeeder::class,

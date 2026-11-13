@@ -64,10 +64,10 @@ class PhoneBookController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve phone book.',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -170,10 +170,10 @@ class PhoneBookController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create contact.',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -231,7 +231,8 @@ class PhoneBookController extends Controller
             return response()->json(['success' => true, 'message' => 'Contact updated successfully.', 'data' => $user], 200);
 
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Failed to update contact.', 'error' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['success' => false, 'message' => 'Failed to update contact.'], 500);
         }
     }
 
@@ -252,7 +253,8 @@ class PhoneBookController extends Controller
 
             return response()->json(['success' => true, 'message' => 'Contact deleted successfully.'], 200);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Failed to delete contact.', 'error' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['success' => false, 'message' => 'Failed to delete contact.'], 500);
         }
     }
 }

@@ -386,18 +386,15 @@ class StockInService extends BaseStockService
                 // Handle Cash Transaction mapping if enabled
                 $cashTxnId = null;
                 if ($amountPcs > 0) {
-                    $cashAmount = bcmul((string)$noOfPcs, (string)$amountPcs, 4);
-                    
-                    $openingAccountBalance = $givenBy->rak_cash_balance;
-                    $openingUserBalance = $givenTo->rak_cash_balance;
+                    $cashAmount = $this->mul($noOfPcs, $amountPcs);
 
                     $cashTxn = CashTxnDetail::create([
                         'type' => 'INCOME',
                         'recipient_id' => $givenTo->user_id, // head admin receives cash
                         'sender_id' => $givenBy->user_id, // worker pays cash
                         'amount' => $cashAmount,
-                        'sender_opening_cash' => $openingAccountBalance, // sender (worker) cash balance
-                        'recipient_opening_cash' => $openingUserBalance, // receiver (head) cash balance
+                        // worker (sender) and head (recipient) cash/RTGS before and after
+                        ...$this->cashOnHandSnapshots($givenBy, $givenTo, $cashAmount),
                         'payment_method' => 'CASH_ON_HAND',
                         'remarks' => "NUMERIC_WASTAGE INCOME (ID : {$stock->stock_in_detail_id})",
                         'added_by' => $addedBy,

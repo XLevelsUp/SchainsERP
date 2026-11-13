@@ -174,10 +174,10 @@ class SystemLogController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve system logs.',
-                'error'   => $e->getMessage(),
             ], 500);
         }
     }
@@ -214,10 +214,10 @@ class SystemLogController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve system log detail.',
-                'error'   => $e->getMessage(),
             ], 500);
         }
     }
@@ -339,10 +339,10 @@ class SystemLogController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve filter options.',
-                'error'   => $e->getMessage(),
             ], 500);
         }
     }

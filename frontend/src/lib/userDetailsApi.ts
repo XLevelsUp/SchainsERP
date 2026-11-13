@@ -52,6 +52,10 @@ function toPayload(form: UserDetailFormValues, includePassword = true) {
 
   if (includePassword) payload.password = form.password
 
+  // No per-row `id`, on purpose. Since PR #53 update() updates a row in
+  // place when it carries an id, but that branch writes an `updated_at`
+  // column users_items_mappings doesn't have, so the whole save would fail
+  // (BACKEND_TODO §10). Without ids update() deletes and re-creates the rows.
   const itemMappings = form.item_mappings
     .filter((m) => m.item_id !== null)
     .map((m) => ({
@@ -135,8 +139,24 @@ export const userDetailsApi = {
   // Password only sent if the user typed a new one. With a new proof image
   // the request goes as POST + _method=PUT: PHP only parses multipart bodies
   // on POST, and Laravel's method override still routes it to update().
-  update: (id: number, form: UserDetailFormValues) => {
+  // includeItemMappings: false leaves item_mappings out entirely, for
+  // non-heads, who can't see the item totals (the backend ignores theirs too).
+  update: (
+    id: number,
+    form: UserDetailFormValues,
+    options: { includeItemMappings?: boolean } = {},
+  ) => {
     const payload = toPayload(form, form.password.length > 0)
+    if (options.includeItemMappings === false) {
+      delete payload.item_mappings
+    } else if (!form.aadhar_image && payload.item_mappings === undefined) {
+      // update() syncs item mappings only when the key is present (PR #53),
+      // and toPayload() leaves an empty list out, so removing a user's last
+      // item never reached the server. Send [] so it clears. JSON only:
+      // FormData can't carry an empty array, and the '' fallback reaches
+      // update() as null, which crashes its array_column() (BACKEND_TODO §10).
+      payload.item_mappings = []
+    }
     return (
       form.aadhar_image
         ? api.postForm<ApiResponse<UserDetailEnvelope>>(

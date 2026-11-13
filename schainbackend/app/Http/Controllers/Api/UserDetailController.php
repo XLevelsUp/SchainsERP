@@ -30,7 +30,7 @@ class UserDetailController extends Controller
     {
         try {
 
-            $actingUserId = $request->user()->user_id ?? ($request->header('X-User-ID') ? (int)$request->header('X-User-ID') : null);
+            $actingUserId = (int) $request->user()->user_id;
             $headId = $request->query('head_id') ? (int)$request->query('head_id') : $actingUserId;
 
             $query = UserDetail::with([
@@ -95,13 +95,21 @@ class UserDetailController extends Controller
                     'phone_number' => $user->phone_no,
                 ];
 
+                // Balances only for heads, or for the signed-in user's own row
+                // (App\Support\BalanceVisibility).
+                $showBalance = \App\Support\BalanceVisibility::canSeeBalancesOf($user->user_id);
+
                 if (strtolower($module) === 'cash') {
-                    $data['hand_cash'] = sprintf('%0.2f', $user->rak_cash_balance ?? 0);
-                    $data['rtgs_cash'] = sprintf('%0.2f', $user->rak_rtgs_balance ?? 0);
+                    if ($showBalance) {
+                        $data['hand_cash'] = sprintf('%0.2f', $user->rak_cash_balance ?? 0);
+                        $data['rtgs_cash'] = sprintf('%0.2f', $user->rak_rtgs_balance ?? 0);
+                    }
                     $data['last_cash_txn_date'] = $user->last_cash_txn_date ? date('Y-m-d H:i:s', strtotime($user->last_cash_txn_date)) : null;
                 } else {
-                    $data['gm'] = sprintf('%0.3f', $user->grams_grand_total ?? 0);
-                    $data['purity'] = sprintf('%0.3f', $user->purity_grand_total ?? 0);
+                    if ($showBalance) {
+                        $data['gm'] = sprintf('%0.3f', $user->grams_grand_total ?? 0);
+                        $data['purity'] = sprintf('%0.3f', $user->purity_grand_total ?? 0);
+                    }
                     $data['last_txn_date'] = $user->last_txn_date ? date('Y-m-d H:i:s', strtotime($user->last_txn_date)) : null;
                 }
 
@@ -120,11 +128,11 @@ class UserDetailController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
+            report($e);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve users',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -282,6 +290,8 @@ class UserDetailController extends Controller
                 'sometimes|boolean',
             'is_admin_login_otp_need_to_shown' =>
                 'sometimes|boolean',
+            'is_act_as_head_enabled' =>
+                'sometimes|boolean',
             'is_customer_cmts_need_to_shown' =>
                 'sometimes|boolean',
             'is_outside_need_to_shown' =>
@@ -348,6 +358,8 @@ class UserDetailController extends Controller
             'is_freeze_entry_need_to_shown' =>
                 'sometimes|boolean',
             'is_admin_login_otp_need_to_shown' =>
+                'sometimes|boolean',
+            'is_act_as_head_enabled' =>
                 'sometimes|boolean',
             'is_customer_cmts_need_to_shown' =>
                 'sometimes|boolean',
@@ -456,6 +468,26 @@ class UserDetailController extends Controller
                 'message' => 'Validation failed',
                 'errors' => $validator->errors()
             ], 422);
+        }
+
+        /*
+        | A user with "Can act as head" may create users (e.g. Add Retailer on
+        | the Stock screen), but only a head may create another head or hand
+        | out that permission (BACKEND_TODO §26, agreed 2026-11-12).
+        */
+        if (!\App\Support\BalanceVisibility::viewerIsHead()) {
+            $headRoleIds = \App\Models\Role::whereRaw('UPPER(role) = ?', ['HEAD'])
+                ->pluck('id')
+                ->map(fn ($id) => (string) $id)
+                ->all();
+
+            if (in_array((string) $request->input('role_id'), $headRoleIds, true)
+                || $request->boolean('is_act_as_head_enabled')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only a head can create a head or give the "Can act as head" permission.',
+                ], 403);
+            }
         }
 
 
@@ -605,6 +637,8 @@ class UserDetailController extends Controller
                         $request->input('is_freeze_entry_need_to_shown', false),
                     'is_admin_login_otp_need_to_shown' =>
                         $request->input('is_admin_login_otp_need_to_shown', false),
+                    'is_act_as_head_enabled' =>
+                        $request->input('is_act_as_head_enabled', false),
                     'is_customer_cmts_need_to_shown' =>
                         $request->input('is_customer_cmts_need_to_shown', false),
                     'is_outside_need_to_shown' =>
@@ -830,6 +864,7 @@ class UserDetailController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
+            report($e);
 
             return response()->json([
 
@@ -838,8 +873,6 @@ class UserDetailController extends Controller
                 'message' =>
                     'Failed to create user and mappings',
 
-                'error' =>
-                    $e->getMessage()
 
             ], 500);
         }
@@ -924,6 +957,7 @@ class UserDetailController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
+            report($e);
 
             return response()->json([
 
@@ -932,8 +966,6 @@ class UserDetailController extends Controller
                 'message' =>
                     'Failed to retrieve user',
 
-                'error' =>
-                    $e->getMessage()
 
             ], 500);
         }
@@ -1130,6 +1162,8 @@ class UserDetailController extends Controller
                 'sometimes|boolean',
             'is_admin_login_otp_need_to_shown' =>
                 'sometimes|boolean',
+            'is_act_as_head_enabled' =>
+                'sometimes|boolean',
             'is_customer_cmts_need_to_shown' =>
                 'sometimes|boolean',
             'is_outside_need_to_shown' =>
@@ -1259,6 +1293,7 @@ class UserDetailController extends Controller
                     'is_cash_mngmt_need_to_shown',
                     'is_freeze_entry_need_to_shown',
                     'is_admin_login_otp_need_to_shown',
+                    'is_act_as_head_enabled',
                     'is_customer_cmts_need_to_shown',
                     'is_outside_need_to_shown',
                     'is_tally_need_to_shown',
@@ -1314,6 +1349,7 @@ class UserDetailController extends Controller
                                     'is_cash_mngmt_need_to_shown',
                                     'is_freeze_entry_need_to_shown',
                                     'is_admin_login_otp_need_to_shown',
+                                    'is_act_as_head_enabled',
                                     'is_customer_cmts_need_to_shown',
                                     'is_outside_need_to_shown',
                                     'is_tally_need_to_shown',
@@ -1479,7 +1515,11 @@ class UserDetailController extends Controller
                 | 3. Update existing / Create new mappings
                 */
 
-                if ($request->has('item_mappings')) {
+                // Only a head may change item mappings here: they carry running totals
+                // (item_grams_total / item_purity_total) that non-heads can't see,
+                // so a non-head's edit form would send them back blank and wipe
+                // the balances (App\Support\BalanceVisibility).
+                if ($request->has('item_mappings') && \App\Support\BalanceVisibility::viewerIsHead()) {
 
                     $newMappings = $request->input('item_mappings', []);
 
@@ -1581,6 +1621,7 @@ class UserDetailController extends Controller
 
 
         } catch (\Exception $e) {
+            report($e);
 
             return response()->json([
 
@@ -1589,8 +1630,6 @@ class UserDetailController extends Controller
                 'message' =>
                     'Failed to update user',
 
-                'error' =>
-                    $e->getMessage()
 
             ], 500);
         }
@@ -1729,6 +1768,7 @@ class UserDetailController extends Controller
 
 
         } catch (\Exception $e) {
+            report($e);
 
             return response()->json([
 
@@ -1737,8 +1777,6 @@ class UserDetailController extends Controller
                 'message' =>
                     'Failed to delete user',
 
-                'error' =>
-                    $e->getMessage()
 
             ], 500);
         }
@@ -1771,10 +1809,10 @@ class UserDetailController extends Controller
                 'message' => 'User not found'
             ], 404);
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update customer comments',
-                'error' => $e->getMessage()
             ], 500);
         }
     }

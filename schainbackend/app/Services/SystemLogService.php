@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\SystemLog;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class SystemLogService
@@ -61,7 +62,13 @@ class SystemLogService
                 }
             }
 
-            return SystemLog::create([
+            // Its own (nested) transaction, BACKEND_TODO §16. Callers log
+            // inside their open business transaction; there Laravel turns
+            // this into a SAVEPOINT, so a failed insert rolls back only the
+            // log row. Without it, PostgreSQL aborts the whole transaction on
+            // the failed statement, every later statement fails, and the
+            // business write is silently rolled back at COMMIT.
+            return DB::transaction(fn () => SystemLog::create([
                 'module' => strtoupper($module),
                 'action' => strtoupper($action),
                 'user_id' => $userId,
@@ -73,7 +80,7 @@ class SystemLogService
                 'ip_address' => $ipAddress,
                 'user_agent' => $userAgent,
                 'created_at' => now(),
-            ]);
+            ]));
         } catch (\Throwable $e) {
             Log::error('SystemLogService::log failed to record log', [
                 'module' => $module,

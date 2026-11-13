@@ -58,7 +58,7 @@ class GoldToCashController extends Controller
         try {
             $record = $this->service->store(
                 $request->validated(),
-                auth()->id() ?? 1
+                (int) auth()->id()
             );
 
             return response()->json([
@@ -74,10 +74,10 @@ class GoldToCashController extends Controller
             ], 422);
 
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Transaction failed. All changes have been rolled back.',
-                'error'   => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }
@@ -113,10 +113,10 @@ class GoldToCashController extends Controller
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json(['success' => false, 'message' => 'Record not found.'], 404);
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Delete failed. All changes have been rolled back.',
-                'error'   => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }

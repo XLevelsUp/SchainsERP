@@ -19,9 +19,389 @@ fixed, struck through, with what changed — this file is the record.
 > When a backend item is fixed: strike it through here with the evidence, and
 > delete it from `BACKEND_TODO.md`.
 
-**Last updated:** 2026-11-04
-**Backend baseline:** `2502a051` (PR #52 — System Logs made HEAD-only, cash
-report retailer suffix fixed).
+**Last updated:** 2026-11-12
+**Backend baseline:** `982afd78` (PR #53) plus our own uncommitted backend
+fixes below. Since 2026-11-06 we own the backend too.
+
+### Step 2 (security) — 2026-11-12
+
+Business rules agreed with the user before coding:
+
+- Heads can read anyone's books; everyone else only their own.
+- Heads and employees see all orders; customers and retailers only their own.
+- For the shared `password` accounts, fix the seeders only for now.
+- Only the item named "Metal" opens the metal picker.
+
+- ~~**BACKEND_TODO §3 — any signed-in user could read any head's books.**~~
+  **Fixed.** New trait `app/Http/Controllers/Concerns/ScopesRecordAccess.php`,
+  used by `StockDetailsController`, `CashTxnDetailController` and
+  `ReportController`.
+  - A non-head who names another user in `head_id`, `employee_id`,
+    `user_id`, `head_user_id`, `customer_id` or `retailer_id` (including
+    `user_<id>` / `retailer_<id>`) gets
+    `403 "You can only view your own records."`.
+  - ID Wise (`stock_id`) and the single receipt (`print-report?id=`) also
+    check that a non-head is a party to the row.
+  - Cash in/out history, the bulk print report and stock cash history used
+    to return **every** user's rows when `head_id` was left out. They now
+    default to the signed-in user.
+  - `report/cash-transactions-obcb` had no user scope at all. Non-heads now
+    get only entries they're a party to; heads still see everything.
+- ~~**BACKEND_TODO §7 — `X-User-ID` header trusted.**~~ **Fixed.** Nothing
+  in the backend reads the header any more: One Day Action, Daywise Grand,
+  Cash Auto Entry's `added_by`, cash categories' `added_by`, Fitem and the
+  user list all use the token's user. Before this, One Day Action and
+  Daywise Grand fell back to user 1 when the header was missing.
+- **Tests:** new `tests/Feature/RecordAccessTest.php` (7 tests). The 3
+  `StockInDetailsTest` tests were already failing (they sent only the header
+  and got `401`); they now sign in with `Passport::actingAs`. The suite is at
+  12/12 passing. They run on SQLite: Aiven's host didn't resolve all of
+  2026-11-12 and Docker wasn't running, so nothing was checked against
+  Postgres.
+- **Frontend follow-up:** the API modules still send `X-User-ID` and their
+  comments say the backend reads it. That's harmless now but misleading;
+  see Pending.
+- **New:** BACKEND_TODO §25 covers the two access gaps left: the user list
+  shows everyone's balances, and write endpoints take the head from the body.
+- ~~**BACKEND_TODO §4 — every user saw every order.**~~ **Fixed.**
+  `OrderController` was rewritten:
+  - Heads and employees see and manage every order; customers and retailers
+    only orders where they're the customer (`403` otherwise, on list, show,
+    create, edit and delete).
+  - `GET /orders` is paginated (`per_page` 1–200, default 50) with
+    `status`, `customer_id`, `from_date` and `to_date` filters, newest first.
+    The response is `{ data: Order[], pagination }`, the same shape as System
+    Logs.
+  - The `remarks` / `due_date` rules were dropped (no such columns, so they
+    caused 500s).
+  - `create` returns the row with its database-set `added_at`.
+  - Frontend: `OrdersView` uses server-side filters, adds a date range and a
+    pager, and loses its stale warning banner. `ordersApi.list(query)` returns
+    `{ rows, pagination }`. New shared `types/pagination.ts` (`ApiPagination`);
+    `SystemLogPagination` is now an alias of it.
+  - 6 tests in `tests/Feature/OrderAccessTest.php`.
+- **BACKEND_TODO §5 — seeders fixed, accounts kept (by decision).** All
+  seeded accounts now get `SEED_USER_PASSWORD` (new `config('app.seed_user_password')`,
+  added to `.env.example`), or a random password printed during seeding
+  (`database/seeders/Support/SeedPassword.php`). The five existing
+  `password` accounts on Aiven stay until go-live (§5 keeps that part).
+  2 tests in `SeedPasswordTest`.
+- **BACKEND_TODO §2 — metal picker settings.** Fixed in code: migration
+  `2026_11_12_000000_seed_metal_item_settings` and `SystemSettingSeeder` set
+  `metal_popup_items` and `live_metal_report_items` to the item named
+  "Metal" (found by name, existing keys kept). Frontend `lib/metalItem.ts`
+  now reads `metal_popup_items` (cached and reactive, with the name match as
+  fallback), and the System Settings screen clears that cache on save or
+  delete. 3 tests in `MetalSettingsTest`. **Not yet run on Aiven** (it was
+  down); §2 keeps that step.
+- **BACKEND_TODO §17 — cash edit/delete made safe, rewrite still open.**
+  `apiResource('cash-txn-details')` is now `->only(['index', 'show'])`, so
+  the broken `store`/`update`/`destroy` can't corrupt balances. `index`,
+  `show` and the image add/delete routes follow the §3 rule. The frontend
+  only used `show`. The rewrite needs decisions, listed in §17.
+- **Backend suite: 25/25 passing; frontend build passes.**
+
+**Later the same day — access model refined (user decisions):** anyone given
+access can act as a head and enter values; access is a permission on the
+user; such users can open the head's books but never see balances;
+non-heads never see balances.
+
+- **New permission `is_act_as_head_enabled`** ("Can act as head"):
+  - Migration `2026_11_12_000100_add_is_act_as_head_enabled_to_user_details`.
+  - Validated and saved by user create/update.
+  - A new "Access" group on the Users screen holds the toggle.
+- **`ScopesRecordAccess`:** heads and permitted users may open anyone's
+  history, lots, stock summary, entries and receipts. The balance reports
+  (Items OB/CB, Consolidated, and their exports) stay HEAD-only for other
+  users. Everyone else gets only their own records.
+- **Entering values** (all stock POSTs, the four gold endpoints, cash
+  in/out/auto entry, cash images, fitems) now needs HEAD or the permission:
+  new `EnsureCanActAsHead` middleware (`act.as.head`), otherwise `403`.
+- **Balances hidden from non-heads** (new `App\Support\BalanceVisibility`):
+  - `UserDetail`, `UsersItemsMapping` and `CashTxnDetail` leave out other
+    users' balance fields and opening/closing snapshots when serialised.
+  - The user list leaves out `hand_cash`/`rtgs_cash`/`gm`/`purity` for
+    other users.
+  - The Cash Transactions report returns `null` OB/CB for balances that
+    aren't the viewer's.
+  - Your own balance is always visible.
+- **User edit:** only a head's `item_mappings` are applied. A non-head
+  can't see the item totals, so their form would have zeroed them.
+- **Frontend:**
+  - The auth store keeps `role_name` and `is_act_as_head_enabled` (from
+    login and `/me`) and exposes `isHead` / `canActAsHead`.
+  - Withheld balances show "—": PartyBalanceCards (including computed
+    closing balances that came out NaN), the Cash Management balance strip
+    (which would have crashed on `undefined.toLocaleString()`), the cash
+    report's OB/CB and CSV, the user picker labels (name and role only, no
+    fake "0.000"), and the post-save balance line on the four gold screens.
+  - On the Users edit form the assigned-items section is read-only for
+    non-heads, and their saves leave `item_mappings` out.
+- **New:** BACKEND_TODO §26: the admin endpoints (users, roles, items,
+  settings, banks, categories, mappings) still have no role checks.
+- **Backend suite: 30/30 passing; frontend build passes.** Still SQLite
+  only; Aiven was down all day.
+
+**Later still — Aiven back, §26 and §17 phase 1:**
+
+- **Migrations run on Aiven:** `2026_11_12_000000_seed_metal_item_settings`
+  (both settings set to item 1, "Metal") and
+  `2026_11_12_000100_add_is_act_as_head_enabled_to_user_details`. §2 is
+  closed.
+- **Step 2 verified on Postgres:** 13 API checks passed (metal picker,
+  books access, balance hiding, write gate, orders, disabled cash delete).
+- ~~**BACKEND_TODO §26 — admin endpoints had no role checks.**~~ **Fixed.**
+  - Users, items, fitem boxes, roles, customer touch (and its user
+    mappings), users-items-mappings, head-employee and cash-head-employee
+    mappings, cash categories, banks and settings: reading stays open, but
+    changes are HEAD-only (new `EnsureHead` middleware, `head.only`).
+  - Creating a user is also open to "Can act as head" users (Add Retailer
+    on the Stock screen), but they can't create a head or grant the
+    permission (`403`).
+  - Saving customer comments (`update-cc`) needs HEAD or the permission.
+  - 3 tests in `AdminAccessTest`.
+- ~~**BACKEND_TODO §17 phase 1 — cash entry editing.**~~ **Done.**
+  - New `PUT/PATCH /cash-txn-details/{id}` (heads only) →
+    `CashTxnEditService`. It edits the amount, payment method and bank,
+    category, remarks and date of plain Cash In / Cash Out, and corrects
+    balances, the bank(s), this entry's closings and every later entry's
+    opening/closing snapshots for both parties. It logs `CASH_EDIT`.
+  - `show()` returns `edit_blocked_reason`.
+  - 5 tests in `CashEditTest`, including a full ledger-chain consistency
+    check.
+  - Verified on Aiven with test entries #85 (in, 7→1, ₹100) and #86 (out,
+    1→7, ₹40): edited to 130, to bank 1, then back. Every balance, the bank
+    and the later entry's snapshots matched and returned exactly; 17 checks
+    passed.
+  - Frontend: `CashTxnDetailModal` has an **Edit** form for heads (amount,
+    payment method, bank, category, date & time, remarks) and explains why
+    other entries can't be edited yet. The history table reloads after a
+    save. The modal's bank label now uses `account_name` (it read a
+    `bank_name` column that doesn't exist).
+- **Backend suite: 38/38 passing; frontend build passes.**
+- ~~**BACKEND_TODO §17 phase 2 — Cash Auto Entry editing.**~~ **Done.**
+  - `CashTxnEditService::edit()` (renamed from `editCashInOut`) now also
+    takes `AUTO_ENTRY` rows: only the sender's cash moves, matching
+    `CashAutoEntryService`. The payment method can't change (`422`).
+  - 2 more tests in `CashEditTest`; the suite is at 40/40.
+  - Verified on Aiven with test rows #87/#88 (head 1 → user 7, ₹60 + ₹25):
+    edited to 80 and back, all 10 checks passed.
+  - Frontend: the edit form hides payment method and bank for auto entries
+    and explains that only the sender's cash moves.
+- **§17 phase 3 decided: gold entries get correcting entries** (reverse the
+  original, post the corrected one, link them), because editing weights in
+  place would mean rewriting frozen stock snapshots in two tables whose
+  insertion order isn't reliable.
+- ~~**§17 phase 3 backend — gold corrections.**~~ **Done.**
+  - `GoldCorrectionService` re-runs the original's own service with
+    negated money/weight (the reversal), then with the corrected input.
+  - New endpoints `GET /gold-entries/{id}` (prefill) and
+    `POST /gold-entries/{id}/correct`, both heads only.
+  - Migration `2026_11_12_000200_add_correction_links_to_cash_to_gold`
+    (run on Aiven).
+  - `GoldToCashService` / `PurchaseGoldService` take a `reversal` option
+    that skips only their "insufficient balance" checks.
+  - `BaseStockService` collapses doubled minus signs (`'-' . -1` used to
+    crash bcmath).
+  - 5 tests in `GoldCorrectionTest`, one per kind plus rules: corrected
+    balances equal entering the right values directly. The suite is at
+    45/45.
+  - Verified on Aiven (test entry #1 → #5 → #7, reversals #4/#6, balances
+    restored exactly).
+- ~~**Gold correction screens.**~~ **Done.**
+  - New `types/goldEntry.ts`, `lib/goldEntriesApi.ts` and
+    `lib/goldCorrection.ts` (prefill helpers and the shared note).
+  - The four gold API modules gained `correct(goldEntryId, form)`, which
+    reuses their own field builder and posts JSON.
+  - `CashToGoldModal`, `GoldToCashModal`, `PurchaseGoldModal` and
+    `SaleGoldModal` take an optional `correction` prop. They open prefilled,
+    titled "Correct … #N", with item and transfer toggle locked, no receipt
+    upload, and no balance preview (it would leave the original in). Saving
+    calls `correct()`. Purchase keeps a deliberately lower "taken" figure
+    instead of letting it follow the totals.
+  - New `GoldCorrectionHost` loads items and banks and opens the right
+    modal.
+  - `CashTxnDetailModal` shows **Correct gold entry #N** to heads on
+    gold-linked rows, explains when an entry can't be corrected (a reversal,
+    or already corrected), and emits `correct-gold`.
+    `CashTxnHistoryTable` closes the detail modal, opens the host and reloads
+    after saving.
+  - The Sale window's exact payload was verified on Aiven: test entry #2 →
+    #9 → #11 → #13, reversals #8, #10 and #12. #2 had been created by
+    script with ₹6,000 where the window's formula gives ₹5,496, so a final
+    correction restored ₹6,000; the test customer's balances are back.
+- ~~**BACKEND_TODO §17 — numeric wastage corrections.**~~ **Done. That
+  finishes entry editing.** BACKEND_TODO §17 now only lists the loose ends.
+  - `NumericWastageCorrectionService` corrects one Numeric Wastage In or Out
+    line the same way as gold. It re-runs `createNumericWasteIn` /
+    `createNumericWaste` with grams, pieces, wastage weight, purity and
+    amount negated (the reversal), then with the corrected line, validated
+    by the same rules as a new line. The parties and item can't change.
+  - A line is identified by its stock row id, the "ID : N" shown in its cash
+    entry's remarks. New migration
+    `2026_11_12_000300_add_correction_links_to_stock_rows` (run on Aiven)
+    adds `reversal_of_id` / `corrects_id` / `corrected_by_id` to
+    `stock_details` and `stock_in_details`.
+  - The reversal's and the corrected line's cash entries get
+    "- reversal of #N" / "- corrects #N" after their usual remarks.
+  - New endpoints, heads only: `GET /numeric-wastage-entries/{in|out}/{id}`
+    (prefill) and `POST …/correct`. `GET /cash-txn-details/{id}` returns
+    `numeric_wastage: {direction, id}` for these cash entries, and their edit
+    message now points at the correction.
+  - Fixed along the way: the stock services' cash entries (both numeric
+    wastage directions and the Stock screen's cash out) now fill all eight
+    opening/closing cash and RTGS snapshots (new
+    `BaseStockService::cashOnHandSnapshots`). Before, only the opening cash
+    was filled, so the Cash Transactions report had no OB/CB for them.
+    Numeric Wastage Out and the stock cash out now also lock both users'
+    rows.
+  - 4 tests in `NumericWastageCorrectionTest`: in and out with cash,
+    dropping the cash, and rules. Each checks the balances equal entering the
+    right line directly, and that the cash snapshots chain from entry to
+    entry. The suite is at 49/49.
+  - Frontend: new `types/numericWastageEntry.ts`,
+    `lib/numericWastageEntriesApi.ts`, and `lib/numericWastage.ts` (the WValue
+    / Total formulas, now shared by Numeric Wastage In, Out and the
+    correction). New `NumericWastageCorrectionModal`: one line, same fields,
+    item locked, no date, and a cash figure showing the old value when it
+    changes. `CashTxnDetailModal` shows **Correct numeric wastage in/out #N**
+    to heads and emits `correct-numeric-wastage`; `CashTxnHistoryTable` opens
+    the modal and reloads after saving.
+  - Verified on Aiven between head_admin (1) and test user 7. IN #26 → #28
+    (reversal #27) → #30 (reversal #29); OUT #45 → #47 (reversal #46), which
+    cancels the IN. Then the window's exact payload: #30 → #32 (reversal #31),
+    remarks only. Cash entries #99–#108. Users 1 and 7 ended with exactly
+    their starting cash, RTGS, grams, purity and item totals (user 7 now has
+    a zero item-1 row, which the first IN created). The cash snapshots chain
+    across all the new entries.
+- ~~**BACKEND_TODO §27 — raw exception text in `500` responses.**~~
+  **Fixed.**
+  - 71 failure responses in 13 controllers stopped sending
+    `'error' => $e->getMessage()`. That included the `config('app.debug')` /
+    `env('APP_DEBUG')`-gated ones, since APP_DEBUG may be on in a deployment.
+    Every one still has its `message`, which is what the screens show.
+  - 37 of those catch blocks didn't log at all; they now call `report($e)`,
+    so the detail goes to `storage/logs/laravel.log`.
+  - The five `InvalidArgumentException` handlers keep returning their
+    message: it's our own text ("insufficient balance", "already
+    corrected"), not a database error.
+  - Verified on Aiven: a Numeric Wastage In with 2.5 pieces (the integer
+    column bug, BACKEND_TODO §17) now answers `500` with only "Failed to
+    process Numeric Wastage In transaction."; the SQL error is in the log
+    and nothing was written. Suite 49/49.
+  - Still worth checking: Render's `APP_DEBUG` must be `false`. An exception
+    no controller catches is rendered by Laravel itself, which includes the
+    message and stack trace when debug is on.
+- ~~**BACKEND_TODO §24 — Sale Gold "In Cash Converter" couldn't be
+  saved.**~~ **Fixed.**
+  - Migration `2026_11_13_000000_allow_in_cash_converter_entry_type` (run on
+    Aiven) adds `IN_CASH_CONVERTER` to the `entry_type` CHECK on
+    `stock_details` and `stock_in_details`. Postgres gets the constraint
+    rebuilt; SQLite (tests) gets the enum changed. The down migration
+    refuses if such rows exist by then.
+  - `SaleGoldController` and `PurchaseGoldController` had no error handling,
+    so the services' own rules (sources must add up, insufficient cash or
+    bank) came back as a bare `500`. They now return `422` with the reason,
+    like Cash to Gold and Gold to Cash; anything else is logged and returns
+    a generic `500`.
+  - All four gold controllers took `auth()->id() ?? 1`; the fallback to user
+    1 is gone (the routes require a token anyway).
+  - 2 tests in `GoldCorrectionTest`: an In Cash Converter sale saves and
+    corrects (confirmed to fail without the migration), and both rule
+    failures are `422` with their message. Suite 52/52.
+  - Verified on Aiven: test In Cash Converter sale, gold entry #14 (head 1 ←
+    user 7, ₹10, 0.001 g, remarks "TEST §24"), saved with stock row #48
+    (`IN_CASH_CONVERTER`, In). A Purchase beyond head 1's cash returned
+    `422` "Insufficient cash balance. Head has -20015, needs 5000." and
+    wrote nothing.
+- ~~**BACKEND_TODO §23 — stock history's In/Out filter hid gold trading
+  rows.**~~ **Fixed.**
+  - `ReportService::getStockHistory` now special-cases only the four
+    transfer types (Out for the sender, In for the receiver). Every other
+    row matches on its own `stock_type`, so `CashToGold`,
+    `GOLDCASHCONVERSION`, `SALES` and both converters show again, and a new
+    entry type can't drop out.
+  - `StockHistoryFilterTest`: one row per entry type, and In + Out must
+    equal All (confirmed to fail on the old code).
+  - Verified on Aiven for head 1: All 47 rows / 496.001 g = In 3 / 110.001 g
+    \+ Out 44 / 386 g, every row under exactly one filter (on 2026-11-06, 2
+    rows were under neither).
+  - Still true, and not part of §23: a transfer between two of the head's
+    employees shows under All but under neither In nor Out, because it's
+    neither the head's send nor receive.
+- ~~**BACKEND_TODO §16 (code part) — a failed log write rolled back the
+  entry it was logging.**~~ **Fixed.**
+  - `SystemLogService::log()` writes the log row in its own nested
+    `DB::transaction()`. Inside the caller's business transaction that's a
+    `SAVEPOINT`, so a failed insert rolls back only the log row.
+  - Checked on Aiven, inside a transaction that was then rolled back (nothing
+    kept): a log write with a 60-character action (the column takes 50).
+    Before the fix, the next statement failed with `SQLSTATE[25P02] current
+    transaction is aborted`. After it, the transaction carried on normally.
+  - `SystemLogServiceTest`: with the log table gone, the writes around a
+    failed log still commit, and the log ran in a nested transaction. SQLite
+    can't show the abort itself. Suite 53/53.
+  - §16 stays open for the two non-code steps: check the other databases,
+    and ask operators about entries made between 2026-10-22 and 2026-11-04.
+
+### PR #53 pass — 2026-11-06
+
+PR #53 (`982afd78`, merging `43e620eb`) is labelled as documentation, but it
+changed three backend files. All three were read in full:
+
+- **`UserDetailController::update()` now syncs `item_mappings`** when the
+  key is present. It deletes rows whose ids weren't sent, updates rows that
+  carry an id, and creates the rest. This closes the item part of
+  BACKEND_TODO §10. Heads and cash heads are still ignored on update. The
+  new code has its own problems, now listed in §10: the update-in-place
+  branch writes an `updated_at` column the table doesn't have, so it would
+  fail every save. Because we send no ids, every save deletes and re-creates
+  the rows, which wipes the stone/beads cost totals and `last_txn_date`.
+  The grams/purity running totals are overwritten from the form. There's no
+  validation, and an empty list can't go in a multipart request.
+- **`ReportService::getStockHistory`'s In/Out filter** now places the four
+  transfer types (EMPTOHEAD, EMPTOEMP, HEADTOHEAD, ANOTHERHEADTOEMP) by who
+  sent and who received, which fixes the old Out filter. But its allowed
+  list of entry types uses names the services don't save. Filtering In or
+  Out now hides Cash to Gold, Gold to Cash, Purchase Gold, Sale Gold and
+  cash-converter entries (BACKEND_TODO §23). No frontend change is needed.
+- **`UserDetail`** gained an unused `HasMany` import. No effect.
+
+**Also found (older, not from PR #53):** `stock_details.entry_type` is an
+enum without `IN_CASH_CONVERTER`, so the database rejects every Sale Gold
+"In Cash Converter" save with a `500`. Confirmed read-only on Aiven: the
+CHECK constraint lists nine values, and there are no such rows
+(BACKEND_TODO §24).
+
+**Frontend done the same day:** see [§1 Done](#done). The Users edit-form
+banner was reworded, and removing a user's last item now saves.
+
+**Verified with real saves the same day.** The user okayed test writes on
+Aiven, since the system isn't live yet. All of it went through the local
+backend as `head_admin`:
+
+- **User edits (BACKEND_TODO §10):** all five cases behaved as predicted,
+  with the exact errors recorded in §10. The frontend's two behaviours both
+  work: no-id saves return `200`, and `item_mappings: []` removes every
+  row.
+- **Saves persist with logs (§16):** two Sale Gold entries kept their cash,
+  stock and log rows. That closes §16's "confirm saves" step.
+- **Stock history filter (§23):** the two test sales show under All and
+  under neither In nor Out.
+- **In Cash Converter (§24):** `500` check-constraint violation, nothing
+  kept.
+- **New (§22):** Sale Gold, Purchase Gold, item change and GMS out log a
+  table name that doesn't exist and a `null` record id.
+
+**Test data left on Aiven** (all tagged "Claude Test" / "CLAUDE TEST"):
+
+- `user_details` 7 (`Claude Test …`, CUSTOMER), with 1 item mapping
+  (item 3) and a head mapping to user 1.
+- `cash_to_gold` 1–2 and stock rows 31–32 (1 g each, from head 1 to
+  user 7).
+- `cash_txn_details` 82–83 (₹6,000 each).
+- `system_logs` 1–2.
+- Head 1's and user 7's gold and cash balances moved by those two sales.
 
 ### PR #52 pass — 2026-11-04
 
@@ -47,9 +427,13 @@ four backend files. All four were read in full:
 Nothing else in the backend differs from PR #51, so every other open item
 is unchanged. `ReportController` line numbers moved by 2.
 
-**Environment:** on 2026-11-04 the Aiven host in the local `.env`
-(`golderp-goldserp.f.aivencloud.com`) no longer exists in DNS. The local
-backend has no database, and BACKEND_TODO §16 couldn't be re-checked.
+**Environment:** the Aiven database in the local `.env` was down for part of
+2026-11-04 (its host name didn't resolve), then came back. Once it was up,
+the `system_logs` migration was still Pending and no cash, stock or gold row
+was dated after 2026-10-22. **The migration was run on Aiven the same day**
+(only that one was pending); the table and its four indexes are in place.
+Entries made against Aiven between 2026-10-22 and 2026-11-04 were probably
+lost and may need re-entering (BACKEND_TODO §16).
 
 **Gap in this file:** it wasn't updated for PR #51 (2026-10-27) or for the
 frontend work since 2026-10-15. The backend side of that is in
@@ -633,6 +1017,8 @@ Practical consequences for us:
 | Stale "Cash Converter entries don't appear in history" warning removed — backend `0a94a6cc` added both types to the history filters | `views/CashManagementView.vue`, `types/cashTxnHistory.ts` |
 | Amount in words on the cash thermal receipt ("Rupees One Lakh Fifty Thousand Only"), Indian numbering, display only | `lib/amountInWords.ts`, `components/cash-txn/ThermalPrintModal.vue` |
 | Daywise Grand report — per-day stock grams/purity in and out for me, a user, or a retailer | `views/DaywiseGrandView.vue`, `types/daywiseGrand.ts`, `lib/reportApi.ts` |
+| System Logs — a `403` shows "Only heads can view system logs" instead of the page; stale permission sentence removed | `views/SystemLogsView.vue` |
+| Users edit form (PR #53): the banner now says items save and heads/cash heads don't, and warns that grams/purity totals are written back as shown. Removing the last item now saves, because an empty `item_mappings` is sent on JSON saves. Row ids are still left out on purpose (BACKEND_TODO §10) | `views/UsersView.vue`, `lib/userDetailsApi.ts` |
 
 **Every endpoint shipped in PRs #29–#32 now has a frontend**, PR #37's two
 new endpoints have one as of 2026-09-11, everything PRs #38–#42 exposed has
@@ -707,6 +1093,39 @@ amber banners rather than hidden:
   through `UserDetailController` and sets real credentials.
 
 ### Pending
+
+#### New work from step 2 (2026-11-12)
+
+- [ ] **Hide the buttons users can't use.** The backend answers `403` to:
+      stock and cash entries from anyone who isn't a head and doesn't have
+      "Can act as head"; and to changes on the admin screens (Users, Items,
+      Roles, Banks, Cash categories, Settings, mappings) from anyone but a
+      head. The screens still show those buttons. `useAuthStore().isHead`
+      and `.canActAsHead` are ready for it.
+
+- [ ] **Stop sending `X-User-ID`.** The backend ignores it since 2026-11-12.
+      `lib/stockApi.ts`, `lib/reportApi.ts`, `lib/cashTxnDetailsApi.ts` and
+      `lib/cashAutoEntryApi.ts` still add it, and their comments say the
+      backend reads it. Drop the header, the `actingUserId` parameters that
+      only feed it, and the comments.
+
+#### New work from the PR #53 pass (2026-11-06)
+
+- [x] ~~**Users edit form: reword the mappings banner, and let the last item
+      be removed.**~~ **Done 2026-11-06.** (`views/UsersView.vue`,
+      `lib/userDetailsApi.ts`)
+
+- [ ] **Send item-mapping row ids once BACKEND_TODO §10 point 1 is fixed.**
+      Keep each row's `id` when the edit form loads (`openEdit`), and send it
+      in `toPayload()`. Rows will then update in place instead of being
+      deleted and re-created. Don't do it before the `updated_at` fix, or
+      every user save will fail.
+
+- [ ] **Decide whether grams/purity totals should be read-only on the edit
+      form.** They're live running balances, and since PR #53 saving writes
+      them back. Making them read-only on edit would stop accidental edits,
+      but not the stale-value problem, which needs the backend change
+      suggested in §10 point 3. For now the banner warns operators.
 
 #### New work from the PR #52 pass (2026-11-04)
 

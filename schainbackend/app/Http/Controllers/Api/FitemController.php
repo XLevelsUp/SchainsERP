@@ -19,8 +19,7 @@ class FitemController extends Controller
     public function store(FitemRequest $request): JsonResponse
     {
         try {
-            // Support X-User-ID or Auth Header
-            $actingUserId = $request->user()->user_id ?? (int)$request->header('X-User-ID', 1);
+            $actingUserId = (int) $request->user()->user_id;
             
             $result = $this->fitemService->processFitems($request->validated(), $actingUserId);
 
@@ -30,10 +29,10 @@ class FitemController extends Controller
                 'data' => $result
             ], 201);
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process F-Items',
-                'error' => $e->getMessage()
             ], 500);
         }
     }

@@ -1,9 +1,6 @@
 ---
-
 paths:
-
-* "frontend/**/*"
-
+  - "frontend/**/*"
 ---
 
 # Jewelry ERP Frontend Rules
@@ -21,7 +18,7 @@ The frontend stack is:
 * Tailwind CSS 4
 * vue-router
 
-The backend is maintained independently in `schainbackend/`.
+Since 2026-11-06 the same team owns the backend (Laravel, `schainbackend/`). Its rules are in `jewelry-erp-backend.md`.
 
 ---
 
@@ -98,18 +95,18 @@ Frequent ERP operators should be able to complete transactions with the same or 
 
 ---
 
-# Backend Boundary
+# Backend Changes (Full-Stack Ownership)
 
-Do not modify `schainbackend/` unless explicitly requested.
+Since 2026-11-06 there is no separate backend team. Backend changes are allowed.
 
-Frontend and backend are maintained by separate teams.
+When a backend problem is discovered:
 
-If an apparent backend problem is discovered:
+1. Verify it against the backend code, and against PostgreSQL if data is involved.
+2. Fix it at the source in `schainbackend/`, following `jewelry-erp-backend.md`. Don't add a frontend workaround that bends the contract.
+3. If the fix changes the API contract (route, HTTP method, payload, response shape, status code), update the frontend types and API modules in the same piece of work, and keep both sides building.
+4. Use an on-screen warning banner only when a backend fix is deliberately deferred, and log the deferred item in `BACKEND_TODO.md`.
 
-1. Verify that it is actually a backend/API mismatch.
-2. Do not invent a frontend workaround that changes the contract.
-3. Report the issue clearly.
-4. Continue frontend work where possible.
+The "Preserve Existing Flow" rules above still apply. Changing the contract or the business behavior is a deliberate decision, never a side effect of UI work.
 
 ---
 

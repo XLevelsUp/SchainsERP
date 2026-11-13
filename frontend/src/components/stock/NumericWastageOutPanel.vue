@@ -8,6 +8,7 @@ import DirectionTag from '@/components/ui/DirectionTag.vue'
 import { stockApi } from '@/lib/stockApi'
 import { ApiError } from '@/lib/api'
 import { nowDateTimeInputValue, toBackendDateTime } from '@/lib/date'
+import { numericWastagePurity, numericWastageWeight } from '@/lib/numericWastage'
 import { useToastStore } from '@/stores/toast'
 import type { Item, NumericWastageOutItemInput } from '@/types'
 
@@ -77,12 +78,9 @@ function onItemSelect(row: NumericWastageOutItemInput, itemId: number | null) {
   if (item) row.touch = item.default_touch
 }
 
-function wastageTotalFor(row: NumericWastageOutItemInput): number {
-  return (row.no_of_pcs ?? 0) * (row.waste_total ?? 0)
-}
-function purityFor(row: NumericWastageOutItemInput): number {
-  return (((row.grams ?? 0) + wastageTotalFor(row)) * (row.touch ?? 0)) / 100
-}
+// Shared with Numeric Wastage In and the correction modal (lib/numericWastage).
+const wastageTotalFor = numericWastageWeight
+const purityFor = numericWastagePurity
 
 const totals = computed(() => {
   let grams = 0

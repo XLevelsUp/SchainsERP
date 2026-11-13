@@ -4,10 +4,17 @@ import { ChevronLeft, ChevronRight, Eye, Printer } from 'lucide-vue-next'
 import DataTable from '@/components/ui/DataTable.vue'
 import ThermalPrintModal from './ThermalPrintModal.vue'
 import CashTxnDetailModal from './CashTxnDetailModal.vue'
+import GoldCorrectionHost from './GoldCorrectionHost.vue'
 import { cashTxnDetailsApi } from '@/lib/cashTxnDetailsApi'
 import { ApiError } from '@/lib/api'
 import { formatDateOnly } from '@/lib/date'
-import type { CashTxnHistoryRow, CashTxnHistoryType } from '@/types'
+import NumericWastageCorrectionModal from '@/components/stock/NumericWastageCorrectionModal.vue'
+import type {
+  CashTxnHistoryRow,
+  CashTxnHistoryType,
+  GoldCorrectionRequest,
+  NumericWastageCorrectionRequest,
+} from '@/types'
 import type { DataTableColumn } from '@/types/table'
 
 /*
@@ -55,6 +62,33 @@ const columns: DataTableColumn<CashTxnHistoryRow>[] = [
 
 const printTxnId = ref<number | null>(null)
 const detailTxnId = ref<number | null>(null)
+// Set while a gold entry is being corrected from a row's detail modal
+// (BACKEND_TODO §17 phase 3); the detail modal closes first, so the two
+// modals never stack.
+const goldCorrection = ref<GoldCorrectionRequest | null>(null)
+
+function startGoldCorrection(request: GoldCorrectionRequest) {
+  detailTxnId.value = null
+  goldCorrection.value = request
+}
+
+function finishGoldCorrection() {
+  goldCorrection.value = null
+  load()
+}
+
+// Same for a numeric wastage line's cash entry (§17).
+const numericWastageCorrection = ref<NumericWastageCorrectionRequest | null>(null)
+
+function startNumericWastageCorrection(request: NumericWastageCorrectionRequest) {
+  detailTxnId.value = null
+  numericWastageCorrection.value = request
+}
+
+function finishNumericWastageCorrection() {
+  numericWastageCorrection.value = null
+  load()
+}
 
 // Coloured by cash direction, the same way Cash Management's quick-action
 // buttons are: oxblood for types where cash leaves the head (the Pay
@@ -210,6 +244,27 @@ function nextPage() {
         v-if="detailTxnId !== null"
         :txn-id="detailTxnId"
         @close="detailTxnId = null"
+        @updated="load()"
+        @correct-gold="startGoldCorrection"
+        @correct-numeric-wastage="startNumericWastageCorrection"
+      />
+
+      <GoldCorrectionHost
+        v-if="goldCorrection"
+        :gold-entry-id="goldCorrection.goldEntryId"
+        :kind="goldCorrection.kind"
+        :input="goldCorrection.input"
+        :head-name="goldCorrection.headName"
+        :customer-name="goldCorrection.customerName"
+        @close="goldCorrection = null"
+        @saved="finishGoldCorrection"
+      />
+
+      <NumericWastageCorrectionModal
+        v-if="numericWastageCorrection"
+        :request="numericWastageCorrection"
+        @close="numericWastageCorrection = null"
+        @saved="finishNumericWastageCorrection"
       />
 
       <div v-if="total > 0" class="mt-2 flex items-center justify-between text-xs text-slate-500">

@@ -800,34 +800,27 @@ class ReportService
         | where head is sender regardless of stock_type.
         */
 
-        if ($type) {
+        // BACKEND_TODO §23: only the four transfer types are special-cased.
+        // Every other row matches on its own stock_type. The old version
+        // listed allowed entry_type names instead, and several didn't match
+        // what the services save (Postgres compares exactly: 'CashToGold',
+        // 'GOLDCASHCONVERSION', 'SALES', 'OUT_CASH_CONVERTER',
+        // 'IN_CASH_CONVERTER'), so gold trading rows vanished under In and Out.
+        if ($type === 'IN' || $type === 'OUT') {
             $filterUserId = $employeeId ?: $headId;
+            $transferTypes = ['EMPTOHEAD', 'EMPTOEMP', 'HEADTOHEAD', 'ANOTHERHEADTOEMP'];
+            // A transfer is OUT for its sender and IN for its receiver.
+            $partyColumn = $type === 'OUT' ? 'given_by' : 'given_to';
 
-            if ($type === 'OUT') {
-                $query->where(function($q) use ($filterUserId) {
-                    $q->where(function($sub) use ($filterUserId) {
-                        // Standard entries: stock_type is directly OUT
-                        $sub->whereIn('entry_type', ['NORMAL', 'STOCKOUT', 'ITEMCHANGE', 'ITEMCONVERSION', 'NUMERICWASTAGE', 'CASHTOGOLD', 'GOLDTOCASH', 'PURCHASEGOLD', 'SALEGOLD', 'FITEMS', 'GMSOUT', 'METALOUT'])
-                             ->where('stock_type', 'OUT');
-                    })->orWhere(function($sub) use ($filterUserId) {
-                        // Auto-entry types: OUT from this user's perspective = they are the sender
-                        $sub->whereIn('entry_type', ['EMPTOHEAD', 'EMPTOEMP', 'HEADTOHEAD', 'ANOTHERHEADTOEMP'])
-                             ->where('given_by', $filterUserId);
-                    });
+            $query->where(function ($q) use ($type, $filterUserId, $transferTypes, $partyColumn) {
+                $q->where(function ($sub) use ($type, $transferTypes) {
+                    $sub->where(function ($e) use ($transferTypes) {
+                        $e->whereNotIn('entry_type', $transferTypes)->orWhereNull('entry_type');
+                    })->where('stock_type', $type);
+                })->orWhere(function ($sub) use ($filterUserId, $transferTypes, $partyColumn) {
+                    $sub->whereIn('entry_type', $transferTypes)->where($partyColumn, $filterUserId);
                 });
-            } elseif ($type === 'IN') {
-                $query->where(function($q) use ($filterUserId) {
-                    $q->where(function($sub) use ($filterUserId) {
-                        // Standard entries: stock_type is directly IN
-                        $sub->whereIn('entry_type', ['NORMAL', 'STOCKIN', 'ITEMCHANGE', 'ITEMCONVERSION', 'NUMERICWASTAGE', 'CASHTOGOLD', 'GOLDTOCASH', 'PURCHASEGOLD', 'SALEGOLD', 'FITEMS', 'GMSIN', 'METALIN'])
-                             ->where('stock_type', 'IN');
-                    })->orWhere(function($sub) use ($filterUserId) {
-                        // Auto-entry types: IN from this user's perspective = they are the receiver
-                        $sub->whereIn('entry_type', ['EMPTOHEAD', 'EMPTOEMP', 'HEADTOHEAD', 'ANOTHERHEADTOEMP'])
-                             ->where('given_to', $filterUserId);
-                    });
-                });
-            }
+            });
         }
         
         if ($fromDate) {

@@ -4,9 +4,10 @@ import type { UserFeatureFlagKey } from '@/types'
 |--------------------------------------------------------------------------
 | Per-user feature flags — the catalogue
 |--------------------------------------------------------------------------
-| user_details carries 44 boolean `is_*` columns. UserDetailController's
+| user_details carries 45 boolean `is_*` columns (is_act_as_head_enabled added
+| 2026-11-12). UserDetailController's
 | store() and update() validate every one of them as `sometimes|boolean`,
-| so all 44 are settable — that changed in PR #43–#45, before which they
+| so all of them are settable — that changed in PR #43–#45, before which they
 | were readable but not writable.
 |
 | Four are deliberately NOT listed here:
@@ -18,7 +19,7 @@ import type { UserFeatureFlagKey } from '@/types'
 |                                        invite someone to mark an account
 |                                        verified by hand.
 |
-| That leaves the 40 below. They are grouped because a flat wall of 40
+| That leaves the 41 below. They are grouped because a flat wall of 40
 | checkboxes is unusable, and labelled in business terms because the column
 | names are not self-explanatory ("is_need_pink_box_shown").
 |
@@ -40,6 +41,12 @@ export interface UserFeatureFlagGroup {
 }
 
 export const USER_FEATURE_FLAG_GROUPS: UserFeatureFlagGroup[] = [
+  {
+    title: 'Access',
+    description:
+      'Lets a non-head enter stock and cash values for any head. They still never see balances. Heads have this already.',
+    flags: [{ key: 'is_act_as_head_enabled', label: 'Can act as head' }],
+  },
   {
     title: 'Calculations',
     description: 'Which calculation engines run for this user.',

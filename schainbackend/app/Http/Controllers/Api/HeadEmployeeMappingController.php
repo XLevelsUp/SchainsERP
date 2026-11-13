@@ -96,11 +96,11 @@ class HeadEmployeeMappingController extends Controller
             ], 201);
             
         } catch (\Exception $e) {
+            report($e);
             DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create mappings',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -159,11 +159,11 @@ class HeadEmployeeMappingController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
+            report($e);
             DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update mappings',
-                'error' => $e->getMessage()
             ], 500);
         }
     }

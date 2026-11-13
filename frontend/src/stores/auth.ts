@@ -2,7 +2,20 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { authApi, type LoginPayload } from '@/lib/authApi'
 import { clearSession, loadSession, saveSession } from '@/lib/authSession'
-import type { AuthSession, AuthUser } from '@/types'
+import type { AuthSession, AuthUser, AuthUserPayload } from '@/types'
+
+// Keeps only what the app needs from the login / me payload, flattening the
+// role relation to its name.
+function toAuthUser(raw: AuthUserPayload): AuthUser {
+  return {
+    user_id: raw.user_id,
+    name: raw.name,
+    user_name: raw.user_name,
+    role_id: raw.role_id,
+    role_name: raw.role?.role ?? null,
+    is_act_as_head_enabled: Boolean(raw.is_act_as_head_enabled),
+  }
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -27,6 +40,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => token.value !== null)
 
+  // Mirrors the backend's access rules (ScopesRecordAccess, EnsureCanActAsHead):
+  // heads see and do everything; the "can act as head" permission lets a user
+  // enter values for any head but not see balances. Display only: the API
+  // enforces all of it.
+  const isHead = computed(() => (user.value?.role_name ?? '').toUpperCase() === 'HEAD')
+  const canActAsHead = computed(() => isHead.value || user.value?.is_act_as_head_enabled === true)
+
   // Local sign-out: forgets the session without calling the backend. Used by
   // the expired-token handler, where the token is already dead server-side.
   function clear() {
@@ -41,10 +61,11 @@ export const useAuthStore = defineStore('auth', () => {
     clear()
 
     const result = await authApi.login(payload)
+    const next = toAuthUser(result.user)
 
-    user.value = result.user
+    user.value = next
     token.value = result.token
-    saveSession({ user: result.user, token: result.token })
+    saveSession({ user: next, token: result.token })
   }
 
   async function logout() {
@@ -88,7 +109,7 @@ export const useAuthStore = defineStore('auth', () => {
         return
       }
 
-      const next = { user_id: me.user_id, name: me.name, user_name: me.user_name, role_id: me.role_id }
+      const next = toAuthUser(me)
       user.value = next
       saveSession({ user: next, token: token.value })
     } catch {
@@ -109,6 +130,8 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     token,
     isAuthenticated,
+    isHead,
+    canActAsHead,
     isLoggingOut,
     login,
     logout,

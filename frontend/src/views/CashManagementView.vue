@@ -160,6 +160,14 @@ const selectedUser = computed(() => filteredUsers.value.find((u) => u.id === use
 const headBalance = reactive({ loading: false, cash: 0, rtgs: 0 })
 const userBalance = reactive({ loading: false, cash: 0, rtgs: 0 })
 
+// Only heads see other users' balances; for anyone else the API leaves the
+// fields out, so they arrive as undefined.
+function balanceText(value: number | null | undefined): string {
+  return value === null || value === undefined || !Number.isFinite(value)
+    ? '—'
+    : value.toLocaleString()
+}
+
 async function refreshHeadBalance() {
   if (headId.value === null) return
   headBalance.loading = true
@@ -272,13 +280,13 @@ async function handleSaved() {
             <div class="flex items-baseline gap-1.5">
               <dt class="text-xs text-slate-500">Cash</dt>
               <dd class="font-figure text-sm font-medium tabular-nums text-ink-900">
-                {{ headBalance.cash.toLocaleString() }}
+                {{ balanceText(headBalance.cash) }}
               </dd>
             </div>
             <div class="flex items-baseline gap-1.5">
               <dt class="text-xs text-slate-500">RTGS</dt>
               <dd class="font-figure text-sm font-medium tabular-nums text-ink-900">
-                {{ headBalance.rtgs.toLocaleString() }}
+                {{ balanceText(headBalance.rtgs) }}
               </dd>
             </div>
           </dl>
@@ -315,13 +323,13 @@ async function handleSaved() {
             <div class="flex items-baseline gap-1.5">
               <dt class="text-xs text-slate-500">Cash</dt>
               <dd class="font-figure text-sm font-medium tabular-nums text-ink-900">
-                {{ userBalance.cash.toLocaleString() }}
+                {{ balanceText(userBalance.cash) }}
               </dd>
             </div>
             <div class="flex items-baseline gap-1.5">
               <dt class="text-xs text-slate-500">RTGS</dt>
               <dd class="font-figure text-sm font-medium tabular-nums text-ink-900">
-                {{ userBalance.rtgs.toLocaleString() }}
+                {{ balanceText(userBalance.rtgs) }}
               </dd>
             </div>
           </dl>

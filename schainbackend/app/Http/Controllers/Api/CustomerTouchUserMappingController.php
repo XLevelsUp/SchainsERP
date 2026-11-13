@@ -33,10 +33,10 @@ class CustomerTouchUserMappingController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve mappings',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -75,10 +75,10 @@ class CustomerTouchUserMappingController extends Controller
                 'message' => 'Mapping not found'
             ], 404);
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update mapping',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -104,10 +104,10 @@ class CustomerTouchUserMappingController extends Controller
                 'data' => $mapping
             ], 201);
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create mapping',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -128,10 +128,10 @@ class CustomerTouchUserMappingController extends Controller
                 'message' => 'Mapping not found'
             ], 404);
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete mapping',
-                'error' => $e->getMessage()
             ], 500);
         }
     }

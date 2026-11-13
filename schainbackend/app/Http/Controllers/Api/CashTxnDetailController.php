@@ -19,9 +19,13 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Requests\StoreCashTxnDetailRequest;
 use App\Services\CashTxnDetailService;
+use App\Services\CashTxnEditService;
+use App\Http\Controllers\Concerns\ScopesRecordAccess;
 
 class CashTxnDetailController extends Controller
 {
+    use ScopesRecordAccess;
+
     /**
      * ============================================================
      * GET CASH OUT HISTORY
@@ -29,8 +33,13 @@ class CashTxnDetailController extends Controller
      */
     public function getOutHistory(Request $request): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersRecords($request, ['head_id'])) {
+            return $denied;
+        }
+
         try {
-            $headId = $request->query('head_id');
+            // Without head_id this used to return every user's entries.
+            $headId = $request->query('head_id') ?: $this->actingUserId($request);
             $cashUserId = $request->query('cash_user_id');
             $fromDate = $request->query('from_date');
             $toDate = $request->query('to_date');
@@ -87,7 +96,6 @@ class CashTxnDetailController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve OUT history',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -99,8 +107,13 @@ class CashTxnDetailController extends Controller
      */
     public function getInHistory(Request $request): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersRecords($request, ['head_id'])) {
+            return $denied;
+        }
+
         try {
-            $headId = $request->query('head_id');
+            // Without head_id this used to return every user's entries.
+            $headId = $request->query('head_id') ?: $this->actingUserId($request);
             $cashUserId = $request->query('cash_user_id');
             $fromDate = $request->query('from_date');
             $toDate = $request->query('to_date');
@@ -157,7 +170,6 @@ class CashTxnDetailController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve IN history',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -169,8 +181,13 @@ class CashTxnDetailController extends Controller
      */
     public function getPrintReport(Request $request): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersRecords($request, ['head_id'])) {
+            return $denied;
+        }
+
         try {
-            $headId = $request->query('head_id');
+            // Without head_id the bulk branch used to return every user's entries.
+            $headId = $request->query('head_id') ?: $this->actingUserId($request);
             $cashUserId = $request->query('cash_user_id');
             $fromDate = $request->query('from_date');
             $toDate = $request->query('to_date');
@@ -180,9 +197,14 @@ class CashTxnDetailController extends Controller
             // Handle Single Transaction Thermal Print
             if ($txnId) {
                 $transaction = CashTxnDetail::with(['givenByUser', 'givenToUser'])->find($txnId);
-                
+
                 if (!$transaction) {
                     return response()->json(['success' => false, 'message' => 'Transaction not found'], 404);
+                }
+
+                // A non-head may only print an entry they are a party to.
+                if ($denied = $this->forbidUnlessParty($request, $transaction->sender_id, $transaction->recipient_id)) {
+                    return $denied;
                 }
 
                 $heading = $transaction->type === 'INCOME' ? 'CASH IN' : ($transaction->type === 'EXPENSE' ? 'CASH OUT' : $transaction->type);
@@ -245,7 +267,6 @@ class CashTxnDetailController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve print report',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -261,16 +282,27 @@ class CashTxnDetailController extends Controller
      * GET ALL CASH TRANSACTIONS
      * ============================================================
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         try {
 
-            $transactions = CashTxnDetail::with([
+            $query = CashTxnDetail::with([
                 'images',
                 'bank',
                 'givenByUser',
                 'givenToUser'
-            ])
+            ]);
+
+            // Heads and users who can act as head see every entry (balances are hidden
+            // from the latter by the model); anyone else only entries they are a party to.
+            if (!$this->actingUserCanActAsHead($request)) {
+                $self = $this->actingUserId($request);
+                $query->where(function ($q) use ($self) {
+                    $q->where('sender_id', $self)->orWhere('recipient_id', $self);
+                });
+            }
+
+            $transactions = $query
                 ->orderByDesc('txn_id')
                 ->get();
 
@@ -299,11 +331,11 @@ class CashTxnDetailController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve cash transactions',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -810,13 +842,12 @@ class CashTxnDetailController extends Controller
             ], 201);
 
         } catch (\Throwable $e) {
+            report($e);
 
             return response()->json([
                 'success' => false,
                 'message' =>
                     'Failed to create cash transaction',
-                'error' =>
-                    $e->getMessage()
             ], 500);
         }
     }
@@ -827,7 +858,7 @@ class CashTxnDetailController extends Controller
      * GET SINGLE TRANSACTION
      * ============================================================
      */
-    public function show($id): JsonResponse
+    public function show(Request $request, $id): JsonResponse
     {
         try {
 
@@ -849,6 +880,24 @@ class CashTxnDetailController extends Controller
                 ], 404);
             }
 
+            // A non-head may only open an entry they are a party to.
+            if ($denied = $this->forbidUnlessParty($request, $transaction->sender_id, $transaction->recipient_id)) {
+                return $denied;
+            }
+
+            // Why a head can't edit this entry yet (null when they can), so the
+            // screen can offer or explain the Edit action (BACKEND_TODO §17).
+            $transaction->setAttribute(
+                'edit_blocked_reason',
+                CashTxnEditService::notEditableReason($transaction)
+            );
+            // The numeric wastage line this entry belongs to, as
+            // {direction, id} (null otherwise), so a head can correct it there.
+            $transaction->setAttribute(
+                'numeric_wastage',
+                \App\Services\NumericWastageCorrectionService::forCashTxn($transaction)
+            );
+
             $this->addImageUrls($transaction);
 
             return response()->json([
@@ -859,13 +908,12 @@ class CashTxnDetailController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
 
             return response()->json([
                 'success' => false,
                 'message' =>
                     'Failed to retrieve cash transaction',
-                'error' =>
-                    $e->getMessage()
             ], 500);
         }
     }
@@ -1394,13 +1442,12 @@ class CashTxnDetailController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
 
             return response()->json([
                 'success' => false,
                 'message' =>
                     'Failed to update cash transaction',
-                'error' =>
-                    $e->getMessage()
             ], 500);
         }
     }
@@ -1463,6 +1510,11 @@ class CashTxnDetailController extends Controller
                     'message' =>
                         'Cash transaction not found'
                 ], 404);
+            }
+
+            // A non-head may only attach images to an entry they are a party to.
+            if ($denied = $this->forbidUnlessParty($request, $transaction->sender_id, $transaction->recipient_id)) {
+                return $denied;
             }
 
 
@@ -1537,13 +1589,12 @@ class CashTxnDetailController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
 
             return response()->json([
                 'success' => false,
                 'message' =>
                     'Failed to add images',
-                'error' =>
-                    $e->getMessage()
             ], 500);
         }
     }
@@ -1685,13 +1736,12 @@ class CashTxnDetailController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
 
             return response()->json([
                 'success' => false,
                 'message' =>
                     'Failed to delete cash transaction',
-                'error' =>
-                    $e->getMessage()
             ], 500);
         }
     }
@@ -1706,6 +1756,7 @@ class CashTxnDetailController extends Controller
      * /api/v1/cash-txn-images/{imageId}
      */
     public function deleteImage(
+        Request $request,
         $imageId
     ): JsonResponse {
 
@@ -1729,6 +1780,11 @@ class CashTxnDetailController extends Controller
                     'txn_id',
                     $image->txn_id
                 )->first();
+
+            // A non-head may only remove images from an entry they are a party to.
+            if ($denied = $this->forbidUnlessParty($request, $transaction?->sender_id, $transaction?->recipient_id)) {
+                return $denied;
+            }
 
 
             /*
@@ -1796,13 +1852,12 @@ class CashTxnDetailController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
 
             return response()->json([
                 'success' => false,
                 'message' =>
                     'Failed to delete image',
-                'error' =>
-                    $e->getMessage()
             ], 500);
         }
     }
@@ -2397,12 +2452,60 @@ class CashTxnDetailController extends Controller
     }
 
     /**
+     * Edit a Cash In / Cash Out / Cash Auto Entry entry — PUT /cash-txn-details/{id}
+     * (heads only, BACKEND_TODO §17). Corrects both parties' balances, the
+     * bank and every later entry's frozen snapshots; see CashTxnEditService.
+     */
+    public function editEntry(Request $request, $id, CashTxnEditService $editService): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'amount' => ['sometimes', 'numeric', 'min:0.01', 'regex:/^\d+(\.\d{1,2})?$/'],
+            'payment_method' => 'sometimes|string|in:CASH_ON_HAND,BANK',
+            'bank_account_id' => 'nullable|integer|exists:bank_details,bank_id',
+            'category_id' => 'nullable|integer|exists:cash_categories,category_id',
+            'remarks' => 'nullable|string|max:5000',
+            'created_at' => 'sometimes|date',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $transaction = $editService->edit((int) $id, $validator->validated(), $this->actingUserId($request));
+            $this->addImageUrls($transaction);
+            $transaction->setAttribute('edit_blocked_reason', null);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cash transaction updated successfully',
+                'data' => $transaction,
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'message' => 'Cash transaction not found'], 404);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            Log::error('CashTxnDetailController::editEntry failed', ['txn_id' => $id, 'error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update the cash transaction.',
+            ], 500);
+        }
+    }
+
+    /**
      * Post Income Cash/Bank Transaction (IN)
      */
     public function postIncome(StoreCashTxnDetailRequest $request): JsonResponse
     {
         try {
-            $addedBy = $request->user()->user_id ?? (int)$request->header('X-User-ID', 1);
+            $addedBy = $this->actingUserId($request);
             $txn = $this->service->storeIncome($request->validated(), $addedBy);
 
             return response()->json([
@@ -2415,7 +2518,6 @@ class CashTxnDetailController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to record income transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -2426,7 +2528,7 @@ class CashTxnDetailController extends Controller
     public function postExpense(StoreCashTxnDetailRequest $request): JsonResponse
     {
         try {
-            $addedBy = $request->user()->user_id ?? (int)$request->header('X-User-ID', 1);
+            $addedBy = $this->actingUserId($request);
             $txn = $this->service->storeExpense($request->validated(), $addedBy);
 
             return response()->json([
@@ -2439,7 +2541,6 @@ class CashTxnDetailController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to record expense transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -2462,10 +2563,10 @@ class CashTxnDetailController extends Controller
                 'data' => $transactions
             ], 201);
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create cash auto entry transactions',
-                'error' => $e->getMessage()
             ], 500);
         }
     }

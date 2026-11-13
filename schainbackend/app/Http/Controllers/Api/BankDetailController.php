@@ -28,10 +28,10 @@ class BankDetailController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve banks',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -72,10 +72,10 @@ class BankDetailController extends Controller
             ], 201);
 
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create bank',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -105,10 +105,10 @@ class BankDetailController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve bank',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -156,10 +156,10 @@ class BankDetailController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update bank',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -190,10 +190,10 @@ class BankDetailController extends Controller
             ], 200);
 
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete bank',
-                'error' => $e->getMessage()
             ], 500);
         }
     }

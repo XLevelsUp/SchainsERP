@@ -27,7 +27,7 @@ class CashToGoldService extends BaseStockService
      *  6. stock_details                 — stock IN movement + user grams update
      *  7. cash_to_gold (update)         — back-fill stock_id
      */
-    public function store(array $data, int $addedBy): CashToGold
+    public function store(array $data, int $addedBy, array $options = []): CashToGold
     {
         return DB::transaction(function () use ($data, $addedBy) {
 

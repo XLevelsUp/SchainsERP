@@ -8,6 +8,7 @@ import BaseSelect from '@/components/ui/BaseSelect.vue'
 import { stockApi } from '@/lib/stockApi'
 import { ApiError } from '@/lib/api'
 import { nowDateTimeInputValue, toBackendDateTime } from '@/lib/date'
+import { numericWastagePurity, numericWastageWeight } from '@/lib/numericWastage'
 import { useToastStore } from '@/stores/toast'
 import type { Item, NumericWastageInItemInput } from '@/types'
 
@@ -76,12 +77,9 @@ function onItemSelect(row: NumericWastageInItemInput, itemId: number | null) {
   if (item) row.touch = item.default_touch
 }
 
-function wastageTotalFor(row: NumericWastageInItemInput): number {
-  return (row.no_of_pcs ?? 0) * (row.waste_total ?? 0)
-}
-function purityFor(row: NumericWastageInItemInput): number {
-  return (((row.grams ?? 0) + wastageTotalFor(row)) * (row.touch ?? 0)) / 100
-}
+// Shared with Numeric Wastage Out and the correction modal (lib/numericWastage).
+const wastageTotalFor = numericWastageWeight
+const purityFor = numericWastagePurity
 
 function validate(): boolean {
   fieldErrors.value = {}

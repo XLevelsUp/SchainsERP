@@ -12,12 +12,14 @@ import { goldToCashApi } from '@/lib/goldToCashApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { sourceTypeOptions } from '@/lib/cashTxnOptions'
 import { ApiError } from '@/lib/api'
+import { CORRECTION_NOTE, toNumber, toSourceInputs } from '@/lib/goldCorrection'
 import { useToastStore } from '@/stores/toast'
 import type {
   BankDetail,
   CashToGoldAmountSourceInput,
   CashTxnSourceType,
   CategoryName,
+  GoldCorrection,
 } from '@/types'
 
 /*
@@ -27,6 +29,11 @@ import type {
 | Same POST /gold-to-cash flow as the standalone page, minus the head/
 | customer pickers — already fixed by the Cash Management hub selection.
 | amount_sources is always required here (head always pays out).
+|
+| With `correction` set, it opens prefilled to correct an existing entry
+| (heads only, BACKEND_TODO §17 phase 3): saving reverses the original and
+| posts the corrected one. No receipt upload, and no balance preview (it
+| would show today's balances without the original taken off).
 |--------------------------------------------------------------------------
 */
 
@@ -37,6 +44,7 @@ const props = defineProps<{
   customerName: string
   banks: BankDetail[]
   reloadBanks?: () => unknown
+  correction?: GoldCorrection
 }>()
 
 const emit = defineEmits<{ close: []; saved: [] }>()
@@ -109,7 +117,21 @@ async function loadBalances() {
     isLoadingBalance.value = false
   }
 }
-onMounted(loadBalances)
+
+function prefillFromCorrection() {
+  const input = props.correction?.input
+  if (!input) return
+  form.total_grams = toNumber(input.total_grams)
+  form.touch = toNumber(input.touch)
+  form.per_gram_cash = toNumber(input.per_gram_cash)
+  form.remarks = input.remarks ?? ''
+  form.amount_sources = toSourceInputs(input)
+}
+
+onMounted(() => {
+  if (props.correction) prefillFromCorrection()
+  else loadBalances()
+})
 
 function clearFieldErrors() {
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
@@ -211,22 +233,25 @@ async function handleSubmit() {
 
   isSaving.value = true
   try {
-    await goldToCashApi.create(
-      {
-        head_id: props.headId,
-        customer_id: props.customerId,
-        total_gold: purity.value,
-        touch: form.touch,
-        total_grams: form.total_grams,
-        per_gram_cash: form.per_gram_cash,
-        total_cash: totalCash.value,
-        remarks: form.remarks,
-        retailer_id: null,
-        amount_sources: form.amount_sources.map((s) => ({ ...s })),
-      },
-      images.value,
-    )
-    toastStore.show('Gold To Cash transaction saved successfully.', 'success')
+    const values = {
+      head_id: props.headId,
+      customer_id: props.customerId,
+      total_gold: purity.value,
+      touch: form.touch,
+      total_grams: form.total_grams,
+      per_gram_cash: form.per_gram_cash,
+      total_cash: totalCash.value,
+      remarks: form.remarks,
+      retailer_id: null,
+      amount_sources: form.amount_sources.map((s) => ({ ...s })),
+    }
+    if (props.correction) {
+      await goldToCashApi.correct(props.correction.goldEntryId, values)
+      toastStore.show(`Gold To Cash entry #${props.correction.goldEntryId} corrected.`, 'success')
+    } else {
+      await goldToCashApi.create(values, images.value)
+      toastStore.show('Gold To Cash transaction saved successfully.', 'success')
+    }
     emit('saved')
   } catch (err) {
     if (err instanceof ApiError) {
@@ -251,7 +276,7 @@ async function handleSubmit() {
 
 <template>
   <BaseModal
-    title="Gold To Cash"
+    :title="correction ? `Correct Gold To Cash #${correction.goldEntryId}` : 'Gold To Cash'"
     :badge="`${headName} to ${customerName}`"
     badge-class="bg-blue-600"
     @close="emit('close')"
@@ -269,7 +294,14 @@ async function handleSubmit() {
       always required below.
     </p>
 
-    <div>
+    <p
+      v-if="correction"
+      class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+    >
+      {{ CORRECTION_NOTE }}
+    </p>
+
+    <div v-else>
       <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
       <PartyBalanceCards
         :left-label="headName"
@@ -353,7 +385,7 @@ async function handleSubmit() {
 
       <BaseTextarea id="remarks" v-model="form.remarks" label="Remarks" size="sm" :rows="2" />
 
-      <div>
+      <div v-if="!correction">
         <BaseFileInput
           id="images"
           v-model="images"
@@ -429,7 +461,7 @@ async function handleSubmit() {
 
       <div class="flex items-center gap-3 border-t border-slate-200 pt-4">
         <BaseButton type="submit" :disabled="isSaving">
-          {{ isSaving ? 'Saving…' : 'Save' }}
+          {{ isSaving ? 'Saving…' : correction ? 'Save correction' : 'Save' }}
         </BaseButton>
         <BaseButton variant="secondary" type="button" @click="emit('close')">Close</BaseButton>
       </div>

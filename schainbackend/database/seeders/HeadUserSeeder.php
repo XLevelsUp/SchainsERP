@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use Database\Seeders\Support\SeedPassword;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -16,7 +17,7 @@ class HeadUserSeeder extends Seeder
             'user_id' => 999,
             'name' => 'Demo Head User',
             'user_name' => 'demo_head',
-            'password_hash' => \Illuminate\Support\Facades\Hash::make('password'),
+            'password_hash' => SeedPassword::hash($this->command),
             'address' => '123 Main St',
             'signature' => 'DH',
             'code' => 'H001',

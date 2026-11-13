@@ -18,9 +18,9 @@ class PurchaseGoldService extends BaseStockService
     /**
      * Store a Purchase Gold transaction atomically.
      */
-    public function store(array $data, int $addedBy): PurchaseGold
+    public function store(array $data, int $addedBy, array $options = []): PurchaseGold
     {
-        return DB::transaction(function () use ($data, $addedBy) {
+        return DB::transaction(function () use ($data, $addedBy, $options) {
             // Lock users
             $head = UserDetail::where('user_id', $data['head_id'])->lockForUpdate()->firstOrFail();
             $customer = UserDetail::where('user_id', $data['customer_id'])->lockForUpdate()->firstOrFail();
@@ -76,8 +76,9 @@ class PurchaseGoldService extends BaseStockService
                     throw new \InvalidArgumentException("Sum of amount sources ({$sourcesSum}) must equal total_cash ({$totalCash}).");
                 }
 
-                // Check balances
-                foreach ($amountSources as $src) {
+                // Check balances. Skipped for a reversal (GoldCorrectionService):
+                // it pays money back, so with negated amounts the check would misfire.
+                foreach (empty($options['reversal']) ? $amountSources : [] as $src) {
                     $amt = (float) $src['amount'];
                     if ($src['source'] === 'CASH_ON_HAND') {
                         if ((float) $head->cash_balance < $amt) {

@@ -12,7 +12,7 @@ abstract class BaseStockService
      */
     protected function add($a, $b): string
     {
-        return bcadd((string)($a ?? 0), (string)($b ?? 0), 4);
+        return bcadd($this->num($a), $this->num($b), 4);
     }
 
     /**
@@ -20,7 +20,7 @@ abstract class BaseStockService
      */
     protected function sub($a, $b): string
     {
-        return bcsub((string)($a ?? 0), (string)($b ?? 0), 4);
+        return bcsub($this->num($a), $this->num($b), 4);
     }
 
     /**
@@ -28,7 +28,7 @@ abstract class BaseStockService
      */
     protected function mul($a, $b): string
     {
-        return bcmul((string)($a ?? 0), (string)($b ?? 0), 4);
+        return bcmul($this->num($a), $this->num($b), 4);
     }
 
     /**
@@ -36,10 +36,55 @@ abstract class BaseStockService
      */
     protected function div($a, $b): string
     {
-        if (bccomp((string)($b ?? 0), '0', 4) === 0) {
+        if (bccomp($this->num($b), '0', 4) === 0) {
             return '0.0000';
         }
-        return bcdiv((string)($a ?? 0), (string)($b ?? 0), 4);
+        return bcdiv($this->num($a), $this->num($b), 4);
+    }
+
+    /**
+     * A number as a bcmath-safe string. The services subtract by prefixing a
+     * minus sign ('-' . $grams); when the value is itself negative (a gold
+     * correction's reversal, GoldCorrectionService) that gives "--1.0000",
+     * which bcmath rejects. Collapse the run of signs: an even number of
+     * minuses is positive, an odd number negative.
+     */
+    protected function num($value): string
+    {
+        $value = trim((string) ($value ?? 0));
+        if (!preg_match('/^([+-]+)(.*)$/', $value, $m)) {
+            return $value === '' ? '0' : $value;
+        }
+        $negative = substr_count($m[1], '-') % 2 === 1;
+
+        return ($negative ? '-' : '') . ($m[2] === '' ? '0' : $m[2]);
+    }
+
+    /**
+     * Opening and closing snapshot columns for a cash-on-hand move of $amount
+     * from $sender to $recipient, read from the (locked) balances before the
+     * move. Cash moves; RTGS doesn't, so its closing equals its opening.
+     * Used by the stock services' cash entries (numeric wastage, Stock screen
+     * cash out), which used to leave every column but the opening cash empty,
+     * so the Cash Transactions report showed no OB/CB for them.
+     */
+    protected function cashOnHandSnapshots(UserDetail $sender, UserDetail $recipient, $amount): array
+    {
+        $senderCash = $this->num($sender->rak_cash_balance);
+        $recipientCash = $this->num($recipient->rak_cash_balance);
+        $senderRtgs = $this->num($sender->rak_rtgs_balance);
+        $recipientRtgs = $this->num($recipient->rak_rtgs_balance);
+
+        return [
+            'sender_opening_cash' => $senderCash,
+            'sender_opening_rtgs' => $senderRtgs,
+            'recipient_opening_cash' => $recipientCash,
+            'recipient_opening_rtgs' => $recipientRtgs,
+            'sender_closing_cash' => $this->sub($senderCash, $amount),
+            'sender_closing_rtgs' => $senderRtgs,
+            'recipient_closing_cash' => $this->add($recipientCash, $amount),
+            'recipient_closing_rtgs' => $recipientRtgs,
+        ];
     }
 
     /**

@@ -1,4 +1,5 @@
 import { api, type ApiResponse } from './api'
+import { goldEntriesApi } from './goldEntriesApi'
 import { buildGoldConversionForm } from './multipartForm'
 import type { CashToGoldFormValues, CashToGoldRecord } from '@/types'
 
@@ -40,4 +41,10 @@ export const cashToGoldApi = {
     api
       .postForm<ApiResponse<CashToGoldRecord>>(RESOURCE, buildGoldConversionForm(toFields(form), images))
       .then((r) => r.data),
+
+  // Heads only: reverse gold entry `goldEntryId` and post these values
+  // instead (BACKEND_TODO §17 phase 3). Same fields as a new entry, as JSON
+  // (no receipt images on a correction).
+  correct: (goldEntryId: number, form: CashToGoldFormValues) =>
+    goldEntriesApi.correct(goldEntryId, toFields(form)),
 }

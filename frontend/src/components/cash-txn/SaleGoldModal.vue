@@ -18,10 +18,12 @@ import type {
   BankDetail,
   CashTxnSourceType,
   CategoryName,
+  GoldCorrection,
   Item,
   SaleGoldAmountSourceInput,
   SaleGoldType,
 } from '@/types'
+import { CORRECTION_NOTE, toNumber, toSourceInputs } from '@/lib/goldCorrection'
 
 /*
 |--------------------------------------------------------------------------
@@ -29,6 +31,13 @@ import type {
 |--------------------------------------------------------------------------
 | Same POST /sale-gold flow as the standalone page, minus the head/
 | customer pickers — already fixed by the Cash Management hub selection.
+|
+| With `correction` set, it opens prefilled to correct an existing entry
+| (heads only, BACKEND_TODO §17 phase 3): saving reverses the original and
+| posts the corrected one, keeping its type and the lot it drew from. Item
+| and "transfer to head" are locked, there's no receipt upload, and no
+| balance preview (it would show today's balances without the original
+| taken off).
 |--------------------------------------------------------------------------
 */
 
@@ -41,6 +50,7 @@ const props = defineProps<{
   banks: BankDetail[]
   reloadItems?: () => unknown
   reloadBanks?: () => unknown
+  correction?: GoldCorrection
 }>()
 
 const emit = defineEmits<{ close: []; saved: [] }>()
@@ -115,7 +125,26 @@ async function loadBalances() {
     isLoadingBalance.value = false
   }
 }
-onMounted(loadBalances)
+
+function prefillFromCorrection() {
+  const input = props.correction?.input
+  if (!input) return
+  form.type = (input.type as SaleGoldType | undefined) ?? 'SALE_GOLD'
+  form.item_id = input.item_id ?? null
+  form.total_grams = toNumber(input.total_grams)
+  form.touch = toNumber(input.touch)
+  form.per_gram_cash = toNumber(input.per_gram_cash)
+  form.amnt_transfer_to_head = input.amnt_transfer_to_head ?? true
+  form.remarks = input.remarks ?? ''
+  form.retailer_id = input.retailer_id
+  form.stock_in_id = input.stock_in_id ?? null
+  form.amount_sources = toSourceInputs(input)
+}
+
+onMounted(() => {
+  if (props.correction) prefillFromCorrection()
+  else loadBalances()
+})
 
 function clearFieldErrors() {
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
@@ -225,26 +254,29 @@ async function handleSubmit() {
 
   isSaving.value = true
   try {
-    await saleGoldApi.create(
-      {
-        type: form.type,
-        head_id: props.headId,
-        customer_id: props.customerId,
-        item_id: form.item_id,
-        total_grams: form.total_grams,
-        touch: form.touch,
-        per_gram_cash: form.per_gram_cash,
-        purity: purity.value,
-        total_cash: totalCash.value,
-        amnt_transfer_to_head: form.amnt_transfer_to_head,
-        remarks: form.remarks,
-        retailer_id: form.retailer_id,
-        stock_in_id: form.stock_in_id,
-        amount_sources: form.amount_sources.map((s) => ({ ...s })),
-      },
-      images.value,
-    )
-    toastStore.show('Sale Gold transaction saved successfully.', 'success')
+    const values = {
+      type: form.type,
+      head_id: props.headId,
+      customer_id: props.customerId,
+      item_id: form.item_id,
+      total_grams: form.total_grams,
+      touch: form.touch,
+      per_gram_cash: form.per_gram_cash,
+      purity: purity.value,
+      total_cash: totalCash.value,
+      amnt_transfer_to_head: form.amnt_transfer_to_head,
+      remarks: form.remarks,
+      retailer_id: form.retailer_id,
+      stock_in_id: form.stock_in_id,
+      amount_sources: form.amount_sources.map((s) => ({ ...s })),
+    }
+    if (props.correction) {
+      await saleGoldApi.correct(props.correction.goldEntryId, values)
+      toastStore.show(`Sale Gold entry #${props.correction.goldEntryId} corrected.`, 'success')
+    } else {
+      await saleGoldApi.create(values, images.value)
+      toastStore.show('Sale Gold transaction saved successfully.', 'success')
+    }
     emit('saved')
   } catch (err) {
     if (err instanceof ApiError) {
@@ -269,7 +301,7 @@ async function handleSubmit() {
 
 <template>
   <BaseModal
-    title="Sale Gold"
+    :title="correction ? `Correct Sale Gold #${correction.goldEntryId}` : 'Sale Gold'"
     :badge="`${headName} to ${customerName}`"
     badge-class="bg-purple-600"
     @close="emit('close')"
@@ -281,13 +313,22 @@ async function handleSubmit() {
       {{ formError }}
     </p>
 
-    <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+    <p
+      v-if="correction"
+      class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+    >
+      {{ CORRECTION_NOTE }}
+    </p>
+    <p
+      v-else
+      class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+    >
       This form always records a standard Sale Gold transaction — the Sale Gold Cash and In Cash
       Converter variants aren't available here. Delivery is always recorded as full, too — there's
       no partial-delivery tracking here.
     </p>
 
-    <div>
+    <div v-if="!correction">
       <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
       <PartyBalanceCards
         :left-label="headName"
@@ -323,6 +364,7 @@ async function handleSubmit() {
           placeholder="Select an item…"
           :options="itemOptions"
           :reload="reloadItems"
+          :disabled="!!correction"
           :error="fieldErrors.item_id"
           @update:model-value="
             (v) => {
@@ -389,12 +431,13 @@ async function handleSubmit() {
           v-model="form.amnt_transfer_to_head"
           label="Transfer amount to head"
           class="self-end pb-2"
+          :disabled="!!correction"
         />
       </div>
 
       <BaseTextarea id="remarks" v-model="form.remarks" label="Remarks" size="sm" :rows="2" />
 
-      <div>
+      <div v-if="!correction">
         <BaseFileInput
           id="images"
           v-model="images"
@@ -470,7 +513,7 @@ async function handleSubmit() {
 
       <div class="flex items-center gap-3 border-t border-slate-200 pt-4">
         <BaseButton type="submit" :disabled="isSaving">
-          {{ isSaving ? 'Saving…' : 'Save' }}
+          {{ isSaving ? 'Saving…' : correction ? 'Save correction' : 'Save' }}
         </BaseButton>
         <BaseButton variant="secondary" type="button" @click="emit('close')">Close</BaseButton>
       </div>

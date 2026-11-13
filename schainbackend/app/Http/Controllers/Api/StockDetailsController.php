@@ -26,12 +26,18 @@ use App\Http\Resources\StockCashHistoryResource;
 use App\Models\StockDetails;
 use App\Models\Item;
 use App\Http\Resources\AvailableMetalResource;
+use App\Http\Controllers\Concerns\ScopesRecordAccess;
 
 class StockDetailsController extends Controller
 {
+    use ScopesRecordAccess;
 
     public function exportHistoryItemsObcb(Request $request)
     {
+        if ($denied = $this->forbidOtherUsersBalanceReport($request, ['head_id', 'employee_id'])) {
+            return $denied;
+        }
+
         try {
             $headId = $request->query('head_id') ?? $this->getActingUserId($request);
             $filters = $request->all();
@@ -59,6 +65,10 @@ class StockDetailsController extends Controller
 
     public function exportConsolidatedReport(Request $request)
     {
+        if ($denied = $this->forbidOtherUsersBalanceReport($request, ['head_id', 'head_user_id', 'employee_id', 'user_id', 'retailer_id'])) {
+            return $denied;
+        }
+
         try {
             $headId = $request->query('head_id') ?? $this->getActingUserId($request);
             $filters = $request->all();
@@ -104,6 +114,10 @@ class StockDetailsController extends Controller
      */
     public function getHistory(Request $request): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersRecords($request, ['head_id', 'employee_id'])) {
+            return $denied;
+        }
+
         try {
             $headId = $request->query('head_id') ?? $this->getActingUserId($request);
             $filters = $request->all();
@@ -121,7 +135,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve stock history',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -148,7 +161,9 @@ class StockDetailsController extends Controller
      */
     protected function getActingUserId(Request $request): int
     {
-        return $request->user()->user_id ?? (int)$request->header('X-User-ID', 1);
+        // Always the token's user. The old `X-User-ID` header fallback let a
+        // caller act as anyone (BACKEND_TODO §7).
+        return $this->actingUserId($request);
     }
 
     /**
@@ -170,7 +185,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Stock Out transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -194,7 +208,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Item Change transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -218,7 +231,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Item Conversion transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -242,7 +254,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process GMS Out transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -266,7 +277,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Numeric Wastage transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -288,7 +298,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Hide transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -310,7 +319,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Unhide transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -334,7 +342,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Cash transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -358,7 +365,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Stock In transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -382,7 +388,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process GMS In transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -417,7 +422,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Numeric Wastage In transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -441,7 +445,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process Auto Entry transaction.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -455,6 +458,16 @@ class StockDetailsController extends Controller
             $request->validate([
                 'stock_id' => 'required|integer'
             ]);
+
+            if ($denied = $this->forbidOtherUsersRecords($request, ['head_id'])) {
+                return $denied;
+            }
+
+            // A non-head may only open a stock row they are a party to.
+            $stock = StockDetails::find($request->input('stock_id'));
+            if ($stock && ($denied = $this->forbidUnlessParty($request, $stock->given_by, $stock->given_to))) {
+                return $denied;
+            }
 
             $headId = $request->query('head_id') ?? $this->getActingUserId($request);
             $result = $this->reportService->getIdWiseStockReport($request->input('stock_id'), $headId);
@@ -481,7 +494,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to compile ID-Wise stock report.',
-                'error' => env('APP_DEBUG') ? $e->getMessage() : 'An unexpected error occurred.'
             ], 500);
         }
     }
@@ -491,6 +503,10 @@ class StockDetailsController extends Controller
      */
     public function getHistoryItemsObcb(Request $request): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersBalanceReport($request, ['head_id', 'employee_id'])) {
+            return $denied;
+        }
+
         try {
             $headId = $request->query('head_id') ?? $this->getActingUserId($request);
             $result = $this->reportService->getItemsObcbReport($request->all(), $headId);
@@ -505,13 +521,16 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to compile Items OB & CB report.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
 
     public function getConsolidatedReport(Request $request): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersBalanceReport($request, ['head_id', 'head_user_id', 'employee_id', 'user_id', 'retailer_id'])) {
+            return $denied;
+        }
+
         try {
             $headId = $request->query('head_id') ?? $this->getActingUserId($request);
             $result = $this->reportService->getConsolidatedReport($request->all(), $headId);
@@ -526,15 +545,19 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to compile consolidated report.',
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
 
     public function getCashTransactionHistory(Request $request)
     {
+        if ($denied = $this->forbidOtherUsersRecords($request, ['head_id'])) {
+            return $denied;
+        }
+
         try {
-            $headId = $request->query('head_id');
+            // Without head_id this used to return every user's rows.
+            $headId = $request->query('head_id') ?: $this->actingUserId($request);
             $cashUserId = $request->query('cash_user_id');
             $perPage = $request->query('per_page', 50);
 
@@ -590,7 +613,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve cash stock history',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -600,6 +622,10 @@ class StockDetailsController extends Controller
      */
     public function getAvailableMetals(Request $request): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersRecords($request, ['user_id'])) {
+            return $denied;
+        }
+
         try {
             $userId = $request->query('user_id');
             $itemId = $request->query('item_id');
@@ -658,7 +684,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve metal stocks',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -668,6 +693,10 @@ class StockDetailsController extends Controller
      */
     public function getHeadStocks(Request $request): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersRecords($request, ['user_id'])) {
+            return $denied;
+        }
+
         try {
             $headId = $request->query('user_id') ?: $this->getActingUserId($request);
             
@@ -689,7 +718,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve head stocks',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -708,6 +736,10 @@ class StockDetailsController extends Controller
      */
     public function getAvailableStockLots(Request $request): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersRecords($request, ['user_id'])) {
+            return $denied;
+        }
+
         try {
             $userId   = $request->query('user_id');
             $itemId   = $request->query('item_id');
@@ -781,7 +813,6 @@ class StockDetailsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve available stock lots.',
-                'error'   => $e->getMessage()
             ], 500);
         }
     }

@@ -58,13 +58,18 @@ class CashTransactionReportResource extends JsonResource
 
         if (in_array($this->type, ['INCOME', 'SALE_GOLD', 'CASH_TO_GOLD', 'AUTO_ENTRY'])) {
             // Money is coming IN to recipient
+            $balanceOwnerId = $this->recipient_id;
             $openingBalance = $this->recipient_opening_cash + $this->recipient_opening_rtgs;
             $closingBalance = $this->recipient_closing_cash + $this->recipient_closing_rtgs;
         } else {
             // Money is going OUT from sender (EXPENSE, PURCHASE_GOLD, GOLD_TO_CASH)
+            $balanceOwnerId = $this->sender_id;
             $openingBalance = $this->sender_opening_cash + $this->sender_opening_rtgs;
             $closingBalance = $this->sender_closing_cash + $this->sender_closing_rtgs;
         }
+
+        // Only heads see another user's balance (App\Support\BalanceVisibility).
+        $showBalance = \App\Support\BalanceVisibility::canSeeBalancesOf($balanceOwnerId);
 
         return [
             'id'              => $this->txn_id,
@@ -74,9 +79,9 @@ class CashTransactionReportResource extends JsonResource
             'category_name'   => $this->category->category_name ?? '-',
             'type_label'      => $typeLabel,
             'source_type'     => $sourceType,
-            'opening_balance' => round($openingBalance, 2),
+            'opening_balance' => $showBalance ? round($openingBalance, 2) : null,
             'amount'          => round($this->amount, 2),
-            'closing_balance' => round($closingBalance, 2),
+            'closing_balance' => $showBalance ? round($closingBalance, 2) : null,
             'remarks'         => $remarks
         ];
     }

@@ -1,19 +1,22 @@
 # Backend — Open Items
 
-For the backend team. **Only things that still need doing.** Anything fixed is
-deleted from this file — the history lives in
+Our backend backlog. Since 2026-11-06 there's no separate backend team, so
+we fix these ourselves, following `.claude/rules/jewelry-erp-backend.md`.
+**Only things that still need doing.** Anything fixed is deleted from this
+file — the history lives in
 [`frontend/PENDING_WORK.md`](frontend/PENDING_WORK.md).
 
-**Checked against:** `schainbackend/` as it stands on **2026-11-04**, after
-**PR #52** (`2502a051`), with `origin` fetched and nothing unpulled. PR #52
-changed four backend files: `SystemLogController`, `ReportController`,
-`CashTransactionReportResource` and `MetalStockSeeder`. It closed the old
-§21 (retailer name suffix) and two of the four points in §22. Nothing else in
-the backend has changed since the full re-read on 2026-10-29, so every other
-item stands as checked then; line numbers were updated where PR #52 moved
-code. §16–§20 and §22 came from checking the backend team's cash-modules
-document (`Schain_ERP_Cash_Modules_Documentation`, rev 2.0.0) against the
-code on 2026-11-03.
+**Checked against:** `schainbackend/` as it stands on **2026-11-06**, after
+**PR #53** (`982afd78`, merging `43e620eb`). PR #53 changed three backend
+files: `UserDetailController` (user edits now save item mappings),
+`ReportService` (stock history's In/Out filter) and `UserDetail` (an unused
+import). It closed part of §10 and added the old §23, a regression in the
+stock history filter (fixed 2026-11-12, along with §24). PR #52 (`2502a051`, 2026-11-04) closed the old §21 and two
+points of §22. Nothing else in the backend has changed since the full re-read
+on 2026-10-29, so every other item stands as checked then. §16–§20 and §22
+came from checking the backend team's cash-modules document
+(`Schain_ERP_Cash_Modules_Documentation`, rev 2.0.0) against the code on
+2026-11-03.
 
 The `#n` tags point at the matching entry in `PENDING_WORK.md` if you want the
 full history.
@@ -68,209 +71,44 @@ integer with a comment — that is what caused this.
 
 ---
 
-## 2. The metal picker is broken on every database — `system_settings` is never seeded
+## 5. Five existing accounts still use the password `password`  `#28`
 
-**Where:** `app/Http/Controllers/Api/StockDetailsController.php:616`,
-`app/Services/ReportService.php:937`, and the missing seeder for
-`2026_09_18_223934_create_system_settings_table`.
+*Seeders fixed on 2026-11-12:* they now take `SEED_USER_PASSWORD` from
+`.env`, or generate a random password and print it. So no new environment
+gets `password`.
 
-**Symptom:** every call to `GET /stock-details/available-metals` returns
-
-```
-400  {"success": false, "message": "Selected item is not valid for metal selection"}
-```
-
-Example that fails today: `?item_id=4&user_id=999`, where item 4 **is** named
-`Metal` and user 999 **does** exist.
-
-**Cause:** PR #45 changed the gate from a name check to a settings lookup:
-
-```php
-$metalItemIds = SystemSetting::get('metal_popup_items', []);
-if (!$item || !in_array($item->item_id, $metalItemIds)) { /* 400 */ }
-```
-
-The migration creates `system_settings`, but **nothing seeds it** — grepped
-all of `database/`, there is no seeder. So `get()` returns its `[]` default and
-`in_array($anything, [])` is always false. Verified on the local database
-2026-10-08:
-
-```
-=== system_settings rows ===
-  (EMPTY TABLE)
-=== metal_popup_items as the controller reads it ===
-  array(0) { }
-```
-
-**Why it matters:** the metal picker is not a corner of the app. Stock In,
-Stock Out, GMS In, GMS Out and Item Change all open it to draw down a metal
-lot. All of them have been dead since PR #45 on any database that was not
-hand-configured — which is all of them.
-
-**The same gap takes out a second endpoint.** `ReportService:937` reads
-`live_metal_report_items` the same way; with it unset, Live Metal Balance
-throws a validation error unless the caller passes `item_id` explicitly. (Our
-screen always sends `item_id`, resolved by name, so it works either way — this
-bites anyone else calling the endpoint.)
-
-**Fix:** ship a seeder for `system_settings` covering at least
-`metal_popup_items` and `live_metal_report_items`, resolving the items **by
-name** rather than hardcoding ids — ids already differ between environments,
-which is what caused the original Live Metal bug (`#17`).
-
-A settings-driven design is the right call and we are not asking you to revert
-it. It just cannot ship without the row that makes it work, because the
-failure mode is a 400 that looks like the caller's fault.
-
-**Workaround meanwhile** (one row):
-
-```sql
-insert into system_settings (setting_key, setting_value, created_at, updated_at)
-values ('metal_popup_items', '[4]', now(), now());
-```
-
-**One more thing this changed, which nobody told us:** the frontend still
-decides whether to open the metal picker by matching the item name
-`'metal'` — the rule the backend used before PR #45. The backend now decides
-by the settings list. Those two will disagree as soon as the list holds
-anything other than exactly the items named "Metal". We will move the
-frontend onto `GET /settings`; flagging it so the drift is on the record.
+**Deferred by decision until go-live:** `head_admin`, `employee_one`,
+`customer_one`, `retailer_one` and `demo_head` on Aiven still have the
+password `password`, and the deployed API is public. Before going live,
+change or delete them. Changing a password does not end sessions already
+signed in; revoke their tokens too.
 
 ---
 
-## 3. Any signed-in user can read any head's books
-
-```php
-$headId = $request->query('head_id') ?? $this->getActingUserId($request);
-```
-
-**The problem:** the `head_id` override that lets a head pull another user's
-report has **no check on who is allowed to use it.** Any authenticated user
-can pass another user's id and read that ledger. An employee can read their
-head's books.
-
-Every one of these takes the id straight from the query string:
-
-| Endpoint | Where (`app/Http/Controllers/Api/…`) | Takes |
-|---|---|---|
-| `GET /stock/reports/items-obcb` | `StockDetailsController.php:495` | `head_id` |
-| `GET /stock/reports/consolidated` | `StockDetailsController.php:516` | `head_id` |
-| `GET /stock/reports/items-obcb/export` (CSV) | `StockDetailsController.php:36` | `head_id` |
-| `GET /stock/reports/consolidated/export` (CSV) | `StockDetailsController.php:63` | `head_id` |
-| `GET /stock-details/history` | `StockDetailsController.php:108` | `head_id` |
-| `GET /stock/reports/id-wise` | `StockDetailsController.php:459` | `head_id` |
-| `GET /stock-details/cash-transaction-history` | `StockDetailsController.php:537` | `head_id` |
-| `GET /stock-details/head-stocks` | `StockDetailsController.php:672` | `user_id` |
-| `GET /cash-txn-details/in-history`, `out-history` | `CashTxnDetailController.php:33`, `:103` | `head_id` |
-| `GET /cash-txn-details/print-report` | `CashTxnDetailController.php:173` | `head_id` |
-| `GET /report/daywise-grand` | `ReportController.php:224` → `ReportService::getDaywiseGrandReport` | `head_user_id`, `employee_id` / `user_id`, `customer_id` / `retailer_id` — and the head itself comes from the `X-User-ID` header ([§7](#7-four-endpoints-still-read-x-user-id-and-ignore-the-token--2-37)) |
-
-**Fix:** allow the override only for HEAD (or admin) accounts, the way
-`getLiveMetalBalance` does. PR #52 added exactly this kind of check to the
-System Logs endpoints (`optional($authUser->role)->role !== 'HEAD'` → `403`),
-so the pattern is already in the codebase. Everyone else gets their own data regardless of
-what they pass. Please keep it working *for heads* — the Stock and Cash
-Management screens deliberately pass another user's id to show that user's
-ledger to the head operating the screen.
-
----
-
-## 4. Every user sees every order
-
-**Where:** `app/Http/Controllers/Api/OrderController.php:11`
-
-```php
-public function index()
-{
-    return response()->json([
-        'success' => true,
-        'data' => OrderDetail::all()
-    ]);
-}
-```
-
-**The problem:** no scoping, no pagination, no filters. Every customer order in
-the system goes to anyone who calls `GET /api/v1/orders`. It also loads the
-whole table into memory, so it gets slower every day.
-
-**Fix:** scope to the signed-in user (as head, or as the order's customer),
-paginate it, and add the filters the list screen will need — at minimum
-`status` and a date range.
-
----
-
-## 5. Five accounts share the password `password`  `#28`
-
-The seeders still hash the literal `'password'` (re-checked 2026-10-29:
-`HeadUserSeeder.php:19`, `StockTestDataSeeder.php:72` and `:99`,
-`UserDetailSeeder.php` ×4), so any fresh environment gets these accounts.
-Verified against the live Render database on **2026-09-16**:
-
-```
-  1 head_admin    role_id=3  password = "password"
-  2 employee_one  role_id=2  password = "password"
-  3 customer_one  role_id=1  password = "password"
-  4 retailer_one  role_id=4  password = "password"
-999 demo_head     role_id=3  password = "password"
-```
-
-Two of them are HEAD. The API is public at `api.lensnstories.com`.
-
-**The live database has not been re-checked since** — please confirm before
-acting. If they are still there: delete them, or set real passwords. And
-change the seeders so new environments don't recreate them.
-
-Also worth knowing: `AuthController` blocks deactivated users at login (good),
-but a token **already issued** keeps working until it expires. So switching an
-account off does not lock anyone out — deleting it or changing the password
-does.
-
----
-
-## 16. Entries may be silently thrown away until the `system_logs` migration runs
+## 16. Entries saved between 2026-10-22 and 2026-11-04 may be lost
 
 *(Numbered out of order so the existing §-links keep working.)*
 
-**Where:** `app/Services/SystemLogService.php` (`log()`), called inside the
-open `DB::transaction` of every write service: `CashTxnDetailService`,
-`CashAutoEntryService`, `CashToGoldService`, `GoldToCashService`,
-`PurchaseGoldService`, `SaleGoldService`, `StockInService`, `StockOutService`,
-`AutoEntryService`, `FitemService`.
+**The code fix is done (2026-11-12):** a failed log write can no longer
+take the business write down with it. `SystemLogService::log()` now writes
+in its own nested transaction, a savepoint. History is in `PENDING_WORK.md`.
 
-**The problem:** `log()` catches any failure and returns `null`, so the
-business write carries on. On PostgreSQL that doesn't work. A failed statement
-aborts the **whole** transaction, and catching the exception in PHP doesn't
-undo that. Every later statement fails, and the final `COMMIT` quietly becomes
-a `ROLLBACK`. PDO doesn't raise on that, so the API still answers `201` with
-the new row's data, and nothing is saved.
+**What happened:** the `system_logs` migration was never run on Aiven, so
+every log write failed from 2026-10-22, when logging landed. On PostgreSQL
+that silently rolled back the entry being logged, while the API still
+answered `201`. No row was saved in `cash_txn_details`, `stock_details`
+or `cash_to_gold` in that window; the newest before it are 2026-10-13 (cash)
+and 2026-10-20 (stock). The migration was run on Aiven on 2026-11-04, and
+saves have worked since.
 
-**Why it matters today:** on 2026-11-03,
-`2026_10_22_000000_create_system_logs_table` was **Pending** on the Aiven
-database (`migrate:status`), so every log write failed there. No row had been
-saved in `cash_txn_details`, `stock_details` or `cash_to_gold` since
-2026-10-22, when the logging landed; the newest were 2026-10-13 (cash) and
-2026-10-20 (stock). That fits writes being rolled back, but quiet days would
-look the same.
+**Still to do (not code):**
 
-On 2026-11-04 the Aiven host (`golderp-goldserp.f.aivencloud.com`) no longer
-exists in DNS. The service looks powered off or deleted, so this couldn't be
-re-checked. Whichever database replaces it needs the migration, and the fix
-below applies regardless. Please confirm by saving one entry and checking
-it's there.
-
-**Fix:**
-
-1. Run the migration on every database. `docker/entrypoint.sh` runs
-   `migrate --force` on deploy, so deployed environments may already have it;
-   local and Aiven do not.
-2. Stop a failed log from taking the business write down with it. Either
-   wrap the insert in its own transaction — inside an open one, Laravel's
-   `DB::transaction()` issues a `SAVEPOINT`, so a failure rolls back only the
-   log row — or write the log with `DB::afterCommit()`. Without this, any
-   future log failure (a payload that won't encode, a column too short)
-   silently drops the entry again.
-
-Until the migration runs, the System Logs screen can only show a load error.
+1. **Check the other databases.** `docker/entrypoint.sh` runs
+   `migrate --force` on deploy, so deployed environments should have the
+   table. Please confirm, along with anyone's local database.
+2. **Ask operators whether they entered anything against Aiven between
+   2026-10-22 and 2026-11-04.** If they did, those entries are gone (the
+   screens showed them as saved) and need entering again.
 
 ---
 
@@ -306,39 +144,6 @@ the alias. Copy that.
 
 Until then, any call to `report/live-metal-balance` with `date` **and** `time`
 returns a 500. The frontend does not expose those filters for this reason.
-
----
-
-## 7. Four endpoints still read `X-User-ID` and ignore the token  `#2` `#37`
-
-Every route sits behind `auth:api`, so `$request->user()` is always available.
-Most of the code reads it. Four places do not:
-
-| File | Line | Reads |
-|---|---|---|
-| `Services/CashAutoEntryService.php` | 38 | header only ❌ |
-| `Controllers/Api/CashCategoryController.php` | 44 | header only ❌ |
-| `Controllers/Api/ReportController.php` | 194 | header only ❌ (one-day-action) |
-| `Controllers/Api/ReportController.php` | 224 | header only ❌ (daywise-grand) |
-
-For comparison, these get it right:
-`StockDetailsController:151`, `CashTxnDetailController:2405` and `:2429`,
-`ReportController:145`, `FitemController:23`.
-
-**Why it matters:** all four default to **user 1** when the header is absent.
-For the two report endpoints that now means the report is silently scoped to
-the wrong person — `getOneDayActionReport` gained real head scoping in PR #46,
-so a missing header no longer just looks odd, it returns someone else's data.
-For the two write paths it means `added_by` records the wrong operator.
-
-**Fix:** use the same line everywhere:
-
-```php
-$userId = $request->user()->user_id ?? (int) $request->header('X-User-ID', 1);
-```
-
-The frontend sends the header everywhere as a workaround, so nothing breaks
-when you change this.
 
 ---
 
@@ -419,28 +224,74 @@ absent.
 
 ---
 
-## 10. Editing a user silently drops its item / head / cash-head mappings
+## 10. Editing a user: heads and cash heads still aren't saved, and the new item sync has problems
 
-`UserDetailController::show()` eager-loads `itemMappings`,
-`headEmployeeMappings` and `cashHeadEmployeeMappings`, and the Users screen
-now loads all three into the edit form. But `update()` never reads
-`item_mappings`, `head_mappings` or `cash_head_mappings` — only `store()`
-does. The frontend sends them on `PUT /user-details/{id}` in exactly the
-shape `store()` accepts (`head_mappings: [{ head_id }]`, etc.), and they are
-ignored, so any change to a user's assigned items, heads or cash heads made
-from the edit form is lost on save with a `200`.
+*PR #53 (`43e620eb`) made `update()` save item mappings. Everything below is
+still open.*
 
-Please have `update()` apply them when the key is present — **replace** the
-set, the way `PUT /head-employee-mappings/{employee_id}` already does for
-heads, rather than re-inserting the way `store()` does (re-inserting would
-duplicate every mapping on each save). For item mappings, note that
-`item_grams_total` / `item_purity_total` are live running balances: decide
-whether an edit should be allowed to overwrite them or only add/remove rows
-and toggle `is_primary`.
+**Where:** `app/Http/Controllers/Api/UserDetailController.php:1482–1532`
+(`update()`, `PUT /user-details/{id}`)
 
-Until then the edit form shows an **amber banner** saying mapping changes
-are not saved, and points to the Head Employee Mappings screen for
-reports-to changes.
+**Still not saved:** `head_mappings` and `cash_head_mappings`. Only
+`store()` reads them. The frontend sends them on `PUT /user-details/{id}` in
+the shape `store()` accepts (`[{ head_id }]`), and they are ignored with a
+`200`. Please **replace** the set when the key is present, the way
+`PUT /head-employee-mappings/{employee_id}` already does for heads. Don't
+re-insert the way `store()` does, which would duplicate every mapping on
+each save.
+
+**Problems in the new item sync:**
+
+1. **Updating an existing row fails the whole save.** For rows that carry an
+   `id`, the code sets `'updated_at' => now()`, but `users_items_mappings`
+   has no `updated_at` column (see
+   `2026_07_25_160555_create_users_items_mappings_table.php`; the model also
+   has `$timestamps = false`). Postgres rejects the statement, the
+   transaction rolls back, and the user save returns `500`. Please drop
+   `updated_at` from that update. The frontend won't send row ids until
+   this is fixed.
+2. **Without ids, every save deletes and re-creates all of the user's
+   rows.** That resets `added_at` and wipes `stone_cost_grand_total`,
+   `beads_cost_grand_total`, `beads_stone_cost_grand_total` and
+   `last_txn_date`, which the request doesn't carry. Once point 1 is fixed,
+   the frontend can send ids so rows are updated in place.
+3. **Saving can put back stale balances.** `item_grams_total` and
+   `item_purity_total` are live running balances, and the sync overwrites
+   them with whatever the form sent. If stock moves for that user while the
+   edit form is open, saving restores the old figure. Suggestion: on update,
+   ignore the two totals for existing rows (only add or remove rows and
+   toggle `is_primary`), and use the sent totals only for new rows. Until
+   then the edit form warns operators to reopen the user if stock has moved.
+4. **No validation.** `store()` validates `item_mappings.*` (around line
+   400); `update()` doesn't, so a missing `is_primary` or a bad `item_id`
+   gives a `500` instead of a `422`. Please copy the `store()` rules.
+5. **An empty list can't be sent with a file upload.** When a proof image is
+   attached the frontend has to send multipart, and multipart can't carry an
+   empty array. The empty-string fallback arrives as `null`, which
+   `array_column()` throws on. If `update()` treated a `null` or empty
+   `item_mappings` as `[]`, a user's last item could be removed in the same
+   save as an image upload. Today the frontend sends `[]` on JSON saves
+   only.
+
+**Checked with real saves on 2026-11-06** (test user 7, "Claude Test",
+through `PUT /user-details/7`):
+
+| Request | Result |
+|---|---|
+| Rows without ids (what the frontend sends) | `200`. Rows 19–20 deleted and re-created as 21–22, `stone_cost_grand_total` (123.45) and `last_txn_date` wiped, `added_at` reset. `head_mappings: []` ignored, head 1 still mapped |
+| A row with its id | `500`: `column "updated_at" of relation "users_items_mappings" does not exist`. Nothing changed |
+| Multipart with `item_mappings=''` | `500`: `array_column(): Argument #1 ($array) must be of type array, null given` |
+| `item_mappings: []` | `200`, all rows removed |
+| A row without `is_primary` | `500`: `Undefined array key "is_primary"` |
+
+The `500` responses also return the raw exception text in `error`, which
+for SQL errors includes the database host name. That's
+`UserDetailController::update()`'s catch block, and it doesn't depend on
+`APP_DEBUG`.
+
+The edit form's **amber banner** says items save but heads and cash heads
+don't, and points to the Head Employee Mappings screen for reports-to
+changes.
 
 ---
 
@@ -514,37 +365,28 @@ nothing is needed for that.
 
 ---
 
-## 17. Deleting a cash entry leaves both balances as if it happened
+## 17. Loose ends found while building entry corrections
 
-**Where:** `app/Http/Controllers/Api/CashTxnDetailController.php`: the
-`apiResource('cash-txn-details')` write methods `store()` (line 328),
-`update()` (line 879) and `destroy()` (line 1557).
+Entry editing and corrections are done (2026-11-12; history in
+`PENDING_WORK.md`). These came up along the way and are still open:
 
-**The problem:** all three still use the cash table's old columns:
-`given_by`, `given_to`, `souce_type`, `bank_id`, `balance`,
-`opening_account_balance`, and so on. `cash_txn_details` now has
-`sender_id` / `recipient_id`, `payment_method`, `bank_account_id` and the
-eight opening/closing snapshots, and none of the old names are in
-`CashTxnDetail::$fillable`. What that does:
-
-- **`DELETE /cash-txn-details/{id}`** looks the user up by
-  `$transaction->given_by`, which is always null. So it skips the balance
-  restore, then deletes the row and its images and answers `200`. The entry
-  disappears from history, but both parties' `rak_cash_balance` (and the
-  bank's `ledger_balance`) stay as if it had happened.
-- **`PUT /cash-txn-details/{id}`**: the validator only knows the old names, so
-  its balance recalculation runs on nulls.
-- **`POST /cash-txn-details`**: the model drops the old names and the
-  required `sender_id` / `recipient_id` are never set, so the insert should
-  fail with a `500` (read from the code, not run). The cash-modules doc names
-  this endpoint for Internal Transfer and Cash Loan.
-
-The frontend calls none of the three, but any signed-in user can.
-
-**Fix:** rewrite them against the current schema, reversing balances the
-same way the service that wrote the entry moved them (sender and recipient,
-cash or RTGS, and the bank). Until then, register only the read routes:
-`apiResource(...)->only(['index', 'show'])`.
+- **The gold screens don't write `obcb_details` or the `*_op` columns** on
+  their own stock rows, so the Items OB/CB report shows no OB/CB for those
+  rows.
+- **Gold to Cash always books item 3**, whatever item applies (legacy
+  hard-coding).
+- **Sale Gold without "transfer to head" doesn't move the head's gold or
+  cash**, only the customer's (legacy behaviour, unchanged).
+- **Numeric Wastage In stores the piece count in an integer column**
+  (`stock_in_details.no_of_pcs`), but `NumericWastageInRequest` accepts any
+  number above 0. A fractional count (2.5) passes validation and then fails
+  on PostgreSQL with a `500`. The screen's step is 1, so it only bites
+  through the API. Either validate `integer` or widen the column (Out uses
+  `decimal(12,4)`); which one depends on whether half pieces exist.
+- **A numeric wastage correction recomputes purity with the screens'
+  formula.** The API accepts a custom `purity` on a new line (no screen
+  sends one). The reversal cancels the saved purity exactly, but the corrected
+  line uses (grams + wastage) × touch ÷ 100.
 
 ---
 
@@ -558,11 +400,11 @@ no screen for any of them:
 |---|---|---|
 | 3.3, 3.4 | Bill Cash / Payment Cash (only the customer's, or only the head's, balance moves) | `StoreCashTxnDetailRequest` accepts `amnt_transfer_to_head`, but `CashTxnDetailService` never reads it, so both parties always move. No `is_bill_cash` / `is_payment_cash` / `is_customer_affect` columns. |
 | 3.6 | Internal Transfer (cash ↔ bank, bank ↔ bank) | No `amount_transfers` table, and nothing writes `INTERNAL_TRANSFER`. The out-history filter no longer includes the type either. |
-| 3.7 | Cash Loan (16 combinations) | No columns for `cash_loan_type`, `rate_of_interest` or the arithmetic operators. Only the broken `store()` mentions them ([§17](#17-deleting-a-cash-entry-leaves-both-balances-as-if-it-happened)). |
+| 3.7 | Cash Loan (16 combinations) | No columns for `cash_loan_type`, `rate_of_interest` or the arithmetic operators. Only the old, now-disabled `store()` mentioned them. |
 | 3.12 | Machine Vendor Expense | No `machine_vendors` table, model or endpoint. |
 | 3.13 | Salary advance link | `is_salary_person` exists on users, but there's no `salary_given_details` table and nothing links a payment to it. |
 | 3.14 | Category 33 / 34 (3% GST, 5% margin) | No calculation anywhere. If built, find the two categories through a setting, not by id: ids differ between environments, which is what caused the Live Metal bug (`#17`). |
-| 3.16 | Hide / Unhide cash entries | `cash_txn_details.is_hide` exists, but no endpoint sets it (`PUT` is broken, §17), and no history or report filters on it. |
+| 3.16 | Hide / Unhide cash entries | `cash_txn_details.is_hide` exists, but no endpoint sets it (the cash edit, `PUT /cash-txn-details/{id}`, doesn't take it), and no history or report filters on it. |
 | 7 | "Mathematical validation" of the gold figures | The four gold endpoints save `total_cash`, `per_gram_cash`, `total_grams`, `touch` and `purity` exactly as sent. Nothing checks purity = grams × touch ÷ 100. A cash-against-rate check would depend on **b** below. The one check that does exist is that the payment sources add up to `total_cash`. |
 
 **Two places where the doc and the code disagree.** Please say which is right
@@ -725,7 +567,7 @@ keep working.)*
 
 **Where:** `app/Services/SystemLogService.php` and the services that call it.
 
-PR #52 made the logs HEAD-only and moved `filters()` onto role names. Two
+PR #52 made the logs HEAD-only and moved `filters()` onto role names. Three
 points are still open:
 
 - **Coverage.** Only the write services log: stock and cash creates, plus
@@ -737,8 +579,22 @@ points are still open:
 - **Names.** Descriptions say "User #12". The screen looks names up from the
   current user list, which breaks for deleted users. Storing the name in
   `metadata` when the log is written would fix that.
+- **Several logs point at tables that don't exist** *(found 2026-11-06)*.
+  The `reference_table` / `reference_id` passed to `log()` don't match the
+  models:
 
-The System Logs screen has a banner telling users about both gaps.
+  | Service | Logs as | Real table, key | Effect |
+  |---|---|---|---|
+  | `SaleGoldService.php:349` | `sale_golds`, `sale_gold_id ?? id` | `cash_to_gold`, `cash_to_gold_id` | id is always `null` (seen on log rows 1–2) |
+  | `PurchaseGoldService.php:330` | `purchase_golds`, `purchase_gold_id ?? id` | `cash_to_gold`, `cash_to_gold_id` | id is always `null` |
+  | `CashToGoldService.php:256`, `GoldToCashService.php:274` | `cash_to_golds` | `cash_to_gold` | wrong table name; id is right |
+  | `StockOutService.php:345` (item change) | `item_change_histories`, `history_id ?? id` | `item_change_history`, `change_id` | id is always `null` |
+  | `StockOutService.php:704` (GMS out) | `gms_histories`, `gms_history_id ?? id` | `gms_history`, `gms_id` | id is always `null` |
+
+  The System Logs screen shows these as e.g. "sale_golds #—", so a log
+  entry can't be traced back to its transaction.
+
+The System Logs screen has a banner telling users about the first two gaps.
 
 ---
 

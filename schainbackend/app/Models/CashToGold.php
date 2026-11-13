@@ -45,6 +45,9 @@ class CashToGold extends Model
         'balance_amount',
         'adjust_cash',
         'is_live',
+        'reversal_of_id',
+        'corrects_id',
+        'corrected_by_id',
     ];
 
     protected $casts = [

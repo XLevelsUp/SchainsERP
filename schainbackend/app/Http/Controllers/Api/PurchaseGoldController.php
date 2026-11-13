@@ -22,14 +22,24 @@ class PurchaseGoldController extends Controller
      */
     public function store(StorePurchaseGoldRequest $request): JsonResponse
     {
-        $addedBy = auth()->id() ?? 1;
+        try {
+            $record = $this->purchaseGoldService->store($request->validated(), (int) $request->user()->user_id);
 
-        $record = $this->purchaseGoldService->store($request->validated(), $addedBy);
+            return response()->json([
+                'success' => true,
+                'message' => 'Purchase gold transaction recorded successfully.',
+                'data'    => new PurchaseGoldResource($record),
+            ], 201);
+        } catch (\InvalidArgumentException $e) {
+            // The service's own rules (sources add up, enough cash or bank balance).
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            report($e);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Purchase gold transaction recorded successfully.',
-            'data'    => new PurchaseGoldResource($record),
-        ], 201);
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaction failed. All changes have been rolled back.',
+            ], 500);
+        }
     }
 }

@@ -34,27 +34,48 @@ Route::prefix('v1')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
 
-        Route::apiResource('user-details', UserDetailController::class);
+        // Administration (BACKEND_TODO §26, agreed 2026-11-12): anyone signed
+        // in may read these (the screens' pickers need them); only a HEAD may
+        // change them. Creating a user is the one exception: users with
+        // "Can act as head" may too (Add Retailer on the Stock screen), and
+        // UserDetailController::store stops them creating a head.
+        $adminResources = [
+            'user-details' => UserDetailController::class,
+            'items' => ItemController::class,
+            'fitem-boxes' => FitemBoxController::class,
+            'roles' => RoleController::class,
+            'customer-touch' => CustomerTouchController::class,
+            'users-items-mappings' => UsersItemsMappingController::class,
+            'head-employee-mappings' => HeadEmployeeMappingController::class,
+            'cash-head-employee-mappings' => CashHeadEmployeeMappingController::class,
+        ];
+        foreach ($adminResources as $name => $controller) {
+            Route::apiResource($name, $controller)->only(['index', 'show']);
+        }
+        Route::post('user-details', [UserDetailController::class, 'store'])
+            ->middleware('act.as.head')
+            ->name('user-details.store');
+        Route::middleware('head.only')->group(function () use ($adminResources) {
+            foreach ($adminResources as $name => $controller) {
+                $except = $name === 'user-details' ? ['index', 'show', 'store'] : ['index', 'show'];
+                Route::apiResource($name, $controller)->except($except);
+            }
+
+            Route::post('customer-touch-user-mappings', [CustomerTouchUserMappingController::class, 'store']);
+            Route::put('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'update']);
+            Route::patch('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'update']);
+            Route::delete('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'destroy']);
+        });
+
         Route::apiResource('orders', \App\Http\Controllers\Api\OrderController::class);
-        Route::apiResource('items', ItemController::class);
-        Route::apiResource('fitem-boxes', FitemBoxController::class);
-        Route::apiResource('roles', RoleController::class);
-        Route::apiResource('customer-touch', CustomerTouchController::class);
-        Route::post('fitems', [\App\Http\Controllers\Api\FitemController::class, 'store']);
-        
-        // Customer Touch User Mappings
+        Route::post('fitems', [\App\Http\Controllers\Api\FitemController::class, 'store'])->middleware('act.as.head');
+
         Route::get('customer-touch-user-mappings', [CustomerTouchUserMappingController::class, 'index']);
-        Route::post('customer-touch-user-mappings', [CustomerTouchUserMappingController::class, 'store']);
-        Route::put('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'update']);
-        Route::patch('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'update']);
-        Route::delete('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'destroy']);
-        
-        // Update CC
-        Route::put('user-details/{id}/update-cc', [UserDetailController::class, 'updateCc']);
-        Route::patch('user-details/{id}/update-cc', [UserDetailController::class, 'updateCc']);
-        Route::apiResource('users-items-mappings', UsersItemsMappingController::class);
-        Route::apiResource('head-employee-mappings', HeadEmployeeMappingController::class);
-        Route::apiResource('cash-head-employee-mappings', CashHeadEmployeeMappingController::class);
+
+        // Customer comments are saved from the Stock screen while entering
+        // values, so operators with "Can act as head" may save them too.
+        Route::put('user-details/{id}/update-cc', [UserDetailController::class, 'updateCc'])->middleware('act.as.head');
+        Route::patch('user-details/{id}/update-cc', [UserDetailController::class, 'updateCc'])->middleware('act.as.head');
 
         // Cash Dashboard APIs (Must be above apiResource to prevent {id} interception)
         Route::get('report/cash-transactions-obcb', [ReportController::class, 'getCashTransactionsObcb']);
@@ -70,26 +91,59 @@ Route::prefix('v1')->group(function () {
         Route::get('stock-details/head-stocks', [StockDetailsController::class, 'getHeadStocks']);
         Route::get('stock-details/available-lots', [StockDetailsController::class, 'getAvailableStockLots']);
 
-        Route::apiResource('cash-txn-details', CashTxnDetailController::class);
-        Route::apiResource('cash-categories', CashCategoryController::class);
+        // The old store/update/destroy used column names the table no longer
+        // has (DELETE removed an entry without restoring either balance), so
+        // they stay unregistered. Deleting isn't allowed (agreed 2026-11-12).
+        // New entries go through cash-txn-details/in, /out and /auto-entry;
+        // edits through editEntry, heads only (BACKEND_TODO §17).
+        Route::apiResource('cash-txn-details', CashTxnDetailController::class)->only(['index', 'show']);
+        Route::put('cash-txn-details/{id}', [CashTxnDetailController::class, 'editEntry'])->middleware('head.only');
+        Route::patch('cash-txn-details/{id}', [CashTxnDetailController::class, 'editEntry'])->middleware('head.only');
+
+        // Gold entries are corrected, not edited in place: a reversal plus the
+        // corrected entry (BACKEND_TODO §17 phase 3). Heads only.
+        Route::middleware('head.only')->group(function () {
+            Route::get('gold-entries/{id}', [\App\Http\Controllers\Api\GoldEntryController::class, 'show'])->whereNumber('id');
+            Route::post('gold-entries/{id}/correct', [\App\Http\Controllers\Api\GoldEntryController::class, 'correct'])->whereNumber('id');
+            // Numeric wastage lines the same way; {id} is the stock row id (§17).
+            Route::get('numeric-wastage-entries/{direction}/{id}', [\App\Http\Controllers\Api\NumericWastageEntryController::class, 'show'])
+                ->whereIn('direction', ['in', 'out'])->whereNumber('id');
+            Route::post('numeric-wastage-entries/{direction}/{id}/correct', [\App\Http\Controllers\Api\NumericWastageEntryController::class, 'correct'])
+                ->whereIn('direction', ['in', 'out'])->whereNumber('id');
+        });
+        // Cash categories and banks: read by everyone, changed by heads only (§26).
+        Route::apiResource('cash-categories', CashCategoryController::class)->only(['index', 'show']);
+        Route::apiResource('bank-details', BankDetailController::class)->only(['index', 'show']);
+        Route::middleware('head.only')->group(function () {
+            Route::apiResource('cash-categories', CashCategoryController::class)->except(['index', 'show']);
+            Route::apiResource('bank-details', BankDetailController::class)->except(['index', 'show']);
+        });
         Route::apiResource('phone-book', PhoneBookController::class)->only(['index', 'show']);
-        Route::post('cash-txn-details/{id}/images', [CashTxnDetailController::class, 'addImages']);
-        Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage']);
-        Route::apiResource('bank-details', BankDetailController::class);
+        Route::post('cash-txn-details/{id}/images', [CashTxnDetailController::class, 'addImages'])->middleware('act.as.head');
+        Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage'])->middleware('act.as.head');
         Route::apiResource('reminders', ReminderController::class);
 
-        Route::post('purchase-gold', [PurchaseGoldController::class, 'store']);
-        Route::post('sale-gold', [SaleGoldController::class, 'store']);
-        Route::post('cash-txn-details/in', [CashTxnDetailController::class, 'postIncome']);
-        Route::post('cash-txn-details/out', [CashTxnDetailController::class, 'postExpense']);
-        Route::post('cash-txn-details/auto-entry', [CashTxnDetailController::class, 'autoEntry']);
-        Route::post('cash-to-gold', [CashToGoldController::class, 'store']);
-        Route::post('gold-to-cash', [GoldToCashController::class, 'store']);
+        // Entering cash and gold values: heads, or users with the "can act as
+        // head" permission (EnsureCanActAsHead).
+        Route::middleware('act.as.head')->group(function () {
+            Route::post('purchase-gold', [PurchaseGoldController::class, 'store']);
+            Route::post('sale-gold', [SaleGoldController::class, 'store']);
+            Route::post('cash-txn-details/in', [CashTxnDetailController::class, 'postIncome']);
+            Route::post('cash-txn-details/out', [CashTxnDetailController::class, 'postExpense']);
+            Route::post('cash-txn-details/auto-entry', [CashTxnDetailController::class, 'autoEntry']);
+            Route::post('cash-to-gold', [CashToGoldController::class, 'store']);
+            Route::post('gold-to-cash', [GoldToCashController::class, 'store']);
+        });
         
-        // System Settings
-        Route::apiResource('settings', \App\Http\Controllers\Api\SystemSettingController::class)->parameters([
-            'settings' => 'key'
-        ]);
+        // System Settings: read by everyone (the stock screens read
+        // metal_popup_items), changed by heads only (§26).
+        Route::apiResource('settings', \App\Http\Controllers\Api\SystemSettingController::class)
+            ->only(['index', 'show'])
+            ->parameters(['settings' => 'key']);
+        Route::apiResource('settings', \App\Http\Controllers\Api\SystemSettingController::class)
+            ->except(['index', 'show'])
+            ->parameters(['settings' => 'key'])
+            ->middleware('head.only');
 
         // System Audit Logs (Admin Panel)
         Route::get('system-logs/filters', [SystemLogController::class, 'filters']);
@@ -99,21 +153,26 @@ Route::prefix('v1')->group(function () {
 });
 
 Route::prefix('v1/stock')->middleware('auth:api')->group(function () {
-    Route::post('out', [StockDetailsController::class, 'postStockOut']);
-    Route::post('in', [StockDetailsController::class, 'postStockIn']);
-    Route::post('item-change', [StockDetailsController::class, 'postItemChange']);
-    Route::post('item-conversion', [StockDetailsController::class, 'postItemConversion']);
-    Route::post('gms-out', [StockDetailsController::class, 'postGmsOut']);
-    Route::post('gms-in', [StockDetailsController::class, 'postGmsIn']);
-    Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
-    Route::post('numeric-waste-in', [StockDetailsController::class, 'postNumericWasteIn']);
-    Route::post('auto-entry', [StockDetailsController::class, 'postAutoEntry']);
+    // Entering stock values: heads, or users with the "can act as head"
+    // permission (EnsureCanActAsHead).
+    Route::middleware('act.as.head')->group(function () {
+        Route::post('out', [StockDetailsController::class, 'postStockOut']);
+        Route::post('in', [StockDetailsController::class, 'postStockIn']);
+        Route::post('item-change', [StockDetailsController::class, 'postItemChange']);
+        Route::post('item-conversion', [StockDetailsController::class, 'postItemConversion']);
+        Route::post('gms-out', [StockDetailsController::class, 'postGmsOut']);
+        Route::post('gms-in', [StockDetailsController::class, 'postGmsIn']);
+        Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
+        Route::post('numeric-waste-in', [StockDetailsController::class, 'postNumericWasteIn']);
+        Route::post('auto-entry', [StockDetailsController::class, 'postAutoEntry']);
+        Route::post('hide', [StockDetailsController::class, 'postHide']);
+        Route::post('unhide', [StockDetailsController::class, 'postUnhide']);
+        Route::post('cash-out', [StockDetailsController::class, 'postCash']);
+    });
+
     Route::get('reports/items-obcb/export', [StockDetailsController::class, 'exportHistoryItemsObcb']);
     Route::get('reports/items-obcb', [StockDetailsController::class, 'getHistoryItemsObcb']);
     Route::get('reports/consolidated/export', [StockDetailsController::class, 'exportConsolidatedReport']);
     Route::get('reports/consolidated', [StockDetailsController::class, 'getConsolidatedReport']);
     Route::get('reports/id-wise', [StockDetailsController::class, 'getIdWiseReport']);
-    Route::post('hide', [StockDetailsController::class, 'postHide']);
-    Route::post('unhide', [StockDetailsController::class, 'postUnhide']);
-    Route::post('cash-out', [StockDetailsController::class, 'postCash']);
 });

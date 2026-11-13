@@ -13,11 +13,13 @@ import { purchaseGoldApi } from '@/lib/purchaseGoldApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { sourceTypeOptions } from '@/lib/cashTxnOptions'
 import { ApiError } from '@/lib/api'
+import { CORRECTION_NOTE, toNumber, toSourceInputs } from '@/lib/goldCorrection'
 import { useToastStore } from '@/stores/toast'
 import type {
   BankDetail,
   CashTxnSourceType,
   CategoryName,
+  GoldCorrection,
   Item,
   PurchaseGoldAmountSourceInput,
   PurchaseGoldType,
@@ -29,6 +31,12 @@ import type {
 |--------------------------------------------------------------------------
 | Same POST /purchase-gold flow as the standalone page, minus the head/
 | customer pickers — already fixed by the Cash Management hub selection.
+|
+| With `correction` set, it opens prefilled to correct an existing entry
+| (heads only, BACKEND_TODO §17 phase 3): saving reverses the original and
+| posts the corrected one. Item and "transfer to head" are locked, there's
+| no receipt upload, and no balance preview (it would show today's balances
+| without the original taken off).
 |--------------------------------------------------------------------------
 */
 
@@ -41,6 +49,7 @@ const props = defineProps<{
   banks: BankDetail[]
   reloadItems?: () => unknown
   reloadBanks?: () => unknown
+  correction?: GoldCorrection
 }>()
 
 const emit = defineEmits<{ close: []; saved: [] }>()
@@ -145,7 +154,42 @@ async function loadBalances() {
     isLoadingBalance.value = false
   }
 }
-onMounted(loadBalances)
+
+function prefillFromCorrection() {
+  const input = props.correction?.input
+  if (!input) return
+  form.type = (input.type as PurchaseGoldType | undefined) ?? 'HEAD'
+  form.item_id = input.item_id ?? null
+  form.total_cash = toNumber(input.total_cash)
+  form.per_gram_cash = toNumber(input.per_gram_cash)
+  form.touch = toNumber(input.touch)
+  form.amnt_transfer_to_head = input.amnt_transfer_to_head ?? true
+  form.remarks = input.remarks ?? ''
+  form.retailer_id = input.retailer_id
+  form.amount_sources = toSourceInputs(input)
+
+  // A "taken" figure below the full amount was a deliberate partial
+  // delivery: keep it instead of letting it follow the totals again.
+  const keepTaken = (taken: string | null | undefined, full: string | undefined) =>
+    taken !== null && taken !== undefined && toNumber(taken) !== toNumber(full)
+  if (keepTaken(input.taken_total_cash, input.total_cash)) {
+    takenTotalCashTouched.value = true
+    takenTotalCash.value = toNumber(input.taken_total_cash)
+  }
+  if (keepTaken(input.taken_purity, input.purity)) {
+    takenPurityTouched.value = true
+    takenPurity.value = toNumber(input.taken_purity)
+  }
+  if (keepTaken(input.taken_total_grams, input.total_grams)) {
+    takenTotalGramsTouched.value = true
+    takenTotalGrams.value = toNumber(input.taken_total_grams)
+  }
+}
+
+onMounted(() => {
+  if (props.correction) prefillFromCorrection()
+  else loadBalances()
+})
 
 function clearFieldErrors() {
   Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
@@ -252,28 +296,31 @@ async function handleSubmit() {
 
   isSaving.value = true
   try {
-    await purchaseGoldApi.create(
-      {
-        type: form.type,
-        head_id: props.headId,
-        customer_id: props.customerId,
-        item_id: form.item_id,
-        total_grams: totalGrams.value,
-        touch: form.touch,
-        per_gram_cash: form.per_gram_cash,
-        purity: purity.value,
-        total_cash: form.total_cash,
-        taken_total_cash: takenTotalCash.value,
-        taken_total_grams: takenTotalGrams.value,
-        taken_purity: takenPurity.value,
-        amnt_transfer_to_head: form.amnt_transfer_to_head,
-        remarks: form.remarks,
-        retailer_id: form.retailer_id,
-        amount_sources: form.amount_sources.map((s) => ({ ...s })),
-      },
-      images.value,
-    )
-    toastStore.show('Purchase Gold transaction saved successfully.', 'success')
+    const values = {
+      type: form.type,
+      head_id: props.headId,
+      customer_id: props.customerId,
+      item_id: form.item_id,
+      total_grams: totalGrams.value,
+      touch: form.touch,
+      per_gram_cash: form.per_gram_cash,
+      purity: purity.value,
+      total_cash: form.total_cash,
+      taken_total_cash: takenTotalCash.value,
+      taken_total_grams: takenTotalGrams.value,
+      taken_purity: takenPurity.value,
+      amnt_transfer_to_head: form.amnt_transfer_to_head,
+      remarks: form.remarks,
+      retailer_id: form.retailer_id,
+      amount_sources: form.amount_sources.map((s) => ({ ...s })),
+    }
+    if (props.correction) {
+      await purchaseGoldApi.correct(props.correction.goldEntryId, values)
+      toastStore.show(`Purchase Gold entry #${props.correction.goldEntryId} corrected.`, 'success')
+    } else {
+      await purchaseGoldApi.create(values, images.value)
+      toastStore.show('Purchase Gold transaction saved successfully.', 'success')
+    }
     emit('saved')
   } catch (err) {
     if (err instanceof ApiError) {
@@ -298,7 +345,7 @@ async function handleSubmit() {
 
 <template>
   <BaseModal
-    title="Purchase Gold"
+    :title="correction ? `Correct Purchase Gold #${correction.goldEntryId}` : 'Purchase Gold'"
     :badge="`${customerName} to ${headName}`"
     badge-class="bg-amber-500"
     @close="emit('close')"
@@ -310,7 +357,14 @@ async function handleSubmit() {
       {{ formError }}
     </p>
 
-    <div>
+    <p
+      v-if="correction"
+      class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+    >
+      {{ CORRECTION_NOTE }}
+    </p>
+
+    <div v-else>
       <p class="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Balances</p>
       <PartyBalanceCards
         :left-label="headName"
@@ -347,6 +401,7 @@ async function handleSubmit() {
           placeholder="Select an item…"
           :options="itemOptions"
           :reload="reloadItems"
+          :disabled="!!correction"
           :error="fieldErrors.item_id"
           @update:model-value="
             (v) => {
@@ -413,6 +468,7 @@ async function handleSubmit() {
           v-model="form.amnt_transfer_to_head"
           label="Transfer amount to head"
           class="self-end pb-2"
+          :disabled="!!correction"
         />
       </div>
 
@@ -470,7 +526,7 @@ async function handleSubmit() {
 
       <BaseTextarea id="remarks" v-model="form.remarks" label="Remarks" size="sm" :rows="2" />
 
-      <div>
+      <div v-if="!correction">
         <BaseFileInput
           id="images"
           v-model="images"
@@ -546,7 +602,7 @@ async function handleSubmit() {
 
       <div class="flex items-center gap-3 border-t border-slate-200 pt-4">
         <BaseButton type="submit" :disabled="isSaving">
-          {{ isSaving ? 'Saving…' : 'Save' }}
+          {{ isSaving ? 'Saving…' : correction ? 'Save correction' : 'Save' }}
         </BaseButton>
         <BaseButton variant="secondary" type="button" @click="emit('close')">Close</BaseButton>
       </div>

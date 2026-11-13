@@ -35,7 +35,8 @@ class CashAutoEntryService
                 $givenBy = $data['head_id'];
             }
 
-            $addedBy = request()->header('X-User-ID', 1);
+            // The token's user (this used to trust an X-User-ID header, BACKEND_TODO §7).
+            $addedBy = (int) auth()->user()->user_id;
             $createdTransactions = [];
 
             foreach ($data['transactions'] as $txnData) {

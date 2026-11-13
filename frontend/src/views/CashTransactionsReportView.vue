@@ -134,7 +134,10 @@ function typeBadgeClass(label: string): string {
   return 'bg-slate-100 text-slate-600'
 }
 
-function formatMoney(value: number): string {
+// opening_balance / closing_balance are null when the balance belongs to
+// someone the viewer may not see (only heads see other users' balances).
+function formatMoney(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—'
   return Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 

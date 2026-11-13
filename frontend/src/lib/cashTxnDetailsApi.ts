@@ -2,6 +2,7 @@ import { api, type ApiResponse } from './api'
 import { buildMultipartForm } from './multipartForm'
 import type {
   CashTxnDetailRow,
+  CashTxnEditPayload,
   CashTxnHistoryPage,
   CashTxnHistoryQuery,
   CashTxnPostFormValues,
@@ -17,23 +18,15 @@ const RESOURCE = '/cash-txn-details'
 // endpoints. PR #17 added the read side — GET .../in-history and
 // .../out-history — and PR #32 put the whole group behind `auth:api`.
 //
-// On show/update/destroy: `apiResource('cash-txn-details')` IS registered
-// (routes/api.php:62) and all three methods exist on the controller, but only
-// `show` is usable. It eager-loads images/bank/givenByUser/givenToUser, every
-// one of which maps to a real column, so getOne below is safe.
+// Since 2026-11-12 `apiResource('cash-txn-details')` is read-only
+// (index/show) plus a new PUT for editing. Its old store/update/destroy were
+// written against the old schema (given_by, souce_type, bank_id, ...), so
+// DELETE removed an entry without restoring either party's balance; they stay
+// unregistered, and deleting isn't allowed at all (agreed 2026-11-12).
 //
-// `update` and `destroy` are NOT wired up here on purpose. Both were written
-// against the pre-PR-#13 schema and never migrated: they read `given_by`,
-// `souce_type`, `bank_id` and `opening_account_balance`, none of which exist
-// on cash_txn_details any more (it has sender_id / recipient_id /
-// payment_method / bank_account_id, and no opening-balance columns). The
-// practical effect is that `destroy` looks up `user_id = null`, matches
-// nobody, skips its guarded balance restore, and then deletes the row and
-// returns 200 — removing the transaction from history while leaving both
-// parties' rak_cash_balance as if it had happened. `update`'s validator only
-// recognises those same dead field names, so its balance-recalculation branch
-// operates on nulls. Calling either would silently desync the cash ledger.
-// Flagged to the backend team; see PENDING_WORK.md.
+// `show` (getOne below) returns 403 to a user who can't act as head and isn't
+// a party to the entry. `update` is heads only and, for now, Cash In / Cash
+// Out and Cash Auto Entry only (BACKEND_TODO §17 phases 1–2).
 // ============================================================================
 
 function buildHistoryQuery(params: CashTxnHistoryQuery): string {
@@ -100,12 +93,17 @@ export const cashTxnDetailsApi = {
       .get<ApiResponse<CashTxnHistoryPage>>(`${RESOURCE}/out-history${buildHistoryQuery(params)}`)
       .then((r) => r.data),
 
-  // GET /cash-txn-details/{id} — the one usable member of the apiResource
-  // trio (see the header comment). Returns the row with its parties, bank and
-  // images, plus the opening/closing balance snapshots the history list
-  // doesn't carry.
+  // GET /cash-txn-details/{id}. Returns the row with its parties, bank and
+  // images, the opening/closing balance snapshots the history list doesn't
+  // carry (only your own side unless you're a head), and edit_blocked_reason.
   getOne: (txnId: number) =>
     api.get<ApiResponse<CashTxnDetailRow>>(`${RESOURCE}/${txnId}`).then((r) => r.data),
+
+  // PUT /cash-txn-details/{id}, heads only. The backend corrects both
+  // parties' balances, the bank and every later entry's snapshots, and
+  // returns the updated row.
+  update: (txnId: number, payload: CashTxnEditPayload) =>
+    api.put<ApiResponse<CashTxnDetailRow>>(`${RESOURCE}/${txnId}`, payload).then((r) => r.data),
 
   // Single-transaction thermal print payload — CashTxnDetailController::
   // getPrintReport's ?id= branch (the bulk date-range branch of the same

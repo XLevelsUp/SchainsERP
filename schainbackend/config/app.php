@@ -43,6 +43,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Seeded Account Password
+    |--------------------------------------------------------------------------
+    |
+    | Password for the accounts the database seeders create. Leave it unset to
+    | get a random one, printed when the seeders run (see SeedPassword).
+    |
+    */
+
+    'seed_user_password' => env('SEED_USER_PASSWORD'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application URL
     |--------------------------------------------------------------------------
     |

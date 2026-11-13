@@ -1,3 +1,5 @@
+import type { NumericWastageRef } from './numericWastageEntry'
+
 // ============================================================================
 // POST /cash-txn-details/in and /cash-txn-details/out
 // (CashTxnDetailController::postIncome/postExpense, backed by
@@ -77,7 +79,9 @@ export interface CashTxnDetailUserRef {
 
 export interface CashTxnDetailBankRef {
   bank_id: number
-  bank_name: string | null
+  // bank_details' name column is account_name; bank_name was never a column.
+  account_name?: string | null
+  bank_name?: string | null
   account_number?: string | null
 }
 
@@ -98,17 +102,24 @@ export interface CashTxnDetailRow {
   recipient_id: number
   category_id: number | null
   amount: string
-  balance_after_txn: string | null
-  sender_opening_cash: string
-  sender_opening_rtgs: string
-  recipient_opening_cash: string
-  recipient_opening_rtgs: string
-  sender_closing_cash: string
-  sender_closing_rtgs: string
-  recipient_closing_cash: string
-  recipient_closing_rtgs: string
+  balance_after_txn?: string | null
+  sender_opening_cash?: string
+  sender_opening_rtgs?: string
+  recipient_opening_cash?: string
+  recipient_opening_rtgs?: string
+  sender_closing_cash?: string
+  sender_closing_rtgs?: string
+  recipient_closing_cash?: string
+  recipient_closing_rtgs?: string
   payment_method: CashTxnSourceType
   bank_account_id: number | null
+  // Set when the entry belongs to a gold entry (Cash to Gold, Gold to Cash,
+  // Purchase or Sale Gold). Such entries are corrected through the gold
+  // entry, not edited (BACKEND_TODO §17 phase 3).
+  cash_to_gold_id?: number | null
+  // Set (by GET /cash-txn-details/{id} only) when the entry is a numeric
+  // wastage line's cash. Corrected through that line (BACKEND_TODO §17).
+  numeric_wastage?: NumericWastageRef | null
   remarks: string | null
   remainder: string | null
   remainder_at: string | null
@@ -121,4 +132,25 @@ export interface CashTxnDetailRow {
   givenToUser: CashTxnDetailUserRef | null
   bank: CashTxnDetailBankRef | null
   images: CashTxnDetailImage[]
+  // Why a head can't edit this entry yet; null when they can (Cash In / Cash
+  // Out not tied to a gold or numeric-wastage entry). Absent from older
+  // backends, which means "not editable".
+  edit_blocked_reason?: string | null
+}
+
+// The balance snapshots above are each party's balance at the time. Since
+// 2026-11-12 a non-head only receives their own side; the other party's
+// fields are left out (and balance_after_txn too).
+
+// PUT /cash-txn-details/{id} (heads only, BACKEND_TODO §17). Every field is
+// optional; the parties can't be changed. bank_account_id is required when
+// the payment method ends up BANK. created_at is "YYYY-MM-DD HH:mm:ss" in the
+// app's timezone.
+export interface CashTxnEditPayload {
+  amount?: number
+  payment_method?: CashTxnSourceType
+  bank_account_id?: number | null
+  category_id?: number | null
+  remarks?: string | null
+  created_at?: string
 }

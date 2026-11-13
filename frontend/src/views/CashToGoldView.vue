@@ -295,7 +295,7 @@ async function handleSubmit() {
         class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
       >
         Saved Cash To Gold #{{ lastResult.cash_to_gold_id }}.
-        <template v-if="lastResult.head">
+        <template v-if="lastResult.head && lastResult.head.cash_balance !== undefined">
           Head cash balance: {{ lastResult.head.cash_balance }} · Head grams total:
           {{ lastResult.head.grams_grand_total }}
         </template>

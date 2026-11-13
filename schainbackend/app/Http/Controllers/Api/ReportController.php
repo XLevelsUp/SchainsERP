@@ -9,9 +9,12 @@ use App\Models\CashCategory;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use App\Http\Controllers\Concerns\ScopesRecordAccess;
 
 class ReportController extends Controller
 {
+    use ScopesRecordAccess;
+
     /**
      * Get Cash Transactions for the Reports Page.
      * Legacy UI Replication.
@@ -28,6 +31,15 @@ class ReportController extends Controller
                 'bank:bank_id,account_name',
                 'cashToGold' // Needed for cash-to-gold specific logic in resource
             ]);
+
+            // Heads and users who can act as head see every entry (balances are hidden
+            // from the latter by the resource); anyone else only entries they are a party to.
+            if (!$this->actingUserCanActAsHead($request)) {
+                $self = $this->actingUserId($request);
+                $query->where(function ($q) use ($self) {
+                    $q->where('sender_id', $self)->orWhere('recipient_id', $self);
+                });
+            }
 
             // Single category filter
             if ($request->filled('category_id')) {
@@ -124,7 +136,6 @@ class ReportController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve Cash Transactions Report',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -142,7 +153,7 @@ class ReportController extends Controller
     {
         try {
             // Determine the target user_id
-            $actingUserId = $request->user()->user_id ?? (int)$request->header('X-User-ID', 1);
+            $actingUserId = $this->actingUserId($request);
             $targetUserId = $actingUserId;
 
             // Admin Override Check
@@ -180,7 +191,6 @@ class ReportController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve Metal Live Report',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -190,8 +200,14 @@ class ReportController extends Controller
      */
     public function getOneDayActionReport(Request $request, \App\Services\ReportService $reportService): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersRecords($request, ['employee_id'])) {
+            return $denied;
+        }
+
         try {
-            $headId = (int) $request->header('X-User-ID', 1); // Get acting user
+            // The token's user. This used to read an X-User-ID header and fall
+            // back to user 1 without it (BACKEND_TODO §7).
+            $headId = $this->actingUserId($request);
             $filters = $request->all();
 
             // Default to today if no date provided
@@ -214,14 +230,19 @@ class ReportController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch one day action report.',
-                'error' => $e->getMessage()
             ], 500);
         }
     }
     public function getDaywiseGrandReport(Request $request): JsonResponse
     {
+        if ($denied = $this->forbidOtherUsersRecords($request, ['head_user_id', 'employee_id', 'user_id', 'customer_id', 'retailer_id'])) {
+            return $denied;
+        }
+
         try {
-            $headId = (int) $request->header('X-User-ID', 1);
+            // The token's user. This used to read an X-User-ID header and fall
+            // back to user 1 without it (BACKEND_TODO §7).
+            $headId = $this->actingUserId($request);
             $filters = $request->all();
 
             $result = $this->reportService->getDaywiseGrandReport($filters, $headId);
@@ -237,7 +258,6 @@ class ReportController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch daywise grand report.',
-                'error' => $e->getMessage()
             ], 500);
         }
     }

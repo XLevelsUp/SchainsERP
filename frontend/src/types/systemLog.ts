@@ -1,3 +1,5 @@
+import type { ApiPagination } from './pagination'
+
 // GET /system-logs, /system-logs/{id} and /system-logs/filters — the audit
 // trail added in commit 3d048b3c (SystemLogController, SystemLogResource).
 //
@@ -81,15 +83,9 @@ export interface SystemLogQuery {
 }
 
 // Unlike most paginated endpoints here, the rows are the envelope's `data`
-// directly and the paginator fields sit beside it in `pagination`.
-export interface SystemLogPagination {
-  total: number
-  per_page: number
-  current_page: number
-  last_page: number
-  from: number | null
-  to: number | null
-}
+// directly and the paginator fields sit beside it in `pagination`. The same
+// shape is shared with GET /orders, see ApiPagination.
+export type SystemLogPagination = ApiPagination
 
 export interface SystemLogFilterUser {
   id: number

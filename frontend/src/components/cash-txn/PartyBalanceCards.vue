@@ -57,8 +57,13 @@ const props = withDefaults(
 const hasRight = computed(() => props.rightLabel !== undefined)
 const showGold = computed(() => props.leftObGrams !== undefined)
 
+// Balances are withheld from non-heads (the API leaves the fields out), and a
+// closing balance computed from a missing opening one comes out as NaN, so
+// both show as "—".
 function fmt(value: number | null | undefined) {
-  return value === null || value === undefined ? '—' : value.toLocaleString()
+  return value === null || value === undefined || !Number.isFinite(value)
+    ? '—'
+    : value.toLocaleString()
 }
 
 const leftShowsGrams = computed(() => categoryShowsGrams(props.leftCategory))

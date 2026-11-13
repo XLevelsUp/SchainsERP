@@ -146,6 +146,7 @@ export type UserFeatureFlagKey =
   | 'is_remainder_shown'
   | 'is_admin_login_otp_need_to_shown'
   | 'is_freeze_entry_need_to_shown'
+  | 'is_act_as_head_enabled'
 
 export type UserFeatureFlags = Record<UserFeatureFlagKey, boolean>
 

@@ -71,6 +71,7 @@ class UserDetail extends Model
         'is_cash_mngmt_need_to_shown',
         'is_freeze_entry_need_to_shown',
         'is_admin_login_otp_need_to_shown',
+        'is_act_as_head_enabled',
         'is_customer_cmts_need_to_shown',
         'is_outside_need_to_shown',
         'is_tally_need_to_shown',
@@ -106,9 +107,46 @@ class UserDetail extends Model
         'otp',
     ];
 
+    /**
+     * Balance columns. Only heads see other users' values; everyone sees
+     * their own (agreed 2026-11-12, see App\Support\BalanceVisibility).
+     */
+    public const BALANCE_FIELDS = [
+        'grams_grand_total',
+        'purity_grand_total',
+        'stone_weight_grand_total',
+        'beads_weight_grand_total',
+        'net_weight_grand_total',
+        'gross_weight_grand_total',
+        'beads_stone_weight_grand_total',
+        'stone_cost_grand_total',
+        'beads_cost_grand_total',
+        'beads_stone_cost_grand_total',
+        'order_grand_total',
+        'rak_cash_balance',
+        'rak_rtgs_balance',
+        'cash_balance',
+        'rtgs_balance',
+    ];
+
+    public function toArray()
+    {
+        $data = parent::toArray();
+
+        if (!\App\Support\BalanceVisibility::canSeeBalancesOf($this->getKey())) {
+            foreach (self::BALANCE_FIELDS as $field) {
+                unset($data[$field]);
+            }
+        }
+
+        return $data;
+    }
+
     protected $casts = [
 
         'role_id' => 'integer',
+
+        'is_act_as_head_enabled' => 'boolean',
 
         'is_active' => 'boolean',
         'is_delete' => 'boolean',

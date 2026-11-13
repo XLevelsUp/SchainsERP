@@ -18,7 +18,7 @@ class SaleGoldService extends BaseStockService
     /**
      * Store a Sale Gold transaction atomically.
      */
-    public function store(array $data, int $addedBy): SaleGold
+    public function store(array $data, int $addedBy, array $options = []): SaleGold
     {
         return DB::transaction(function () use ($data, $addedBy) {
             // Lock users

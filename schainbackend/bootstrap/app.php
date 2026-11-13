@@ -13,6 +13,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->alias([
+            'act.as.head' => \App\Http\Middleware\EnsureCanActAsHead::class,
+            'head.only' => \App\Http\Middleware\EnsureHead::class,
+        ]);
+
         $middleware->redirectGuestsTo(fn (Request $request) => abort(response()->json([
             'success' => false,
             'message' => 'Unauthenticated.'

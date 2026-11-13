@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { RefreshCw, Plus, Pencil, Trash2, X, TriangleAlert } from 'lucide-vue-next'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { RefreshCw, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -20,30 +20,23 @@ import type { DataTableColumn, Item, Order, UserDetailListItem } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
-| Orders — apiResource('orders') (PR #43–#45, validated in PR #48)
+| Orders — apiResource('orders')
 |--------------------------------------------------------------------------
-| CRUD over `order_details`. Feeds the "Active Orders" figure that
-| HeadStockSummaryPanel has always shown as 0, because the table did not
-| exist until this PR.
+| CRUD over `order_details`.
 |
-| Originally built defensively against zero backend validation. PR #48
-| closed most of that: OrderController now checks customer_id/item_id exist
-| and status is a real enum. ORDER_STATUSES below is read straight off that
-| enum, not a guess any more — see its own comment for a mismatch that
-| caught (this file used to send 'IN_PROGRESS', the backend wants
-| 'PROCESSING'). grams still has no server-side bound, so this screen's own
-| checks stay in validate().
+| Since 2026-11-12 GET /orders is paginated and filtered server-side
+| (status, customer, added date range), newest first. Heads and employees
+| get every order; customers and retailers only their own, and the backend
+| answers 403 if they name another customer. ORDER_STATUSES is read off the
+| backend's validation enum. grams has no server-side bound, so this
+| screen's own checks stay in validate().
 |
-| PR #48 also validates `remarks`/`due_date`, which order_details has no
-| columns for — confirmed live, both crash with an uncaught 500. This form
-| has neither field on purpose; see types/order.ts for the full write-up
-| and don't add them until the backend fixes it.
-|
-| index() returns OrderDetail::all() with no eager loading, so customer and
-| item names are resolved from the lookups this screen loads itself, the same
-| way CustomerTouchMappingsView falls back for rows without relations.
+| Rows carry ids only, so customer and item names are resolved from the
+| lookups this screen loads itself.
 |--------------------------------------------------------------------------
 */
+
+const PER_PAGE = 50
 
 const toast = useToastStore()
 
@@ -54,10 +47,33 @@ const items = ref<Item[]>([])
 const isLoading = ref(false)
 const loadError = ref('')
 
+const page = ref(1)
+const lastPage = ref(1)
+const total = ref(0)
+const rangeFrom = ref<number | null>(null)
+const rangeTo = ref<number | null>(null)
+
 const filters = reactive({
   status: null as string | null,
   customer_id: null as number | null,
+  from_date: '',
+  to_date: '',
 })
+
+const hasFilters = computed(
+  () =>
+    filters.status !== null ||
+    filters.customer_id !== null ||
+    filters.from_date !== '' ||
+    filters.to_date !== '',
+)
+
+// YYYY-MM-DD strings compare correctly as text. The backend 422s on this too.
+const dateRangeError = computed(() =>
+  filters.from_date && filters.to_date && filters.from_date > filters.to_date
+    ? '“From” date must be on or before the “To” date.'
+    : '',
+)
 
 const statusOptions = ORDER_STATUSES.map((s) => ({ value: s as string, label: s.replace('_', ' ') }))
 const userOptions = computed(() =>
@@ -86,15 +102,6 @@ function itemLabel(row: Order): string {
   if (row.item_id === null) return '—'
   return itemNameById.value.get(row.item_id) ?? `#${row.item_id}`
 }
-
-// Both filters are client-side: index() takes no query parameters at all.
-const visibleOrders = computed(() =>
-  orders.value.filter((o) => {
-    if (filters.status !== null && o.status !== filters.status) return false
-    if (filters.customer_id !== null && o.customer_id !== filters.customer_id) return false
-    return true
-  }),
-)
 
 // Actions are keyed on the id field with a blank label, and there is no
 // standalone ID column — same shape as UsersView/ItemsView. The order number
@@ -132,17 +139,55 @@ function statusClass(status: string): string {
   }
 }
 
-async function loadOrders() {
+// Ticket guards against an older, slower response overwriting a newer one
+// when filters change quickly.
+let latestRequest = 0
+
+async function loadOrders(targetPage = page.value) {
+  if (dateRangeError.value) return
+  const ticket = ++latestRequest
   isLoading.value = true
   loadError.value = ''
   try {
-    orders.value = await ordersApi.list()
+    const { rows, pagination } = await ordersApi.list({
+      page: targetPage,
+      per_page: PER_PAGE,
+      status: filters.status ?? undefined,
+      customer_id: filters.customer_id ?? undefined,
+      from_date: filters.from_date || undefined,
+      to_date: filters.to_date || undefined,
+    })
+    if (ticket !== latestRequest) return
+    // Deleting the last row on the last page leaves that page empty.
+    if (rows.length === 0 && pagination.current_page > 1) {
+      await loadOrders(pagination.last_page)
+      return
+    }
+    orders.value = rows
+    page.value = pagination.current_page
+    lastPage.value = pagination.last_page
+    total.value = pagination.total
+    rangeFrom.value = pagination.from
+    rangeTo.value = pagination.to
   } catch (err) {
+    if (ticket !== latestRequest) return
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load orders.'
   } finally {
-    isLoading.value = false
+    if (ticket === latestRequest) isLoading.value = false
   }
 }
+
+function prevPage() {
+  if (page.value > 1) loadOrders(page.value - 1)
+}
+function nextPage() {
+  if (page.value < lastPage.value) loadOrders(page.value + 1)
+}
+
+watch(
+  () => [filters.status, filters.customer_id, filters.from_date, filters.to_date],
+  () => loadOrders(1),
+)
 
 async function loadLookups() {
   try {
@@ -241,17 +286,19 @@ async function saveForm() {
     status: form.status,
   }
   try {
+    // Reload rather than patch the list: the server decides order, paging and
+    // whether the row still matches the filters.
     if (formMode.value === 'create') {
       const created = await ordersApi.create(payload)
-      orders.value = [created, ...orders.value]
       toast.show(`Order #${created.order_id} created.`, 'success')
+      closeForm()
+      await loadOrders(1)
     } else if (editingId.value !== null) {
       const updated = await ordersApi.update(editingId.value, payload)
-      const index = orders.value.findIndex((o) => o.order_id === editingId.value)
-      if (index !== -1) orders.value[index] = updated
       toast.show(`Order #${updated.order_id} saved.`, 'success')
+      closeForm()
+      await loadOrders()
     }
-    closeForm()
   } catch (err) {
     if (err instanceof ApiError) {
       formError.value = err.errors ? (Object.values(err.errors)[0]?.[0] ?? err.message) : err.message
@@ -274,9 +321,9 @@ async function handleDelete(row: Order) {
   deletingId.value = row.order_id
   try {
     await ordersApi.remove(row.order_id)
-    orders.value = orders.value.filter((o) => o.order_id !== row.order_id)
     if (editingId.value === row.order_id) closeForm()
     toast.show(`Order #${row.order_id} deleted.`, 'success')
+    await loadOrders()
   } catch (err) {
     toast.show(err instanceof ApiError ? err.message : 'Failed to delete the order.', 'error')
   } finally {
@@ -287,11 +334,13 @@ async function handleDelete(row: Order) {
 function clearFilters() {
   filters.status = null
   filters.customer_id = null
+  filters.from_date = ''
+  filters.to_date = ''
 }
 
 onMounted(async () => {
   await loadLookups()
-  await loadOrders()
+  await loadOrders(1)
 })
 </script>
 
@@ -299,33 +348,20 @@ onMounted(async () => {
   <div>
     <PageHeader title="Orders" description="Customer orders and their fulfilment status.">
       <template #actions>
-        <BaseButton variant="secondary" :icon="RefreshCw" :disabled="isLoading" @click="loadOrders">
+        <BaseButton
+          variant="secondary"
+          :icon="RefreshCw"
+          :disabled="isLoading"
+          @click="loadOrders()"
+        >
           Refresh
         </BaseButton>
         <BaseButton :icon="Plus" @click="openCreate">New order</BaseButton>
       </template>
     </PageHeader>
 
-    <div
-      class="mb-4 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-    >
-      <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-      <div>
-        <p class="font-medium">Create and edit orders here, not through the API directly.</p>
-        <p class="mt-1 text-amber-800">
-          The backend now checks that the customer and item exist and that status is one of
-          PENDING/PROCESSING/COMPLETED/CANCELLED (PR #48) — real validation, not this screen's
-          guess any more. What it does <em>not</em> check: the grams amount has no server-side
-          bound, so this screen's own checks are still the only ones there. Also worth knowing —
-          this form deliberately has no remarks or due-date field: the API accepts both but the
-          orders table has no such columns, so sending either crashes with a 500. Flagged to
-          backend; don't add those fields here until it's fixed.
-        </p>
-      </div>
-    </div>
-
     <BaseCard class="mb-4">
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <BaseSelect
           v-model="filters.status"
           label="Status"
@@ -341,14 +377,32 @@ onMounted(async () => {
           :options="userOptions"
           :reload="reloadUsers"
         />
+        <BaseInput
+          v-model="filters.from_date"
+          label="Added from"
+          type="date"
+          size="sm"
+          clearable
+        />
+        <BaseInput
+          v-model="filters.to_date"
+          label="Added to"
+          type="date"
+          size="sm"
+          clearable
+          :error="dateRangeError || undefined"
+        />
         <div class="flex items-end">
-          <BaseButton variant="secondary" type="button" @click="clearFilters">Clear</BaseButton>
+          <BaseButton
+            variant="secondary"
+            type="button"
+            :disabled="!hasFilters"
+            @click="clearFilters"
+          >
+            Clear
+          </BaseButton>
         </div>
       </div>
-      <p class="mt-2 text-xs text-slate-500">
-        Both filters run in the browser — the endpoint returns every order and takes no query
-        parameters.
-      </p>
     </BaseCard>
 
     <p
@@ -426,20 +480,15 @@ onMounted(async () => {
       </form>
     </BaseCard>
 
-    <p class="mb-2 text-sm text-slate-500">
-      Showing <span class="font-medium text-slate-700">{{ visibleOrders.length }}</span> of
-      <span class="font-medium text-slate-700">{{ orders.length }}</span> orders
-    </p>
-
     <DataTable
       :columns="columns"
-      :rows="visibleOrders"
+      :rows="orders"
       :empty-message="
         isLoading
           ? 'Loading…'
-          : orders.length === 0
-            ? 'No orders yet. Use “New order” to create the first one.'
-            : 'No orders match these filters.'
+          : hasFilters
+            ? 'No orders match these filters.'
+            : 'No orders yet. Use “New order” to create the first one.'
       "
     >
       <template #customer_id="{ row }">
@@ -491,5 +540,32 @@ onMounted(async () => {
         </div>
       </template>
     </DataTable>
+
+    <div v-if="total > 0" class="mt-3 flex items-center justify-between text-xs text-slate-500">
+      <span class="tabular-nums">
+        {{ rangeFrom ?? 0 }}–{{ rangeTo ?? 0 }} of {{ total }} order{{ total === 1 ? '' : 's' }}
+      </span>
+      <div class="flex items-center gap-1">
+        <button
+          type="button"
+          class="rounded-md p-1 text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="page === 1 || isLoading"
+          aria-label="Previous page"
+          @click="prevPage"
+        >
+          <ChevronLeft class="h-4 w-4" />
+        </button>
+        <span>Page {{ page }} of {{ lastPage }}</span>
+        <button
+          type="button"
+          class="rounded-md p-1 text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="page === lastPage || isLoading"
+          aria-label="Next page"
+          @click="nextPage"
+        >
+          <ChevronRight class="h-4 w-4" />
+        </button>
+      </div>
+    </div>
   </div>
 </template>

@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuthUser;
 use App\Models\Item;
 use App\Models\UserDetail;
+use Laravel\Passport\Passport;
 use App\Models\StockInDetail;
 use App\Models\GmsInHistory;
 use App\Models\NumericWastageIn;
@@ -26,6 +28,10 @@ class StockInDetailsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Roles: entering stock needs a HEAD (or the act-as-head permission).
+        \App\Models\Role::create(['role' => 'HEAD']);      // id 1
+        \App\Models\Role::create(['role' => 'EMPLOYEE']);  // id 2
 
         // Seed basic users
         $this->head = UserDetail::create([
@@ -141,9 +147,8 @@ class StockInDetailsTest extends TestCase
             ]
         ];
 
-        $response = $this->withHeaders([
-            'X-User-ID' => $this->head->user_id,
-        ])->postJson('/api/v1/stock/in', $payload);
+        Passport::actingAs(AuthUser::findOrFail($this->head->user_id));
+        $response = $this->postJson('/api/v1/stock/in', $payload);
 
         $response->assertStatus(201);
         $response->assertJsonPath('success', true);
@@ -189,9 +194,8 @@ class StockInDetailsTest extends TestCase
             ]
         ];
 
-        $response = $this->withHeaders([
-            'X-User-ID' => $this->head->user_id,
-        ])->postJson('/api/v1/stock/gms-in', $payload);
+        Passport::actingAs(AuthUser::findOrFail($this->head->user_id));
+        $response = $this->postJson('/api/v1/stock/gms-in', $payload);
 
         $response->assertStatus(201);
         $response->assertJsonPath('success', true);
@@ -241,9 +245,8 @@ class StockInDetailsTest extends TestCase
             ]
         ];
 
-        $response = $this->withHeaders([
-            'X-User-ID' => $this->head->user_id,
-        ])->postJson('/api/v1/stock/numeric-waste-in', $payload);
+        Passport::actingAs(AuthUser::findOrFail($this->head->user_id));
+        $response = $this->postJson('/api/v1/stock/numeric-waste-in', $payload);
 
         $response->assertStatus(201);
         $response->assertJsonPath('success', true);

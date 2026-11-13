@@ -27,7 +27,6 @@ class SystemSettingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve system settings',
-                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Internal Server Error'
             ], 500);
         }
     }
@@ -62,7 +61,6 @@ class SystemSettingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create system setting',
-                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Internal Server Error'
             ], 500);
         }
     }
@@ -89,7 +87,6 @@ class SystemSettingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve system setting',
-                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Internal Server Error'
             ], 500);
         }
     }
@@ -130,7 +127,6 @@ class SystemSettingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update system setting',
-                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Internal Server Error'
             ], 500);
         }
     }
@@ -158,7 +154,6 @@ class SystemSettingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete system setting',
-                'error' => env('APP_DEBUG') ? $e->getMessage() : 'Internal Server Error'
             ], 500);
         }
     }

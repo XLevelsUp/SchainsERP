@@ -718,8 +718,9 @@ class StockOutService extends BaseStockService
     public function createNumericWaste(array $data, int $addedBy): array
     {
         return DB::transaction(function () use ($data, $addedBy) {
-            $givenBy = UserDetail::findOrFail($data['given_by'] ?? $addedBy);
-            $givenTo = UserDetail::findOrFail($data['given_to']);
+            // Locked like Numeric Wastage In: the cash snapshots read these balances.
+            $givenBy = UserDetail::where('user_id', $data['given_by'] ?? $addedBy)->lockForUpdate()->firstOrFail();
+            $givenTo = UserDetail::where('user_id', $data['given_to'])->lockForUpdate()->firstOrFail();
             $addedAt = isset($data['added_at']) ? \Illuminate\Support\Carbon::parse($data['added_at']) : now();
 
             $createdWastages = [];
@@ -786,17 +787,14 @@ class StockOutService extends BaseStockService
                 $cashTxnId = null;
                 if ($amountPcs > 0) {
                     $cashAmount = $this->mul($noOfPcs, $amountPcs);
-                    
-                    $openingAccountBalance = $givenBy->rak_cash_balance;
-                    $openingUserBalance = $givenTo->rak_cash_balance;
 
                     $cashTxn = CashTxnDetail::create([
                         'type' => 'EXPENSE',
                         'recipient_id' => $givenTo->user_id, // worker receives cash
                         'sender_id' => $givenBy->user_id, // head admin pays cash
                         'amount' => $cashAmount,
-                        'sender_opening_cash' => $openingAccountBalance, // sender (head) cash balance
-                        'recipient_opening_cash' => $openingUserBalance, // receiver (worker) cash balance
+                        // head (sender) and worker (recipient) cash/RTGS before and after
+                        ...$this->cashOnHandSnapshots($givenBy, $givenTo, $cashAmount),
                         'payment_method' => 'CASH_ON_HAND',
                         'remarks' => "NUMERIC_WASTAGE EXPENSE (ID : {$stock->stock_id})",
                         'added_by' => $addedBy,
@@ -947,13 +945,10 @@ class StockOutService extends BaseStockService
     public function createCashOut(array $data, int $addedBy): CashTxnDetail
     {
         return DB::transaction(function () use ($data, $addedBy) {
-            $givenBy = UserDetail::findOrFail($addedBy); // head/sender
-            $givenTo = UserDetail::findOrFail($data['given_to']); // employee/receiver
+            $givenBy = UserDetail::where('user_id', $addedBy)->lockForUpdate()->firstOrFail(); // head/sender
+            $givenTo = UserDetail::where('user_id', $data['given_to'])->lockForUpdate()->firstOrFail(); // employee/receiver
             $amount = $data['amount'];
             $remarks = $data['remarks'] ?? null;
-
-            $openingAccountBalance = $givenBy->rak_cash_balance;
-            $openingUserBalance = $givenTo->rak_cash_balance;
 
             // Create cash transaction record
             $cashTxn = CashTxnDetail::create([
@@ -961,8 +956,7 @@ class StockOutService extends BaseStockService
                 'recipient_id' => $givenTo->user_id,
                 'sender_id' => $givenBy->user_id,
                 'amount' => $amount,
-                'sender_opening_cash' => $openingAccountBalance,
-                'recipient_opening_cash' => $openingUserBalance,
+                ...$this->cashOnHandSnapshots($givenBy, $givenTo, $amount),
                 'payment_method' => 'CASH_ON_HAND',
                 'remarks' => $remarks,
                 'added_by' => $addedBy,

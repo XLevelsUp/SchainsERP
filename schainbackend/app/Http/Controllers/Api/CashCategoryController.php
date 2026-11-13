@@ -41,7 +41,7 @@ class CashCategoryController extends Controller
         $data = $request->validated();
         
         // Add the user who created it
-        $data['added_by'] = $request->header('X-User-ID', 1);
+        $data['added_by'] = (int) $request->user()->user_id;
 
         $category = CashCategory::create($data);
 
