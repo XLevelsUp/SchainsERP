@@ -32,7 +32,13 @@ export const navItems: NavItem[] = [
   { type: 'link', label: 'Stock', to: '/stock', icon: Package },
   { type: 'link', label: 'Cash Management', to: '/cash-management', icon: ArrowLeftRight },
   { type: 'link', label: 'Clients', to: '/clients', icon: Users },
-  { type: 'link', label: 'Phone Book', to: '/phone-book', icon: BookUser },
+  {
+    type: 'link',
+    label: 'Phone Book',
+    to: '/phone-book',
+    icon: BookUser,
+    permission: 'is_phone_book_need_shown',
+  },
   {
     type: 'group',
     label: 'Settings',
@@ -47,10 +53,10 @@ export const navItems: NavItem[] = [
     type: 'group',
     label: 'Administration',
     icon: ShieldCheck,
-    // Users and Head Employee Mappings are in the admin console
-    // (admin/lib/nav.ts): admin accounts create users and assign heads.
+    // Users, Head Employee Mappings and Roles are in the admin console
+    // (admin/lib/nav.ts): admin accounts create users, assign heads and
+    // create roles.
     children: [
-      { type: 'link', label: 'Roles', to: '/roles', icon: ShieldCheck },
       { type: 'link', label: 'Customer Touch', to: '/customer-touch', icon: Hand },
       { type: 'link', label: 'Customer Touch Mappings', to: '/customer-touch-mappings', icon: Hand },
       { type: 'link', label: 'Bank Details', to: '/bank-details', icon: Landmark },

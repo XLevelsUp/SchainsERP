@@ -25,8 +25,12 @@ class AuthUser extends Authenticatable
         'password_hash',
     ];
 
+    // report_password and otp are secrets too; login and /me returned them
+    // to the browser until 2026-11-21 (UserDetail already hid them).
     protected $hidden = [
         'password_hash',
+        'report_password',
+        'otp',
     ];
 
     public function getAuthPassword()

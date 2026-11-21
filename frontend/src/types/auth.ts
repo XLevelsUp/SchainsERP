@@ -4,6 +4,18 @@
 // (user_id/name/user_name/role_id) and is now `{ user, token, token_type }`
 // with a Laravel Passport bearer token, because every route outside
 // /api/v1/login moved behind the `auth:api` middleware.
+
+// The permissions the app checks for the signed-in user (2026-11-21): an
+// admin switches them on per user in the admin console, and the app shows a
+// user only what they allow (lib/appPermissions.ts). Column names.
+export type AppPermission =
+  | 'is_item_change_need_shown'
+  | 'is_item_conversion_need_shown'
+  | 'is_cash_mngmt_need_to_shown'
+  | 'is_phone_book_need_shown'
+  | 'is_create_order_shown'
+  | 'is_customer_touch_need_shown'
+
 export interface AuthUser {
   user_id: number
   name: string
@@ -18,11 +30,14 @@ export interface AuthUser {
   // "Can act as head" permission: enter stock and cash values for any head,
   // without seeing balances. Heads don't need it.
   is_act_as_head_enabled?: boolean
+  // What the app shows this user (2026-11-21). Missing (a session saved
+  // before then, until /me refreshes it on boot) reads as off.
+  permissions?: Partial<Record<AppPermission, boolean>>
 }
 
 // What login and /me actually send for the user: the full user_details row
 // with its `role` relation loaded. Only the fields the app keeps are listed.
-export interface AuthUserPayload {
+export interface AuthUserPayload extends Partial<Record<AppPermission, boolean | number | null>> {
   user_id: number
   name: string
   user_name: string

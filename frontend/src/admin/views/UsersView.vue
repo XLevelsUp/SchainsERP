@@ -1,65 +1,63 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { Search, Plus, Pencil, Trash2, X, RefreshCw, Trash, ChevronDown } from 'lucide-vue-next'
+import { computed, onMounted, ref, watch } from 'vue'
+import { Check, ChevronLeft, ChevronRight, Eye, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
-import BaseMultiSelect from '@/components/ui/BaseMultiSelect.vue'
-import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
-import BaseFileInput from '@/components/ui/BaseFileInput.vue'
+import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
 import DataTable from '@/components/ui/DataTable.vue'
-import SpecialPasswordDialog from '@/admin/components/SpecialPasswordDialog.vue'
-import { itemsApi, rolesApi, userDetailsApi } from '@/admin/lib/resources'
-import { adminApiWithSpecialPassword } from '@/admin/lib/adminApi'
-import { createUserDetailsApi } from '@/lib/userDetailsApi'
-import { isRoleActive } from '@/lib/rolesApi'
-import { userCategoryOptions } from '@/lib/userCategory'
-import { userOptionLabel } from '@/lib/userLabel'
 import { ApiError } from '@/lib/api'
-import {
-  emptyUserFeatureFlags,
-  USER_FEATURE_FLAG_GROUPS,
-  USER_FEATURE_FLAG_KEYS,
-} from '@/lib/userFeatureFlags'
-import type { UserFeatureFlagGroup } from '@/lib/userFeatureFlags'
+import { createUserDetailsApi } from '@/lib/userDetailsApi'
 import { useToastStore } from '@/stores/toast'
 import type {
+  CustomerTouch,
   DataTableColumn,
-  UserDetailFormValues,
-  UserDetailListItem,
   Item,
   Role,
+  UserDetailListItem,
+  UserFormProfileCatalog,
 } from '@/types'
+import SpecialPasswordDialog from '../components/SpecialPasswordDialog.vue'
+import UserFormCard from '../components/users/UserFormCard.vue'
+import UserViewDialog from '../components/users/UserViewDialog.vue'
+import { adminApiWithSpecialPassword } from '../lib/adminApi'
+import { customerTouchApi, itemsApi, rolesApi, userDetailsApi } from '../lib/resources'
+import { userFormProfilesApi } from '../lib/userFormProfiles'
 
-// GET /user-details (list) returns a flattened summary row (PR #15) — no
-// user_name, no address/signature/etc, so it's only good for the table and
-// the head/cash-head pickers. Editing fetches the full record separately
-// via GET /user-details/{id}, which still returns everything.
+/*
+|--------------------------------------------------------------------------
+| Admin console — Users (2026-11-21, after the legacy User Details screen)
+|--------------------------------------------------------------------------
+| The list: user name, phone, role, salary person, per-day salary, status,
+| with a filter for each and 20 a page. Status toggles in place (with a
+| confirm). View / edit / delete per row; delete needs the special password.
+|
+| The form (UserFormCard) is driven by the user's role: each role has its
+| own fields and permissions (GET /admin/user-form-profiles).
+|--------------------------------------------------------------------------
+*/
+
+const PAGE_SIZE = 20
+
+const toast = useToastStore()
+
 const users = ref<UserDetailListItem[]>([])
-const items = ref<Item[]>([])
 const roles = ref<Role[]>([])
+const items = ref<Item[]>([])
+const heads = ref<UserDetailListItem[]>([])
+const touches = ref<CustomerTouch[]>([])
+const catalog = ref<UserFormProfileCatalog | null>(null)
 const isLoading = ref(false)
 const loadError = ref('')
-const searchQuery = ref('')
-const toastStore = useToastStore()
+const profilesError = ref('')
 
-const columns: DataTableColumn<UserDetailListItem>[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'phone_number', label: 'Phone' },
-  { key: 'category_name', label: 'Category' },
-  { key: 'is_active', label: 'Status' },
-  { key: 'id', label: '' },
-]
-
-async function loadData() {
+async function loadUsers() {
+  if (isLoading.value) return
   isLoading.value = true
   loadError.value = ''
   try {
-    const [usersData, itemsData] = await Promise.all([userDetailsApi.list(), itemsApi.list()])
-    users.value = usersData
-    items.value = itemsData
+    users.value = await userDetailsApi.list()
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load users.'
   } finally {
@@ -67,386 +65,169 @@ async function loadData() {
   }
 }
 
-// Fetched separately so a broken/missing roles endpoint can't take the
-// whole user list down with it (Promise.all fails the batch on any single
-// rejection) — it just leaves the Role dropdown empty.
+// Lookups load separately: one failing leaves its picker empty instead of
+// taking the list down with it.
 async function loadRoles() {
+  roles.value = await rolesApi.list().catch(() => [])
+}
+async function loadItems() {
+  items.value = await itemsApi.list().catch(() => [])
+}
+async function loadHeads() {
+  heads.value = await userDetailsApi.list('HEAD').catch(() => [])
+}
+async function loadTouches() {
+  touches.value = await customerTouchApi.list().catch(() => [])
+}
+async function loadProfiles() {
+  profilesError.value = ''
   try {
-    roles.value = await rolesApi.list()
-  } catch {
-    roles.value = []
-  }
-}
-
-onMounted(loadData)
-onMounted(loadRoles)
-
-// Dropdown reload buttons: each re-fetches one master with the same call
-// loadData() / loadRoles() make, leaving isLoading/loadError and the form
-// alone. `users` also backs the table, which picks up the fresh list in place.
-async function reloadUsers() {
-  users.value = await userDetailsApi.list()
-}
-async function reloadItems() {
-  items.value = await itemsApi.list()
-}
-async function reloadRoles() {
-  roles.value = await rolesApi.list()
-}
-
-const filteredUsers = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase()
-  if (!query) return users.value
-  return users.value.filter((u) => u.name.toLowerCase().includes(query))
-})
-
-const userOptions = computed(() =>
-  users.value.map((u) => ({ value: u.id, label: userOptionLabel(u) })),
-)
-
-function makeEmptyForm(): UserDetailFormValues {
-  return {
-    name: '',
-    user_name: '',
-    password: '',
-    address: '',
-    signature: '',
-    code: '',
-    phone_no: '',
-    remarks: '',
-    proff: '',
-    role_id: '',
-    system_id: '',
-    mailing_name: '',
-    customer_commants: '',
-    // No default — the head picks one (see lib/userCategory.ts).
-    category_name: null,
-    is_active: true,
-    is_delete: false,
-    is_billable: false,
-    ...emptyUserFeatureFlags(),
-    item_mappings: [],
-    head_mappings: [],
-    cash_head_mappings: [],
-    aadhar_image: null,
-  }
-}
-
-const isFormOpen = ref(false)
-const editingId = ref<number | null>(null)
-
-// Assigned items carry running gram/purity totals, which are balances: only
-// heads see or change them on an existing user, and admins aren't heads. The
-// backend ignores item_mappings on an admin's edit, so the section is
-// read-only when editing. A new user's items and opening totals are set here.
-const itemsLocked = computed(() => editingId.value !== null)
-
-// Assigning heads needs the admin's special password (agreed 2026-11-20).
-// Only create() saves head mappings (update() leaves them alone), so it's
-// asked for when a new user has heads or cash heads. Sent as a header, never
-// in the body, and cleared whenever the form opens or closes.
-const specialPassword = ref('')
-const needsSpecialPassword = computed(
-  () =>
-    editingId.value === null &&
-    (form.head_mappings.some((m) => m.head_id !== null) ||
-      form.cash_head_mappings.some((m) => m.head_id !== null)),
-)
-const form = reactive<UserDetailFormValues>(makeEmptyForm())
-const formError = ref('')
-const isSaving = ref(false)
-const isLoadingEditUser = ref(false)
-// Saved proof image of the user being edited (show()'s aadhar_image_url),
-// shown until a replacement is picked.
-const currentProofUrl = ref<string | null>(null)
-
-// Proof is one image; BaseFileInput's model is a File[] list.
-const proofFiles = computed<File[]>({
-  get: () => (form.aadhar_image ? [form.aadhar_image] : []),
-  set: (files) => {
-    form.aadhar_image = files[0] ?? null
-  },
-})
-
-// ----- feature flag helpers (declared after `form`, which they all read) --
-
-// Collapsed by default: the flags are an occasional administrative concern,
-// while name/role/mappings are the everyday path through this form.
-const showFeatureFlags = ref(false)
-
-const enabledFlagCount = computed(() => USER_FEATURE_FLAG_KEYS.filter((k) => form[k]).length)
-
-function isGroupAllOn(group: UserFeatureFlagGroup): boolean {
-  return group.flags.every((f) => form[f.key])
-}
-
-// One click to set or clear a whole group — with 40 toggles, doing this by
-// hand is where mistakes come from.
-function toggleGroup(group: UserFeatureFlagGroup) {
-  const next = !isGroupAllOn(group)
-  for (const flag of group.flags) form[flag.key] = next
-}
-
-function resetForm(values: UserDetailFormValues) {
-  Object.assign(form, values)
-}
-
-function openCreateForm() {
-  editingId.value = null
-  currentProofUrl.value = null
-  resetForm(makeEmptyForm())
-  formError.value = ''
-  clearFieldErrors()
-  specialPassword.value = ''
-  isFormOpen.value = true
-}
-
-// The table/picker row (UserDetailListItem) no longer carries address/
-// signature/code/role_id/etc — those only exist on the full record, so
-// editing now needs its own GET /user-details/{id} instead of reusing the
-// list row like it used to.
-async function openEditForm(row: UserDetailListItem) {
-  editingId.value = row.id
-  formError.value = ''
-  clearFieldErrors()
-  isFormOpen.value = true
-  isLoadingEditUser.value = true
-  currentProofUrl.value = null
-  try {
-    const { user, aadhar_image_url } = await userDetailsApi.get(row.id)
-    currentProofUrl.value = aadhar_image_url
-    resetForm({
-      ...makeEmptyForm(),
-      name: user.name,
-      user_name: user.user_name,
-      address: user.address,
-      signature: user.signature,
-      // code / system_id / proff have no inputs any more, but are still
-      // loaded so update() writes the stored values back unchanged rather
-      // than toPayload() replacing them with placeholders.
-      code: user.code,
-      phone_no: user.phone_no,
-      remarks: user.remarks ?? '',
-      proff: user.proff,
-      // UserDetail casts role_id to integer, but the Role picker's options
-      // are String(role.id) — without this the select can't match and shows
-      // empty on edit.
-      role_id: String(user.role_id),
-      system_id: user.system_id,
-      mailing_name: user.mailing_name,
-      customer_commants: user.customer_commants ?? '',
-      category_name: user.category_name,
-      is_active: user.is_active,
-      is_delete: user.is_delete,
-      is_billable: user.is_billable,
-      // Feature flags come back from show() on the full model. Start from the
-      // all-false defaults and overlay whatever the response carries, so a
-      // column the API omits stays false rather than becoming undefined and
-      // failing the Record<..., boolean> contract.
-      ...emptyUserFeatureFlags(),
-      ...Object.fromEntries(
-        USER_FEATURE_FLAG_KEYS.filter((k) => typeof user[k] === 'boolean').map((k) => [
-          k,
-          user[k] as boolean,
-        ]),
-      ),
-      // show() eager-loads all three mapping relations; map them back into
-      // the same input shapes the create form uses.
-      item_mappings: (user.item_mappings ?? []).map((m) => ({
-        item_id: m.item_id,
-        item_grams_total: m.item_grams_total ?? '0',
-        item_purity_total: m.item_purity_total ?? '0',
-        is_primary: m.is_primary ? 1 : 0,
-      })),
-      head_mappings: (user.head_employee_mappings ?? []).map((m) => ({ head_id: m.head_id })),
-      cash_head_mappings: (user.cash_head_employee_mappings ?? []).map((m) => ({
-        head_id: m.head_id,
-      })),
-    })
+    catalog.value = await userFormProfilesApi.get()
   } catch (err) {
-    isFormOpen.value = false
-    toastStore.show(
-      err instanceof ApiError ? err.message : 'Failed to load user details.',
-      'error',
-    )
-  } finally {
-    isLoadingEditUser.value = false
+    catalog.value = null
+    profilesError.value =
+      err instanceof ApiError ? err.message : 'Could not load the role profiles.'
   }
+}
+
+function refresh() {
+  void loadUsers()
+  void loadRoles()
+  void loadHeads()
+  void loadProfiles()
+}
+
+onMounted(() => {
+  refresh()
+  void loadItems()
+  void loadTouches()
+})
+
+// ---- filters & paging ------------------------------------------------------
+
+type YesNoAll = 'all' | 'yes' | 'no'
+type StatusFilter = 'active' | 'inactive' | 'all'
+
+const filters = ref({
+  userName: '',
+  phone: '',
+  roleId: '' as string,
+  salary: 'all' as YesNoAll,
+  status: 'active' as StatusFilter,
+})
+
+const roleFilterOptions = computed(() => [
+  { value: '', label: 'All roles' },
+  ...roles.value.map((r) => ({ value: String(r.id), label: r.role })),
+])
+const salaryOptions: { value: YesNoAll; label: string }[] = [
+  { value: 'all', label: 'Salary: all' },
+  { value: 'yes', label: 'Salary person' },
+  { value: 'no', label: 'Not salary' },
+]
+const statusOptions: { value: StatusFilter; label: string }[] = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'all', label: 'All statuses' },
+]
+
+const filtered = computed(() => {
+  const name = filters.value.userName.trim().toLowerCase()
+  const phone = filters.value.phone.trim()
+  return users.value.filter((u) => {
+    if (name && !`${u.user_name ?? ''} ${u.name}`.toLowerCase().includes(name)) return false
+    if (phone && !(u.phone_number ?? '').includes(phone)) return false
+    if (filters.value.roleId && String(u.role_id ?? '') !== filters.value.roleId) return false
+    if (filters.value.salary !== 'all' && Boolean(u.is_salary_person) !== (filters.value.salary === 'yes')) return false
+    if (filters.value.status !== 'all' && u.is_active !== (filters.value.status === 'active')) return false
+    return true
+  })
+})
+
+const page = ref(1)
+const showAll = ref(false)
+const lastPage = computed(() => Math.max(1, Math.ceil(filtered.value.length / PAGE_SIZE)))
+const pageRows = computed(() =>
+  showAll.value ? filtered.value : filtered.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
+)
+const rangeFrom = computed(() => (filtered.value.length ? (showAll.value ? 1 : (page.value - 1) * PAGE_SIZE + 1) : 0))
+const rangeTo = computed(() => (showAll.value ? filtered.value.length : Math.min(page.value * PAGE_SIZE, filtered.value.length)))
+
+watch(filters, () => (page.value = 1), { deep: true })
+watch(lastPage, (last) => {
+  if (page.value > last) page.value = last
+})
+
+const isFiltered = computed(
+  () =>
+    !!filters.value.userName.trim() ||
+    !!filters.value.phone.trim() ||
+    !!filters.value.roleId ||
+    filters.value.salary !== 'all' ||
+    filters.value.status !== 'all',
+)
+
+const columns: DataTableColumn<UserDetailListItem>[] = [
+  { key: 'user_name', label: 'User name' },
+  { key: 'phone_number', label: 'Phone no' },
+  { key: 'type', label: 'Role' },
+  { key: 'is_salary_person', label: 'Salary person' },
+  { key: 'per_day_salary', label: 'Per day salary (₹)', align: 'right' },
+  { key: 'is_active', label: 'Status' },
+  { key: 'id', label: '' },
+]
+
+function salary(value: UserDetailListItem['per_day_salary']): string {
+  if (value === null || value === undefined || value === '') return '—'
+  return Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// ---- status ----------------------------------------------------------------
+
+const togglingId = ref<number | null>(null)
+
+async function toggleStatus(user: UserDetailListItem) {
+  if (togglingId.value !== null) return
+  togglingId.value = user.id
+  try {
+    const result = await userDetailsApi.setStatus(user.id, !user.is_active)
+    user.is_active = result.is_active
+    toast.show(`${user.name} ${result.is_active ? 'activated' : 'deactivated'}.`, 'success')
+  } catch (err) {
+    toast.show(err instanceof ApiError ? err.message : 'Failed to change the status.', 'error')
+  } finally {
+    togglingId.value = null
+  }
+}
+
+// ---- view / form -----------------------------------------------------------
+
+const viewingId = ref<number | null>(null)
+// null = list; { id: null } = new user; { id } = editing.
+const formTarget = ref<{ id: number | null } | null>(null)
+
+function openCreate() {
+  viewingId.value = null
+  formTarget.value = { id: null }
+}
+
+function openEdit(id: number) {
+  viewingId.value = null
+  formTarget.value = { id }
 }
 
 function closeForm() {
-  isFormOpen.value = false
-  specialPassword.value = ''
+  formTarget.value = null
 }
 
-// ----- mapping row helpers -----
-function addItemMapping() {
-  form.item_mappings.push({
-    item_id: null,
-    item_grams_total: '0',
-    item_purity_total: '0',
-    is_primary: 0,
-  })
-}
-function removeItemMapping(index: number) {
-  form.item_mappings.splice(index, 1)
-}
-// "Reports to" is a multi-select over head ids; form.head_mappings keeps its
-// { head_id } row shape so toPayload() and the request body are unchanged.
-const headIds = computed<number[]>({
-  get: () =>
-    form.head_mappings.map((m) => m.head_id).filter((id): id is number => id !== null),
-  set: (ids) => {
-    form.head_mappings = ids.map((head_id) => ({ head_id }))
-  },
-})
-function addCashHeadMapping() {
-  form.cash_head_mappings.push({ head_id: null })
-}
-function removeCashHeadMapping(index: number) {
-  form.cash_head_mappings.splice(index, 1)
+async function handleSaved(message: string) {
+  formTarget.value = null
+  toast.show(message, 'success')
+  await Promise.all([loadUsers(), loadHeads()])
 }
 
-// Mirrors the max-length rules enforced by UserDetailController::store()/update().
-// Signature and mailing name are optional on this form — toPayload() fills
-// blanks with the placeholders store() needs — so they're length-checked
-// in validate() instead.
-const requiredFields: { key: keyof UserDetailFormValues; label: string; maxLength: number }[] = [
-  { key: 'name', label: 'Name', maxLength: 55 },
-  { key: 'user_name', label: 'Username', maxLength: 55 },
-  { key: 'address', label: 'Address', maxLength: 400 },
-  { key: 'phone_no', label: 'Phone number', maxLength: 15 },
-]
+// ---- delete (special password) ---------------------------------------------
 
-// store()/update(): aadhar_image is image|mimes:jpg,jpeg,png,webp|max:5120 (KB).
-const MAX_PROOF_BYTES = 5120 * 1024
-
-const fieldErrors = reactive<Record<string, string>>({})
-
-// The multi-select can't hold an empty row, so the only head errors left are
-// server-side ones keyed per row (head_mappings.0.head_id) — surface the
-// first under the single control.
-const headMappingsError = computed(
-  () => Object.entries(fieldErrors).find(([key]) => key.startsWith('head_mappings'))?.[1],
-)
-
-function clearFieldErrors() {
-  Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
-}
-
-function validate(): boolean {
-  clearFieldErrors()
-  formError.value = ''
-
-  for (const f of requiredFields) {
-    const value = String(form[f.key] ?? '').trim()
-    if (!value) {
-      fieldErrors[f.key] = `${f.label} is required.`
-    } else if (value.length > f.maxLength) {
-      fieldErrors[f.key] = `${f.label} must be ${f.maxLength} characters or fewer.`
-    }
-  }
-
-  if (!String(form.role_id).trim()) {
-    fieldErrors.role_id = 'Role is required.'
-  }
-  if (!form.category_name) {
-    fieldErrors.category_name = 'Category is required.'
-  }
-
-  if (form.phone_no.trim() && !/^\d{6,15}$/.test(form.phone_no.trim())) {
-    fieldErrors.phone_no = 'Phone number must be 6-15 digits.'
-  }
-
-  if (form.signature.length > 45) {
-    fieldErrors.signature = 'Signature must be 45 characters or fewer.'
-  }
-  if (form.mailing_name.length > 255) {
-    fieldErrors.mailing_name = 'Mailing name must be 255 characters or fewer.'
-  }
-  if (form.remarks.length > 255) {
-    fieldErrors.remarks = 'Remarks must be 255 characters or fewer.'
-  }
-  if (form.customer_commants.length > 1500) {
-    fieldErrors.customer_commants = 'Customer comments must be 1500 characters or fewer.'
-  }
-  if (form.aadhar_image && form.aadhar_image.size > MAX_PROOF_BYTES) {
-    fieldErrors.aadhar_image = 'Proof image must be 5 MB or smaller.'
-  }
-
-  if (editingId.value === null && form.password.trim().length < 6) {
-    fieldErrors.password = 'Password is required (min 6 characters).'
-  }
-
-  form.item_mappings.forEach((mapping, index) => {
-    if (mapping.item_id === null) {
-      fieldErrors[`item_mappings.${index}`] = `Select an item for row ${index + 1} or remove it.`
-    }
-  })
-  form.cash_head_mappings.forEach((mapping, index) => {
-    if (mapping.head_id === null) {
-      fieldErrors[`cash_head_mappings.${index}`] =
-        `Select a cash head for row ${index + 1} or remove it.`
-    }
-  })
-
-  const firstError = Object.values(fieldErrors)[0]
-  if (firstError) {
-    formError.value = firstError
-    toastStore.show(firstError, 'error')
-    return false
-  }
-  return true
-}
-
-async function handleSubmit() {
-  if (!validate()) return
-
-  if (needsSpecialPassword.value && !specialPassword.value) {
-    fieldErrors.special_password = 'Enter your special password to assign heads.'
-    return
-  }
-
-  isSaving.value = true
-  try {
-    if (editingId.value !== null) {
-      await userDetailsApi.update(editingId.value, { ...form }, {
-        includeItemMappings: !itemsLocked.value,
-      })
-    } else if (needsSpecialPassword.value) {
-      await createUserDetailsApi(adminApiWithSpecialPassword(specialPassword.value)).create({ ...form })
-    } else {
-      await userDetailsApi.create({ ...form })
-    }
-    specialPassword.value = ''
-    isFormOpen.value = false
-    toastStore.show(
-      editingId.value !== null ? 'User updated successfully.' : 'User created successfully.',
-      'success',
-    )
-    await loadData()
-  } catch (err) {
-    if (err instanceof ApiError) {
-      formError.value = err.message
-      if (err.errors) {
-        for (const [key, messages] of Object.entries(err.errors)) {
-          fieldErrors[key] = messages[0]
-        }
-        toastStore.show(Object.values(err.errors)[0]?.[0] ?? err.message, 'error')
-      } else {
-        toastStore.show(err.message, 'error')
-      }
-    } else {
-      formError.value = 'Failed to save user.'
-      toastStore.show('Failed to save user.', 'error')
-    }
-  } finally {
-    isSaving.value = false
-  }
-}
-
-// Deleting needs the special password: the dialog asks for it and confirms
-// in one step (it replaces the old confirm popover).
 const deleteTarget = ref<UserDetailListItem | null>(null)
 const deleteError = ref('')
 const isDeleting = ref(false)
@@ -456,28 +237,23 @@ function askDelete(user: UserDetailListItem) {
   deleteError.value = ''
 }
 
-function cancelDelete() {
-  deleteTarget.value = null
-  deleteError.value = ''
-}
-
-async function handleDelete(specialPasswordValue: string) {
+async function handleDelete(specialPassword: string) {
   const user = deleteTarget.value
   if (!user || isDeleting.value) return
   isDeleting.value = true
   deleteError.value = ''
   try {
-    await createUserDetailsApi(adminApiWithSpecialPassword(specialPasswordValue)).remove(user.id)
+    await createUserDetailsApi(adminApiWithSpecialPassword(specialPassword)).remove(user.id)
     deleteTarget.value = null
-    toastStore.show(`${user.name} deleted.`, 'success')
-    await loadData()
+    toast.show(`${user.name} deleted.`, 'success')
+    await Promise.all([loadUsers(), loadHeads()])
   } catch (err) {
     if (err instanceof ApiError && (err.errors?.special_password || err.status === 429)) {
       // Wrong special password, or locked out: keep the dialog open.
       deleteError.value = err.errors?.special_password?.[0] ?? err.message
     } else {
       deleteTarget.value = null
-      loadError.value = err instanceof ApiError ? err.message : 'Failed to delete user.'
+      loadError.value = err instanceof ApiError ? err.message : 'Failed to delete the user.'
     }
   } finally {
     isDeleting.value = false
@@ -487,472 +263,195 @@ async function handleDelete(specialPasswordValue: string) {
 
 <template>
   <div>
-    <PageHeader title="Users" description="Manage users and their item / head assignments.">
-      <template #actions>
-        <BaseButton variant="secondary" :icon="RefreshCw" @click="loadData">Refresh</BaseButton>
-        <BaseButton :icon="Plus" @click="openCreateForm">New user</BaseButton>
-      </template>
-    </PageHeader>
+    <UserFormCard
+      v-if="formTarget"
+      :key="formTarget.id ?? 'new'"
+      :editing-id="formTarget.id"
+      :roles="roles"
+      :items="items"
+      :heads="heads"
+      :users="users"
+      :touches="touches"
+      :catalog="catalog"
+      :reload-items="loadItems"
+      :reload-heads="loadHeads"
+      :reload-users="loadUsers"
+      :reload-touches="loadTouches"
+      @saved="handleSaved"
+      @close="closeForm"
+    />
 
-    <BaseCard v-if="isFormOpen" class="mb-6">
-      <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-slate-900">
-          {{ editingId !== null ? 'Edit user' : 'New user' }}
-        </h2>
-        <button
-          type="button"
-          class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-          aria-label="Close form"
-          @click="closeForm"
-        >
-          <X class="h-4 w-4" />
-        </button>
+    <template v-else>
+      <PageHeader
+        title="Users"
+        description="Create users, give them a role, and set what each can do. The fields and permissions follow the role."
+      >
+        <template #actions>
+          <BaseButton variant="secondary" :icon="RefreshCw" :disabled="isLoading" @click="refresh">
+            Refresh
+          </BaseButton>
+          <BaseButton :icon="Plus" @click="openCreate">New user</BaseButton>
+        </template>
+      </PageHeader>
+
+      <div
+        v-if="profilesError"
+        class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+      >
+        {{ profilesError }} The form will show every field; saving still follows each role's
+        profile.
       </div>
 
-      <p
-        v-if="formError"
-        class="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+      <div class="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <BaseInput v-model="filters.userName" type="search" size="sm" placeholder="User name…" aria-label="Filter by user name" />
+        <BaseInput v-model="filters.phone" type="search" size="sm" placeholder="Phone no…" aria-label="Filter by phone" />
+        <BaseSelect v-model="filters.roleId" size="sm" aria-label="Filter by role" :options="roleFilterOptions" />
+        <BaseSelect v-model="filters.salary" size="sm" aria-label="Filter by salary person" :options="salaryOptions" />
+        <BaseSelect v-model="filters.status" size="sm" aria-label="Filter by status" :options="statusOptions" />
+      </div>
+
+      <div
+        v-if="loadError"
+        class="mb-4 flex items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
       >
-        {{ formError }}
-      </p>
+        <span>{{ loadError }}</span>
+        <button type="button" class="font-medium underline" @click="loadUsers">Try again</button>
+      </div>
 
-      <p v-if="isLoadingEditUser" class="py-6 text-center text-sm text-slate-500">
-        Loading user…
-      </p>
+      <div
+        v-if="isLoading && !users.length"
+        class="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500"
+      >
+        Loading users…
+      </div>
 
-      <form v-else class="flex flex-col gap-6" @submit.prevent="handleSubmit">
-        <!-- Core details -->
-        <section class="grid gap-3 sm:grid-cols-3">
-          <BaseInput
-            id="name"
-            v-model="form.name"
-            label="Name"
-            required
-            size="sm"
-            maxlength="55"
-            :error="fieldErrors.name"
-          />
-          <BaseInput
-            id="user_name"
-            v-model="form.user_name"
-            label="Username"
-            required
-            size="sm"
-            maxlength="55"
-            :error="fieldErrors.user_name"
-          />
-          <BaseInput
-            id="password"
-            v-model="form.password"
-            :label="editingId !== null ? 'Password (leave blank to keep)' : 'Password'"
-            type="password"
-            :required="editingId === null"
-            size="sm"
-            :error="fieldErrors.password"
-          />
-          <BaseInput
-            id="phone_no"
-            v-model="form.phone_no"
-            label="Phone number"
-            required
-            size="sm"
-            maxlength="15"
-            :error="fieldErrors.phone_no"
-          />
-          <BaseInput
-            id="address"
-            v-model="form.address"
-            label="Address"
-            required
-            size="sm"
-            maxlength="400"
-            :error="fieldErrors.address"
-          />
-          <BaseInput
-            id="mailing_name"
-            v-model="form.mailing_name"
-            label="Mailing name"
-            placeholder="Defaults to name"
-            size="sm"
-            maxlength="255"
-            :error="fieldErrors.mailing_name"
-          />
-          <BaseInput
-            id="signature"
-            v-model="form.signature"
-            label="Signature"
-            size="sm"
-            maxlength="45"
-            :error="fieldErrors.signature"
-          />
-          <div class="flex flex-col gap-1">
-            <BaseFileInput
-              id="aadhar_image"
-              v-model="proofFiles"
-              label="Proof image"
-              hint="JPG, PNG or WEBP, up to 5 MB."
-              compact
-              :multiple="false"
-            />
-            <a
-              v-if="currentProofUrl && !form.aadhar_image"
-              :href="currentProofUrl"
-              target="_blank"
-              rel="noopener"
-              class="inline-flex items-center gap-2 text-xs text-slate-500 hover:text-brand-600"
+      <template v-else>
+        <DataTable
+          :columns="columns"
+          :rows="pageRows"
+          size="sm"
+          :empty-message="isFiltered ? 'No users match these filters.' : 'No users yet. Create the first one.'"
+        >
+          <template #user_name="{ row }">
+            <div class="font-medium text-slate-900">{{ row.user_name ?? row.name }}</div>
+            <div v-if="row.user_name && row.user_name !== row.name" class="text-xs text-slate-500">{{ row.name }}</div>
+          </template>
+
+          <template #phone_number="{ value }">
+            <span class="tabular-nums">{{ value }}</span>
+          </template>
+
+          <template #type="{ value }">
+            <span class="text-xs font-semibold tracking-wide text-slate-700 uppercase">{{ value ?? '—' }}</span>
+          </template>
+
+          <template #is_salary_person="{ row }">
+            <Check v-if="row.is_salary_person" class="h-4 w-4 text-emerald-600" aria-label="Yes" />
+            <X v-else class="h-4 w-4 text-slate-300" aria-label="No" />
+          </template>
+
+          <template #per_day_salary="{ row }">
+            <span class="tabular-nums">{{ row.is_salary_person ? salary(row.per_day_salary) : '—' }}</span>
+          </template>
+
+          <template #is_active="{ row }">
+            <ConfirmPopover
+              :message="row.is_active ? `Deactivate ${row.name}? They won't be able to sign in.` : `Activate ${row.name}?`"
+              :confirm-label="row.is_active ? 'Deactivate' : 'Activate'"
+              @confirm="toggleStatus(row)"
             >
-              <img
-                :src="currentProofUrl"
-                alt="Saved proof"
-                class="h-9 w-9 rounded-md border border-slate-200 object-cover"
-              />
-              Saved proof — view
-            </a>
-            <p v-if="fieldErrors.aadhar_image" class="text-sm text-red-600">
-              {{ fieldErrors.aadhar_image }}
-            </p>
-          </div>
-
-          <BaseSelect
-            id="role_id"
-            v-model="form.role_id"
-            label="Role"
-            required
-            size="sm"
-            placeholder="Select a role…"
-            :options="
-              roles
-                .filter((role) => isRoleActive(role) || String(role.id) === form.role_id)
-                .map((role) => ({ value: String(role.id), label: role.role }))
-            "
-            :reload="reloadRoles"
-            :error="fieldErrors.role_id"
-          />
-
-          <BaseSelect
-            id="category_name"
-            v-model="form.category_name"
-            label="Category"
-            required
-            size="sm"
-            placeholder="Select a category…"
-            :options="userCategoryOptions"
-            :error="fieldErrors.category_name"
-          />
-
-          <BaseInput
-            id="remarks"
-            v-model="form.remarks"
-            label="Remarks"
-            size="sm"
-            maxlength="255"
-            :error="fieldErrors.remarks"
-          />
-          <BaseInput
-            id="customer_commants"
-            v-model="form.customer_commants"
-            label="Customer comments"
-            size="sm"
-            maxlength="1500"
-            :error="fieldErrors.customer_commants"
-          />
-        </section>
-
-        <section class="flex flex-wrap gap-6">
-          <BaseCheckbox v-model="form.is_active" label="Active" />
-          <BaseCheckbox v-model="form.is_billable" label="Billable" />
-          <BaseCheckbox v-model="form.is_delete" label="Marked deleted" />
-        </section>
-
-        <!--
-          Feature flags. 40 booleans, grouped rather than listed flat — see
-          lib/userFeatureFlags.ts for why these 40 and not the 44 columns.
-          Collapsed by default so the everyday path (name, role, mappings) is
-          not buried under a wall of checkboxes.
-        -->
-        <section class="border-t border-slate-200 pt-4">
-          <button
-            type="button"
-            class="flex w-full items-center justify-between text-left"
-            @click="showFeatureFlags = !showFeatureFlags"
-          >
-            <span>
-              <span class="text-sm font-semibold text-slate-900">Permissions &amp; features</span>
-              <span class="ml-2 text-xs text-slate-500">
-                {{ enabledFlagCount }} of {{ USER_FEATURE_FLAG_KEYS.length }} enabled
-              </span>
-            </span>
-            <ChevronDown
-              class="h-4 w-4 text-slate-400 transition-transform"
-              :class="showFeatureFlags ? 'rotate-180' : ''"
-            />
-          </button>
-
-          <div v-if="showFeatureFlags" class="mt-4 flex flex-col gap-5">
-            <p class="text-xs text-slate-500">
-              Controls which screens and options this user sees. These are stored per user on
-              <code>user_details</code>; the app does not gate navigation on them yet, so today
-              they record intent for the legacy screens.
-            </p>
-
-            <div
-              v-for="group in USER_FEATURE_FLAG_GROUPS"
-              :key="group.title"
-              class="rounded-lg border border-slate-200 p-3"
-            >
-              <div class="mb-2 flex items-baseline justify-between gap-3">
-                <h4 class="text-sm font-medium text-slate-900">{{ group.title }}</h4>
+              <template #default="{ toggle }">
                 <button
                   type="button"
-                  class="text-xs font-medium text-brand-600 hover:text-brand-700"
-                  @click="toggleGroup(group)"
+                  class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium disabled:opacity-50"
+                  :class="row.is_active ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                  :disabled="togglingId === row.id"
+                  :title="row.is_active ? 'Click to deactivate' : 'Click to activate'"
+                  @click="toggle"
                 >
-                  {{ isGroupAllOn(group) ? 'Clear all' : 'Select all' }}
+                  <Check v-if="row.is_active" class="h-3.5 w-3.5" aria-hidden="true" />
+                  <X v-else class="h-3.5 w-3.5" aria-hidden="true" />
+                  {{ row.is_active ? 'Active' : 'Inactive' }}
                 </button>
-              </div>
-              <p class="mb-3 text-xs text-slate-500">{{ group.description }}</p>
-              <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                <BaseCheckbox
-                  v-for="flag in group.flags"
-                  :key="flag.key"
-                  v-model="form[flag.key]"
-                  :label="flag.label"
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!--
-          Backend gaps (BACKEND_TODO.md §10): since PR #53 update() saves
-          item_mappings, overwriting the grams/purity running totals with
-          what the form sends. head_mappings / cash_head_mappings are still
-          ignored on update; only store() reads them.
-        -->
-        <p
-          v-if="editingId !== null"
-          class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
-        >
-          <template v-if="!itemsLocked">
-            <strong>Save changes</strong> saves assigned items and writes their grams and purity
-            totals back exactly as shown. If this user's stock has moved since you opened this
-            form, close it and reopen it first.
+              </template>
+            </ConfirmPopover>
           </template>
-          Heads and cash heads don't save from here yet; to change who this user reports to, use
-          <RouterLink to="/admin/head-employee-mappings" class="font-medium underline">
-            Head Employee Mappings</RouterLink
-          >.
-        </p>
 
-        <!-- Item mappings -->
-        <section class="border-t border-slate-200 pt-4">
-          <div class="mb-3 flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-slate-900">Assigned items</h3>
-            <BaseButton
-              v-if="!itemsLocked"
-              variant="secondary"
-              type="button"
-              :icon="Plus"
-              @click="addItemMapping"
-            >
-              Add item
-            </BaseButton>
-          </div>
-          <p v-if="itemsLocked" class="mb-2 text-xs text-slate-500">
-            Only a head can change assigned items, because they carry gram and purity balances.
-          </p>
-          <p v-if="form.item_mappings.length === 0" class="text-sm text-slate-500">
-            No items assigned.
-          </p>
-          <ul v-if="itemsLocked" class="space-y-1 text-sm text-slate-700">
-            <li v-for="(mapping, index) in form.item_mappings" :key="index">
-              {{ items.find((i) => i.item_id === mapping.item_id)?.item_name ?? `#${mapping.item_id}` }}
-              <span v-if="mapping.is_primary === 1" class="ml-1 text-xs text-slate-500">· Primary</span>
-            </li>
-          </ul>
-          <div
-            v-for="(mapping, index) in itemsLocked ? [] : form.item_mappings"
-            :key="index"
-            class="mb-3 grid items-end gap-3 sm:grid-cols-[1fr_1fr_1fr_auto_auto]"
-          >
-            <BaseSelect
-              v-model="mapping.item_id"
-              label="Item"
-              size="sm"
-              placeholder="Select…"
-              :options="items.map((item) => ({ value: item.item_id, label: item.item_name }))"
-              :reload="reloadItems"
-              :error="fieldErrors[`item_mappings.${index}`]"
-            />
-            <BaseInput
-              v-model="mapping.item_grams_total"
-              label="Grams total"
-              type="number"
-              size="sm"
-            />
-            <BaseInput
-              v-model="mapping.item_purity_total"
-              label="Purity total"
-              type="number"
-              size="sm"
-            />
-            <BaseCheckbox
-              class="pb-2"
-              label="Primary"
-              :model-value="mapping.is_primary === 1"
-              @update:model-value="(v) => (mapping.is_primary = v ? 1 : 0)"
-            />
-            <button
-              type="button"
-              class="mb-1 rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
-              aria-label="Remove item"
-              @click="removeItemMapping(index)"
-            >
-              <Trash class="h-4 w-4" />
+          <template #id="{ row }">
+            <div class="flex items-center justify-end gap-1">
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                :aria-label="`View ${row.name}`"
+                @click="viewingId = row.id"
+              >
+                <Eye class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                :aria-label="`Edit ${row.name}`"
+                @click="openEdit(row.id)"
+              >
+                <Pencil class="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                :aria-label="`Delete ${row.name}`"
+                :disabled="isDeleting && deleteTarget?.id === row.id"
+                @click="askDelete(row)"
+              >
+                <Trash2 class="h-4 w-4" />
+              </button>
+            </div>
+          </template>
+        </DataTable>
+
+        <div v-if="filtered.length" class="mt-3 flex items-center justify-between text-xs text-slate-500">
+          <span class="tabular-nums">Showing {{ rangeFrom }}–{{ rangeTo }} of {{ filtered.length }} users</span>
+          <div class="flex items-center gap-2">
+            <button type="button" class="font-medium text-brand-600 hover:text-brand-700" @click="showAll = !showAll">
+              {{ showAll ? 'Show 20 a page' : 'Show all' }}
             </button>
+            <template v-if="!showAll && lastPage > 1">
+              <button
+                type="button"
+                class="rounded-md p-1 text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="page === 1"
+                aria-label="Previous page"
+                @click="page--"
+              >
+                <ChevronLeft class="h-4 w-4" />
+              </button>
+              <span class="tabular-nums">Page {{ page }} of {{ lastPage }}</span>
+              <button
+                type="button"
+                class="rounded-md p-1 text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="page === lastPage"
+                aria-label="Next page"
+                @click="page++"
+              >
+                <ChevronRight class="h-4 w-4" />
+              </button>
+            </template>
           </div>
-        </section>
-
-        <!-- Head mappings -->
-        <section class="border-t border-slate-200 pt-4">
-          <h3 class="mb-3 text-sm font-semibold text-slate-900">Reports to (heads)</h3>
-          <BaseMultiSelect
-            id="head_ids"
-            v-model="headIds"
-            label="Heads (users)"
-            size="sm"
-            placeholder="No heads assigned — select one or more…"
-            :options="userOptions"
-            :reload="reloadUsers"
-            :error="headMappingsError"
-          />
-        </section>
-
-        <!-- Cash head mappings -->
-        <section class="border-t border-slate-200 pt-4">
-          <div class="mb-3 flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-slate-900">Cash heads</h3>
-            <BaseButton variant="secondary" type="button" :icon="Plus" @click="addCashHeadMapping">
-              Add cash head
-            </BaseButton>
-          </div>
-          <p v-if="form.cash_head_mappings.length === 0" class="text-sm text-slate-500">
-            No cash heads assigned.
-          </p>
-          <div
-            v-for="(mapping, index) in form.cash_head_mappings"
-            :key="index"
-            class="mb-3 flex items-end gap-3"
-          >
-            <BaseSelect
-              v-model="mapping.head_id"
-              label="Cash head (user)"
-              size="sm"
-              class="flex-1"
-              placeholder="Select a user…"
-              :options="userOptions"
-              :reload="reloadUsers"
-              :error="fieldErrors[`cash_head_mappings.${index}`]"
-            />
-            <button
-              type="button"
-              class="mb-1 rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
-              aria-label="Remove cash head"
-              @click="removeCashHeadMapping(index)"
-            >
-              <Trash class="h-4 w-4" />
-            </button>
-          </div>
-        </section>
-
-        <section v-if="needsSpecialPassword" class="border-t border-slate-200 pt-4">
-          <BaseInput
-            id="user_special_password"
-            v-model="specialPassword"
-            label="Special password"
-            type="password"
-            autocomplete="off"
-            placeholder="Required to assign heads"
-            required
-            :error="fieldErrors.special_password"
-          />
-          <p class="mt-1 text-xs text-slate-500">
-            Assigning heads needs your special password. Leave heads empty to create the user
-            without one.
-          </p>
-        </section>
-
-        <div class="flex items-center gap-3 border-t border-slate-200 pt-4">
-          <BaseButton type="submit" :disabled="isSaving">
-            {{ isSaving ? 'Saving…' : editingId !== null ? 'Save changes' : 'Create user' }}
-          </BaseButton>
-          <BaseButton variant="secondary" type="button" @click="closeForm">Cancel</BaseButton>
-        </div>
-      </form>
-    </BaseCard>
-
-    <div class="mb-4 flex items-center gap-2">
-      <BaseInput
-        v-model="searchQuery"
-        type="search"
-        :icon="Search"
-        placeholder="Search users…"
-        aria-label="Search users"
-        class="w-full max-w-xs"
-      />
-    </div>
-
-    <div
-      v-if="loadError"
-      class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-    >
-      {{ loadError }}
-    </div>
-
-    <div
-      v-if="isLoading"
-      class="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500"
-    >
-      Loading users…
-    </div>
-
-    <DataTable
-      v-else
-      :columns="columns"
-      :rows="filteredUsers"
-      empty-message="No users yet. Add your first user to get started."
-    >
-      <template #is_active="{ value }">
-        <span
-          class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-          :class="value ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'"
-        >
-          {{ value ? 'Active' : 'Inactive' }}
-        </span>
-      </template>
-
-      <template #id="{ row }">
-        <div class="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Edit user"
-            @click="openEditForm(row as UserDetailListItem)"
-          >
-            <Pencil class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-            aria-label="Delete user"
-            :disabled="isDeleting && deleteTarget?.id === (row as UserDetailListItem).id"
-            @click="askDelete(row as UserDetailListItem)"
-          >
-            <Trash2 class="h-4 w-4" />
-          </button>
         </div>
       </template>
-    </DataTable>
+    </template>
+
+    <UserViewDialog
+      v-if="viewingId !== null"
+      :user-id="viewingId"
+      :roles="roles"
+      :items="items"
+      :heads="heads"
+      :users="users"
+      :touches="touches"
+      :catalog="catalog"
+      @close="viewingId = null"
+      @edit="openEdit(viewingId)"
+    />
 
     <SpecialPasswordDialog
       v-if="deleteTarget"
@@ -963,7 +462,7 @@ async function handleDelete(specialPasswordValue: string) {
       :submitting="isDeleting"
       :error="deleteError"
       @confirm="handleDelete"
-      @cancel="cancelDelete"
+      @cancel="deleteTarget = null"
     />
   </div>
 </template>

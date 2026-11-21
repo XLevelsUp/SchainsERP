@@ -211,6 +211,20 @@ class ItemChangeTest extends TestCase
             'is_customerfitem_cal_enabled' => false, 'is_customerfitem_cal_in_enabled' => false,
             'is_active' => true, 'is_delete' => false, 'is_billable' => true,
             'rak_cash_balance' => 0, 'rak_rtgs_balance' => 0, 'grams_grand_total' => 0, 'purity_grand_total' => 0,
+            // Item Change / Conversion each need their permission (2026-11-21).
+            'is_item_change_need_shown' => true, 'is_item_conversion_need_shown' => true,
         ]);
+    }
+
+    public function test_item_change_and_conversion_need_their_permissions(): void
+    {
+        $this->head->update(['is_item_change_need_shown' => false, 'is_item_conversion_need_shown' => false]);
+        Passport::actingAs(AuthUser::findOrFail($this->head->user_id));
+
+        $this->postJson('/api/v1/stock/item-change', ['given_to' => $this->head->user_id, 'items' => [$this->line()]])
+            ->assertStatus(403)
+            ->assertJsonPath('message', "Your account doesn't have access to Item Change. Ask an admin to switch it on.");
+        $this->postJson('/api/v1/stock/item-conversion', [])->assertStatus(403);
+        $this->assertDatabaseHas('users_items_mappings', ['user_id' => $this->head->user_id, 'item_id' => $this->metal->item_id, 'item_grams_total' => 50]);
     }
 }

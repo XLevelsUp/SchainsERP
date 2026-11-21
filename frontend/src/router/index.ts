@@ -25,9 +25,8 @@ const router = createRouter({
           name: 'fitem-boxes',
           component: () => import('@/views/FitemBoxesView.vue'),
         },
-        { path: 'roles', name: 'roles', component: () => import('@/views/RolesView.vue') },
-        // Users and Head Employee Mappings live in the admin console
-        // (admin/routes.ts): admins create users and assign them to heads.
+        // Users, Head Employee Mappings and Roles live in the admin console
+        // (admin/routes.ts): admins create users, assign heads and create roles.
         { path: 'clients', name: 'clients', component: () => import('@/views/ClientsView.vue') },
         {
           path: 'customer-touch',
@@ -117,6 +116,7 @@ const router = createRouter({
         {
           path: 'phone-book',
           name: 'phone-book',
+          meta: { permission: 'is_phone_book_need_shown' },
           component: () => import('@/views/PhoneBookView.vue'),
         },
         {

@@ -27,6 +27,7 @@ class LogAdminAction
         'admin.user-details.store' => ['USER_CREATE', 'user_details', 'response:data.user.user_id'],
         'admin.user-details.update' => ['USER_UPDATE', 'user_details', 'user_detail'],
         'admin.user-details.destroy' => ['USER_DELETE', 'user_details', 'user_detail'],
+        'admin.user-details.status' => ['USER_STATUS_CHANGE', 'user_details', 'user_detail'],
         'admin.head-employee-mappings.store' => ['HEAD_ASSIGN', 'head_employee_mappings', null],
         'admin.head-employee-mappings.update' => ['HEAD_ASSIGN', 'head_employee_mappings', 'head_employee_mapping'],
         'admin.cash-head-employee-mappings.store' => ['CASH_HEAD_ASSIGN', 'cash_head_employee_mappings', null],

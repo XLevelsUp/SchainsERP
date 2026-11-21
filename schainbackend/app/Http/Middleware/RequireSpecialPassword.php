@@ -16,7 +16,11 @@ use Symfony\Component\HttpFoundation\Response;
  *
  *   special.password                                  always required
  *   special.password:head_mappings,cash_head_mappings  required only when one
- *                                                      of these inputs is filled
+ *                                                      of these inputs is sent
+ *
+ * "Sent" includes an empty list: on an edit, `head_mappings: []` removes
+ * every head, which is as sensitive as adding one. The console sends the
+ * head lists only when they changed.
  *
  * A missing or wrong password is a 422 on `special_password`, so the console
  * shows it on the prompt's field. Five wrong tries lock the check for five
@@ -27,9 +31,9 @@ class RequireSpecialPassword
     private const MAX_ATTEMPTS = 5;
     private const LOCK_SECONDS = 300;
 
-    public function handle(Request $request, Closure $next, string ...$whenFilled): Response
+    public function handle(Request $request, Closure $next, string ...$whenSent): Response
     {
-        if ($whenFilled !== [] && !collect($whenFilled)->contains(fn (string $field) => $request->filled($field))) {
+        if ($whenSent !== [] && !collect($whenSent)->contains(fn (string $field) => $request->exists($field))) {
             return $next($request);
         }
 

@@ -24,7 +24,8 @@ import type { UserFeatureFlagKey } from '@/types'
 | names are not self-explanatory ("is_need_pink_box_shown").
 |
 | The labels are OUR reading of each column name — no backend documentation
-| for them exists. Where a name is genuinely ambiguous the label stays close
+| for them exists. Those on the legacy admin and head user forms use that
+| form's wording (2026-11-21). Where a name is genuinely ambiguous the label stays close
 | to the column so nobody is misled by a confident-sounding guess.
 |--------------------------------------------------------------------------
 */
@@ -63,22 +64,24 @@ export const USER_FEATURE_FLAG_GROUPS: UserFeatureFlagGroup[] = [
     description: 'Stock entry options and the fields shown on item rows.',
     flags: [
       { key: 'is_metal_stock_shown', label: 'Show metal stock' },
-      { key: 'is_delivery_item_shown', label: 'Show delivery item' },
-      { key: 'is_polish_needed', label: 'Polish required' },
-      { key: 'is_polish_chk_need_shown', label: 'Show polish check' },
-      { key: 'is_delivery_chk_need_shown', label: 'Show delivery check' },
-      { key: 'is_wa_delivery_stock_needed', label: 'WhatsApp delivery stock' },
+      { key: 'is_delivery_item_shown', label: 'Delivery item shown (head)' },
+      { key: 'is_polish_needed', label: 'Polish needed shown (head)' },
+      { key: 'is_polish_chk_need_shown', label: 'Polish checks shown in stock (employee)' },
+      { key: 'is_delivery_chk_need_shown', label: 'Delivery checks shown in stock (employee)' },
+      { key: 'is_wa_delivery_stock_needed', label: 'WhatsApp share needed in stock' },
       { key: 'is_cus_fitem_pur_in_shown', label: 'Show customer f-item purchase (in)' },
       { key: 'is_cus_fitem_pur_out_shown', label: 'Show customer f-item purchase (out)' },
       { key: 'is_need_grosswgt_print_shown', label: 'Print gross weight' },
       { key: 'is_die_num_search_need_to_shown', label: 'Die number search' },
+      { key: 'is_item_change_need_shown', label: 'Item change in stock (head)' },
+      { key: 'is_item_conversion_need_shown', label: 'Item conversion in stock (head)' },
     ],
   },
   {
     title: 'Orders',
     description: 'Order creation and status visibility.',
     flags: [
-      { key: 'is_create_order_shown', label: 'Show create order' },
+      { key: 'is_create_order_shown', label: 'Create order shown' },
       { key: 'is_create_order_need_to_shown', label: 'Create order required' },
       { key: 'is_need_order_status_shown', label: 'Show order status' },
       {
@@ -91,8 +94,8 @@ export const USER_FEATURE_FLAG_GROUPS: UserFeatureFlagGroup[] = [
     title: 'Cash',
     description: 'Cash management access and receipt options.',
     flags: [
-      { key: 'is_cash_mngmt_need_to_shown', label: 'Show cash management' },
-      { key: 'is_cashamt_thermal_shown', label: 'Show cash amount on thermal print' },
+      { key: 'is_cash_mngmt_need_to_shown', label: 'Cash management in stock (head)' },
+      { key: 'is_cashamt_thermal_shown', label: 'Cash amount on thermal print in stock' },
       { key: 'is_need_role_wise_cash_rpt_shown', label: 'Role-wise cash report' },
     ],
   },
@@ -104,7 +107,7 @@ export const USER_FEATURE_FLAG_GROUPS: UserFeatureFlagGroup[] = [
       { key: 'is_con_box_rpt_need_to_shown', label: 'Consolidated box report' },
       { key: 'is_box_tot_rpt_need_to_shown', label: 'Box total report' },
       { key: 'is_day_grand_rpt_need_shown', label: 'Day grand total report' },
-      { key: 'is_complete_history_need_shown', label: 'Complete history' },
+      { key: 'is_complete_history_need_shown', label: 'Complete history shown' },
       { key: 'is_tally_need_to_shown', label: 'Tally' },
     ],
   },
@@ -112,7 +115,7 @@ export const USER_FEATURE_FLAG_GROUPS: UserFeatureFlagGroup[] = [
     title: 'Customer',
     description: 'Customer-facing panels and fields.',
     flags: [
-      { key: 'is_customer_touch_need_shown', label: 'Show customer touch' },
+      { key: 'is_customer_touch_need_shown', label: 'Customer touch shown' },
       { key: 'is_customer_cmts_need_to_shown', label: 'Show customer comments' },
       { key: 'is_need_to_retailer_shown', label: 'Show retailer' },
     ],
@@ -127,7 +130,8 @@ export const USER_FEATURE_FLAG_GROUPS: UserFeatureFlagGroup[] = [
       { key: 'is_outside_need_to_shown', label: 'Show outside' },
       { key: 'is_gallery_need_to_shown', label: 'Show gallery' },
       { key: 'is_need_pink_box_shown', label: 'Show pink box' },
-      { key: 'is_remainder_shown', label: 'Show reminders' },
+      { key: 'is_remainder_shown', label: 'Cash reminder shown' },
+      { key: 'is_phone_book_need_shown', label: 'Phone book shown' },
     ],
   },
   {

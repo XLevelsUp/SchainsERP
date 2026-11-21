@@ -78,7 +78,12 @@ Route::prefix('v1')->group(function () {
             Route::delete('customer-touch-user-mappings/{id}', [CustomerTouchUserMappingController::class, 'destroy']);
         });
 
-        Route::apiResource('orders', \App\Http\Controllers\Api\OrderController::class);
+        // Creating an order needs the "Create order shown" permission
+        // (EnsureUserPermission, 2026-11-21); listing and editing don't.
+        Route::apiResource('orders', \App\Http\Controllers\Api\OrderController::class)->except(['store']);
+        Route::post('orders', [\App\Http\Controllers\Api\OrderController::class, 'store'])
+            ->middleware('user.permission:is_create_order_shown')
+            ->name('orders.store');
         Route::post('fitems', [\App\Http\Controllers\Api\FitemController::class, 'store'])->middleware('act.as.head');
 
         Route::get('customer-touch-user-mappings', [CustomerTouchUserMappingController::class, 'index']);
@@ -129,7 +134,8 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('cash-categories', CashCategoryController::class)->except(['index', 'show']);
             Route::apiResource('bank-details', BankDetailController::class)->except(['index', 'show']);
         });
-        Route::apiResource('phone-book', PhoneBookController::class)->only(['index', 'show']);
+        Route::apiResource('phone-book', PhoneBookController::class)->only(['index', 'show'])
+            ->middleware('user.permission:is_phone_book_need_shown');
         Route::post('cash-txn-details/{id}/images', [CashTxnDetailController::class, 'addImages'])->middleware('act.as.head');
         Route::delete('cash-txn-images/{imageId}', [CashTxnDetailController::class, 'deleteImage'])->middleware('act.as.head');
         Route::apiResource('reminders', ReminderController::class);
@@ -170,8 +176,11 @@ Route::prefix('v1/stock')->middleware('auth:api')->group(function () {
     Route::middleware('act.as.head')->group(function () {
         Route::post('out', [StockDetailsController::class, 'postStockOut']);
         Route::post('in', [StockDetailsController::class, 'postStockIn']);
-        Route::post('item-change', [StockDetailsController::class, 'postItemChange']);
-        Route::post('item-conversion', [StockDetailsController::class, 'postItemConversion']);
+        // Each also needs its own permission (EnsureUserPermission, 2026-11-21).
+        Route::post('item-change', [StockDetailsController::class, 'postItemChange'])
+            ->middleware('user.permission:is_item_change_need_shown');
+        Route::post('item-conversion', [StockDetailsController::class, 'postItemConversion'])
+            ->middleware('user.permission:is_item_conversion_need_shown');
         Route::post('gms-out', [StockDetailsController::class, 'postGmsOut']);
         Route::post('gms-in', [StockDetailsController::class, 'postGmsIn']);
         Route::post('numeric-waste', [StockDetailsController::class, 'postNumericWaste']);
@@ -179,7 +188,8 @@ Route::prefix('v1/stock')->middleware('auth:api')->group(function () {
         Route::post('auto-entry', [StockDetailsController::class, 'postAutoEntry']);
         Route::post('hide', [StockDetailsController::class, 'postHide']);
         Route::post('unhide', [StockDetailsController::class, 'postUnhide']);
-        Route::post('cash-out', [StockDetailsController::class, 'postCash']);
+        Route::post('cash-out', [StockDetailsController::class, 'postCash'])
+            ->middleware('user.permission:is_cash_mngmt_need_to_shown');
     });
 
     Route::get('reports/items-obcb/export', [StockDetailsController::class, 'exportHistoryItemsObcb']);

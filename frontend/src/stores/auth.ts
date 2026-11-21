@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed } from 'vue'
 import { authApi } from '@/lib/authApi'
 import { appSession } from '@/lib/authSession'
+import type { AppPermission } from '@/types'
 import { toAuthUser, useSessionState } from './sessionState'
 
 /*
@@ -26,5 +27,11 @@ export const useAuthStore = defineStore('auth', () => {
     () => isHead.value || state.user.value?.is_act_as_head_enabled === true,
   )
 
-  return { ...state, isHead, canActAsHead }
+  // What the app shows this user (lib/appPermissions.ts): only the features
+  // an admin switched on. A missing value reads as off, as on the backend.
+  function can(permission: AppPermission): boolean {
+    return state.user.value?.permissions?.[permission] === true
+  }
+
+  return { ...state, isHead, canActAsHead, can }
 })

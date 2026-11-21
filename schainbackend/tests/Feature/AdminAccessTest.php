@@ -111,7 +111,8 @@ class AdminAccessTest extends TestCase
         $this->getJson('/api/v1/settings')->assertOk();
 
         $this->postJson('/api/v1/items', ['item_name' => 'X'])->assertStatus(403);
-        $this->postJson('/api/v1/roles', ['role' => 'HEAD'])->assertStatus(403);
+        // Roles are created in the admin console only.
+        $this->postJson('/api/v1/roles', ['role' => 'HEAD'])->assertStatus(405);
         $this->postJson('/api/v1/settings', ['setting_key' => 'k', 'setting_value' => [1]])->assertStatus(403);
         $this->postJson('/api/v1/bank-details', [])->assertStatus(403);
         $this->postJson('/api/v1/cash-categories', [])->assertStatus(403);
@@ -119,13 +120,17 @@ class AdminAccessTest extends TestCase
         $this->postJson('/api/v1/user-details', $this->newUserPayload($this->customerRole->id, 'c1'))->assertStatus(403);
     }
 
-    public function test_heads_manage_items_roles_settings_and_the_audit_log_in_the_app(): void
+    public function test_heads_manage_items_settings_and_the_audit_log_in_the_app(): void
     {
         $this->signInAs($this->head);
 
         // Past the gate: validation decides from here.
-        $this->postJson('/api/v1/roles', [])->assertStatus(422);
         $this->postJson('/api/v1/items', [])->assertStatus(422);
+        // Roles moved to the admin console; heads still read them.
+        $this->getJson('/api/v1/roles')->assertOk();
+        $this->postJson('/api/v1/roles', ['role' => 'X'])->assertStatus(405);
+        $this->putJson('/api/v1/roles/' . $this->headRole->id, ['role' => 'X'])->assertStatus(405);
+        $this->deleteJson('/api/v1/roles/' . $this->headRole->id)->assertStatus(405);
         $this->getJson('/api/v1/system-logs')->assertOk();
         $this->getJson('/api/v1/system-logs/filters')->assertOk();
     }
@@ -280,16 +285,58 @@ class AdminAccessTest extends TestCase
     {
         $this->signInToAdminConsoleAs($this->admin);
 
-        // Read-only lookups for the Users form.
-        $this->getJson('/api/v1/admin/roles')->assertOk();
+        // Items are a read-only lookup for the Users form. Roles can be
+        // created and viewed, never edited or deleted.
         $this->getJson('/api/v1/admin/items')->assertOk();
-        $this->postJson('/api/v1/admin/roles', ['role' => 'X'])->assertStatus(405);
         $this->postJson('/api/v1/admin/items', [])->assertStatus(405);
+        $this->putJson('/api/v1/admin/roles/' . $this->headRole->id, ['role' => 'X'])->assertStatus(405);
+        $this->deleteJson('/api/v1/admin/roles/' . $this->headRole->id)->assertStatus(405);
         $this->getJson('/api/v1/admin/system-logs')->assertStatus(404);
 
         // And an admin session doesn't open the app.
         $this->getJson('/api/v1/items')->assertStatus(401);
         $this->postJson('/api/v1/stock/out', [])->assertStatus(401);
+    }
+
+    public function test_admins_create_and_view_roles(): void
+    {
+        $this->signInToAdminConsoleAs($this->admin);
+
+        // Stored trimmed and in capitals, like the existing roles; active by default.
+        $created = $this->postJson('/api/v1/admin/roles', ['role' => '  job work '])
+            ->assertStatus(201)
+            ->assertJsonPath('data.role', 'JOB WORK')
+            ->assertJsonPath('data.is_active', true)
+            ->json('data');
+
+        $this->postJson('/api/v1/admin/roles', ['role' => 'Chit', 'is_active' => false])
+            ->assertStatus(201)
+            ->assertJsonPath('data.role', 'CHIT')
+            ->assertJsonPath('data.is_active', false);
+
+        // Unique ignoring case, required, and a real boolean.
+        $this->postJson('/api/v1/admin/roles', ['role' => 'Head'])->assertStatus(422)
+            ->assertJsonValidationErrors(['role']);
+        $this->postJson('/api/v1/admin/roles', ['role' => '   '])->assertStatus(422)
+            ->assertJsonValidationErrors(['role']);
+        $this->postJson('/api/v1/admin/roles', ['role' => 'X', 'is_active' => 'maybe'])->assertStatus(422)
+            ->assertJsonValidationErrors(['is_active']);
+
+        $this->getJson('/api/v1/admin/roles/' . $created['id'])->assertOk()
+            ->assertJsonPath('data.role', 'JOB WORK');
+        // The list returns every role, inactive included, each with its status.
+        $this->getJson('/api/v1/admin/roles')->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('data.0.role', 'CHIT')
+            ->assertJsonPath('data.0.is_active', false);
+
+        $this->assertDatabaseHas('system_logs', [
+            'module' => 'ADMIN',
+            'action' => 'ROLE_CREATE',
+            'admin_id' => $this->admin->id,
+            'reference_table' => 'roles',
+            'reference_id' => $created['id'],
+        ]);
     }
 
     public function test_an_admin_token_without_the_admin_scope_is_refused(): void

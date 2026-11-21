@@ -31,8 +31,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.session' => \App\Http\Middleware\EnsureAdminSession::class,
             'admin.audit' => \App\Http\Middleware\LogAdminAction::class,
             'special.password' => \App\Http\Middleware\RequireSpecialPassword::class,
+            'user.profile' => \App\Http\Middleware\ApplyUserFormProfile::class,
             // App: the one user creation left there (Add Retailer).
             'quick.add.customer' => \App\Http\Middleware\EnsureQuickAddCustomer::class,
+            // App: a feature the signed-in user's permissions don't allow.
+            'user.permission' => \App\Http\Middleware\EnsureUserPermission::class,
         ]);
 
         $middleware->redirectGuestsTo(fn (Request $request) => abort(response()->json([

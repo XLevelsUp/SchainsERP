@@ -23,7 +23,9 @@ function toPayload(form: UserDetailFormValues, includePassword = true) {
   const payload: Record<string, unknown> = {
     name: form.name,
     user_name: form.user_name,
-    address: form.address,
+    // store() requires it; a role whose form has no address (2026-11-21
+    // user-form profiles) sends the same '-' placeholder as the fields below.
+    address: form.address.trim() || '-',
     signature: form.signature.trim() || '-',
     code: form.code.trim() || '-',
     phone_no: form.phone_no,
@@ -76,18 +78,68 @@ function toPayload(form: UserDetailFormValues, includePassword = true) {
     .map((m) => ({ head_id: m.head_id }))
   if (cashHeadMappings.length) payload.cash_head_mappings = cashHeadMappings
 
+  // 2026-11-21 sections, sent only by forms that carry them (the admin
+  // console). Customer touches go as the whole set — update() replaces it.
+  if (form.joining_date !== undefined) payload.joining_date = form.joining_date || null
+  // HEAD form (2026-11-21).
+  if (form.aadhar_number !== undefined) payload.aadhar_number = form.aadhar_number.trim() || null
+  if (form.per_day_salary !== undefined) payload.per_day_salary = form.per_day_salary === '' ? null : form.per_day_salary
+  if (form.report_password) payload.report_password = form.report_password
+  if (form.head_user_mappings?.length) {
+    const headUsers = employeePayload(form.head_user_mappings)
+    if (headUsers.length) payload.head_user_mappings = headUsers
+  }
+  if (form.customer_touch_mappings !== undefined) {
+    payload.customer_touch_mappings = form.customer_touch_mappings
+      .filter((m) => m.customer_touch_id !== null)
+      .map((m) => ({ customer_touch_id: m.customer_touch_id, is_active: m.is_active }))
+  }
+
   return payload
 }
 
-// JSON unless a proof image is attached — store()/update() only accept
-// aadhar_image as a real file, which needs multipart. Nulls go as '' so they
-// still clear their column: buildMultipartForm drops nulls entirely, and
-// Laravel's ConvertEmptyStringsToNull turns '' back into null server-side.
-function toMultipart(payload: Record<string, unknown>, image: File, extra: Record<string, string> = {}) {
+function headPayload(rows: UserDetailFormValues['head_mappings']) {
+  return rows.filter((m) => m.head_id !== null).map((m) => ({ head_id: m.head_id }))
+}
+
+function employeePayload(rows: NonNullable<UserDetailFormValues['head_user_mappings']>) {
+  return rows.filter((m) => m.employee_id !== null).map((m) => ({ employee_id: m.employee_id }))
+}
+
+// The image fields store()/update() accept as real files.
+function filesOf(form: UserDetailFormValues): Record<string, File> {
+  const files: Record<string, File> = {}
+  if (form.aadhar_image) files.aadhar_image = form.aadhar_image
+  if (form.profile_image) files.profile_image = form.profile_image
+  if (form.aadhar_back_image) files.aadhar_back_image = form.aadhar_back_image
+  if (form.image_file) files.image_url = form.image_file
+  return files
+}
+
+// Lists update() replaces as a whole set. FormData can't carry an empty
+// list, so one that's empty goes as '' — Laravel turns it into null, which
+// update() reads as "none". (item_mappings isn't one of them: an empty one
+// still can't go multipart, see update() below.)
+const REPLACED_LISTS = ['head_mappings', 'cash_head_mappings', 'head_user_mappings', 'customer_touch_mappings']
+
+// JSON unless an image is attached — store()/update() only accept
+// aadhar_image / profile_image as real files, which needs multipart. Nulls go
+// as '' so they still clear their column: buildMultipartForm drops nulls
+// entirely, and Laravel's ConvertEmptyStringsToNull turns '' back into null
+// server-side.
+function toMultipart(
+  payload: Record<string, unknown>,
+  files: Record<string, File>,
+  extra: Record<string, string> = {},
+) {
   const fields = Object.fromEntries(
-    Object.entries(payload).map(([key, value]) => [key, value === null ? '' : value]),
+    Object.entries(payload).map(([key, value]) => {
+      if (value === null) return [key, '']
+      if (REPLACED_LISTS.includes(key) && Array.isArray(value) && value.length === 0) return [key, '']
+      return [key, value]
+    }),
   )
-  return buildMultipartForm({ ...fields, ...extra, aadhar_image: image })
+  return buildMultipartForm({ ...fields, ...extra, ...files })
 }
 
 // store()/show()/update() all wrap the user object one level deeper than
@@ -96,6 +148,9 @@ interface UserDetailEnvelope {
   user: UserDetail
   profile_image_url: string | null
   aadhar_image_url: string | null
+  // show() only (2026-11-21): the HEAD form's Image and Aadhar back.
+  image_url?: string | null
+  aadhar_back_image_url?: string | null
 }
 
 // PUT /user-details/{id}/update-cc echoes back only the two fields it
@@ -132,31 +187,47 @@ export function createUserDetailsApi(api: ApiClient) {
 
     create: (form: UserDetailFormValues) => {
       const payload = toPayload(form)
+      const files = filesOf(form)
       return (
-        form.aadhar_image
-          ? api.postForm<ApiResponse<UserDetailEnvelope>>(
-              RESOURCE,
-              toMultipart(payload, form.aadhar_image),
-            )
+        Object.keys(files).length
+          ? api.postForm<ApiResponse<UserDetailEnvelope>>(RESOURCE, toMultipart(payload, files))
           : api.post<ApiResponse<UserDetailEnvelope>>(RESOURCE, payload)
       ).then((r) => r.data)
     },
 
-    // Frontend-ready for when the backend adds PUT /user-details/{id}.
-    // Password only sent if the user typed a new one. With a new proof image
-    // the request goes as POST + _method=PUT: PHP only parses multipart bodies
-    // on POST, and Laravel's method override still routes it to update().
-    // includeItemMappings: false leaves item_mappings out entirely, for
-    // non-heads, who can't see the item totals (the backend ignores theirs too).
+    // PUT /user-details/{id} (admin console). Password only sent if the user
+    // typed a new one. With a new image the request goes as POST +
+    // _method=PUT: PHP only parses multipart bodies on POST, and Laravel's
+    // method override still routes it to update().
+    //
+    // includeItemMappings: false leaves item_mappings out entirely.
+    // includeHeadMappings: true sends the head lists — stock and cash heads,
+    // and for a head the users under them — even empty, so update() replaces
+    // them. Only when they changed: sending them
+    // needs the special password (RequireSpecialPassword), so the caller
+    // passes a client that carries it.
     update: (
       id: number,
       form: UserDetailFormValues,
-      options: { includeItemMappings?: boolean } = {},
+      options: { includeItemMappings?: boolean; includeHeadMappings?: boolean } = {},
     ) => {
       const payload = toPayload(form, form.password.length > 0)
+      const files = filesOf(form)
+      const multipart = Object.keys(files).length > 0
+
+      if (options.includeHeadMappings) {
+        payload.head_mappings = headPayload(form.head_mappings)
+        payload.cash_head_mappings = headPayload(form.cash_head_mappings)
+        payload.head_user_mappings = employeePayload(form.head_user_mappings ?? [])
+      } else {
+        delete payload.head_mappings
+        delete payload.cash_head_mappings
+        delete payload.head_user_mappings
+      }
+
       if (options.includeItemMappings === false) {
         delete payload.item_mappings
-      } else if (!form.aadhar_image && payload.item_mappings === undefined) {
+      } else if (!multipart && payload.item_mappings === undefined) {
         // update() syncs item mappings only when the key is present (PR #53),
         // and toPayload() leaves an empty list out, so removing a user's last
         // item never reached the server. Send [] so it clears. JSON only:
@@ -165,16 +236,25 @@ export function createUserDetailsApi(api: ApiClient) {
         payload.item_mappings = []
       }
       return (
-        form.aadhar_image
+        multipart
           ? api.postForm<ApiResponse<UserDetailEnvelope>>(
               `${RESOURCE}/${id}`,
-              toMultipart(payload, form.aadhar_image, { _method: 'PUT' }),
+              toMultipart(payload, files, { _method: 'PUT' }),
             )
           : api.put<ApiResponse<UserDetailEnvelope>>(`${RESOURCE}/${id}`, payload)
       ).then((r) => r.data)
     },
 
     remove: (id: number) => api.delete<ApiResponse<null>>(`${RESOURCE}/${id}`),
+
+    // PATCH /user-details/{id}/status (admin console): the Users list's
+    // active toggle, without sending the whole form.
+    setStatus: (id: number, isActive: boolean) =>
+      api
+        .put<ApiResponse<{ user_id: number; is_active: boolean }>>(`${RESOURCE}/${id}/status`, {
+          is_active: isActive,
+        })
+        .then((r) => r.data),
 
     // PUT /user-details/{id}/update-cc (UserDetailController::updateCc, added
     // in PR #32) — a dedicated single-field endpoint so the customer comments

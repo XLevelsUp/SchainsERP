@@ -4,7 +4,10 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Api\Admin\AdminAccountController;
 use App\Http\Controllers\Api\Admin\AdminAuthController;
+use App\Http\Controllers\Api\Admin\UserFormProfileController;
+use App\Http\Controllers\Api\Admin\UserStatusController;
 use App\Http\Controllers\Api\CashHeadEmployeeMappingController;
+use App\Http\Controllers\Api\CustomerTouchController;
 use App\Http\Controllers\Api\HeadEmployeeMappingController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\RoleController;
@@ -45,15 +48,22 @@ Route::middleware(['auth:admin', 'admin.session', 'admin.audit'])->group(functio
             ->name('account.special-password');
     });
 
-    // Users. Creating one with heads attached, and deleting one, need the
-    // special password. update() doesn't change head mappings.
+    // Users. The form's sections and permissions depend on the user's role
+    // (App\Support\UserFormProfiles): served by user-form-profiles, enforced
+    // on save by user.profile. Sending heads (create, or an edit that changes
+    // them) and deleting a user need the special password.
+    Route::get('user-form-profiles', UserFormProfileController::class)->name('user-form-profiles');
     Route::get('user-details', [UserDetailController::class, 'index'])->name('user-details.index');
     Route::get('user-details/{user_detail}', [UserDetailController::class, 'show'])->name('user-details.show');
     Route::post('user-details', [UserDetailController::class, 'store'])
-        ->middleware('special.password:head_mappings,cash_head_mappings')
+        ->middleware(['user.profile', 'special.password:head_mappings,cash_head_mappings,head_user_mappings'])
         ->name('user-details.store');
     Route::match(['put', 'patch'], 'user-details/{user_detail}', [UserDetailController::class, 'update'])
+        ->middleware(['user.profile', 'special.password:head_mappings,cash_head_mappings,head_user_mappings'])
         ->name('user-details.update');
+    Route::match(['put', 'patch'], 'user-details/{user_detail}/status', [UserStatusController::class, 'update'])
+        ->whereNumber('user_detail')
+        ->name('user-details.status');
     Route::delete('user-details/{user_detail}', [UserDetailController::class, 'destroy'])
         ->middleware('special.password')
         ->name('user-details.destroy');
@@ -86,7 +96,8 @@ Route::middleware(['auth:admin', 'admin.session', 'admin.audit'])->group(functio
     Route::post('roles', [RoleController::class, 'store'])->name('roles.store');
     Route::get('roles/{role}', [RoleController::class, 'show'])->name('roles.show');
 
-    // Read-only lookup for the Users form's item picker; heads manage items
-    // in the app.
+    // Read-only lookups for the Users form's item and customer touch pickers;
+    // heads manage both lists in the app.
     Route::get('items', [ItemController::class, 'index'])->name('items.index');
+    Route::get('customer-touch', [CustomerTouchController::class, 'index'])->name('customer-touch.index');
 });

@@ -20,6 +20,95 @@ use Illuminate\Support\Facades\Storage;
 
 class UserDetailController extends Controller
 {
+    /**
+     * Rules for the user-form sections added 2026-11-21 (joining date,
+     * customer touches), shared by store() and update(). Which of them a
+     * role may send is decided before the controller, by ApplyUserFormProfile.
+     */
+    private static function formSectionRules(): array
+    {
+        return [
+            'joining_date' => 'nullable|date',
+            'customer_touch_mappings' => 'nullable|array',
+            'customer_touch_mappings.*.customer_touch_id' => 'required|integer|distinct|exists:customer_touch,item_id',
+            'customer_touch_mappings.*.is_active' => 'sometimes|boolean',
+
+            // HEAD form (2026-11-21).
+            'head_user_mappings' => 'nullable|array',
+            'head_user_mappings.*.employee_id' => 'required|integer|distinct|exists:user_details,user_id',
+            'image_url' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'aadhar_back_image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'aadhar_number' => 'nullable|string|max:20',
+            'per_day_salary' => 'nullable|numeric|min:0|max:99999999',
+            // Set or replaced, never read back; stored hashed.
+            'report_password' => 'nullable|string|min:4|max:100',
+            'is_item_change_need_shown' => 'sometimes|boolean',
+            'is_item_conversion_need_shown' => 'sometimes|boolean',
+            'is_phone_book_need_shown' => 'sometimes|boolean',
+        ];
+    }
+
+    /** Fields of the HEAD form stored straight from the request, on create and edit. */
+    private const HEAD_FORM_FIELDS = ['aadhar_number', 'per_day_salary'];
+
+    /** The 2026-11-21 permissions (default off). */
+    private const NEW_PERMISSION_FLAGS = [
+        'is_item_change_need_shown',
+        'is_item_conversion_need_shown',
+        'is_phone_book_need_shown',
+    ];
+
+    /**
+     * Stores an uploaded image for a user column (image_url,
+     * aadhar_back_image), deleting the file it replaces. Null when none was
+     * sent, so the stored one stays.
+     */
+    private function storeUserImage(Request $request, string $field, ?UserDetail $user = null): ?string
+    {
+        if (!$request->hasFile($field)) {
+            return null;
+        }
+
+        if ($user && $user->{$field} && Storage::disk('public')->exists($user->{$field})) {
+            Storage::disk('public')->delete($user->{$field});
+        }
+
+        return $request->file($field)->store('images', 'public');
+    }
+
+    /** The HEAD form's extra columns, from the request (store / update). */
+    private function headFormData(Request $request, ?UserDetail $user = null): array
+    {
+        $data = [];
+
+        foreach (self::HEAD_FORM_FIELDS as $field) {
+            if ($request->exists($field)) {
+                $data[$field] = $field === 'per_day_salary'
+                    ? ($request->input($field) ?? 0)
+                    : $request->input($field);
+            }
+        }
+
+        foreach (self::NEW_PERMISSION_FLAGS as $flag) {
+            if ($request->exists($flag)) {
+                $data[$flag] = $request->boolean($flag);
+            }
+        }
+
+        // Blank keeps the current one.
+        if ($request->filled('report_password')) {
+            $data['report_password'] = Hash::make((string) $request->input('report_password'));
+        }
+
+        foreach (['image_url', 'aadhar_back_image'] as $field) {
+            if ($path = $this->storeUserImage($request, $field, $user)) {
+                $data[$field] = $path;
+            }
+        }
+
+        return $data;
+    }
+
     /*
     |--------------------------------------------------------------------------
     | GET ALL USERS
@@ -98,6 +187,11 @@ class UserDetailController extends Controller
                     'category_name' => $user->category_name,
                     'retailer_user_name' => 'Normal user',
                     'phone_number' => $user->phone_no,
+                    // For the admin console's Users list (2026-11-21).
+                    'user_name' => $user->user_name,
+                    'role_id' => $user->role_id,
+                    'is_salary_person' => (bool) $user->is_salary_person,
+                    'per_day_salary' => $user->per_day_salary,
                 ];
 
                 // Balances only for heads, or for the signed-in user's own row
@@ -439,8 +533,10 @@ class UserDetailController extends Controller
             'head_mappings' =>
                 'nullable|array',
 
+            // exists: an unknown head id used to fail the insert's foreign key
+            // as a 500.
             'head_mappings.*.head_id' =>
-                'required|integer',
+                'required|integer|distinct|exists:user_details,user_id',
 
 
             /*
@@ -453,7 +549,9 @@ class UserDetailController extends Controller
                 'nullable|array',
 
             'cash_head_mappings.*.head_id' =>
-                'required|integer',
+                'required|integer|distinct|exists:user_details,user_id',
+
+            ...self::formSectionRules(),
         ]);
 
         $validator->after(function ($validator) use ($request) {
@@ -555,6 +653,9 @@ class UserDetailController extends Controller
 
                     'system_id' =>
                         $request->system_id,
+
+                    'joining_date' =>
+                        $request->input('joining_date'),
 
 
                     /*
@@ -737,6 +838,10 @@ class UserDetailController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
+                // HEAD form (2026-11-21): Aadhar number / back image, image,
+                // per-day salary, report password, the new permissions.
+                $userData = array_merge($userData, $this->headFormData($request));
+
                 $user = UserDetail::create($userData);
 
 
@@ -745,6 +850,10 @@ class UserDetailController extends Controller
                 | ITEM MAPPINGS
                 |--------------------------------------------------------------------------
                 */
+
+                // Admins choose a new user's items, never the balances on them
+                // (2026-11-21): their items start at zero, like the legacy form.
+                $totalsFromRequest = !\App\Support\AdminAccess::isAdmin($request->user());
 
                 if ($request->filled('item_mappings')) {
 
@@ -762,12 +871,14 @@ class UserDetailController extends Controller
                                 $user->user_id,
 
                             'item_grams_total' =>
-                                $mapping['item_grams_total']
-                                ?? '0',
+                                $totalsFromRequest
+                                    ? ($mapping['item_grams_total'] ?? '0')
+                                    : '0',
 
                             'item_purity_total' =>
-                                $mapping['item_purity_total']
-                                ?? '0',
+                                $totalsFromRequest
+                                    ? ($mapping['item_purity_total'] ?? '0')
+                                    : '0',
 
                             'is_primary' =>
                                 $mapping['is_primary'],
@@ -832,6 +943,24 @@ class UserDetailController extends Controller
                                 now(),
                         ]);
                     }
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | CUSTOMER TOUCH MAPPINGS (user form, 2026-11-21)
+                |--------------------------------------------------------------------------
+                */
+
+                if ($request->filled('customer_touch_mappings')) {
+                    app(\App\Services\UserMappingSyncService::class)
+                        ->syncCustomerTouches($user, $request->input('customer_touch_mappings'));
+                }
+
+                // For a head: the users under them (HEAD form's "Head Users").
+                if ($request->filled('head_user_mappings')) {
+                    app(\App\Services\UserMappingSyncService::class)
+                        ->syncHeadUsers($user, $request->input('head_user_mappings'));
                 }
 
 
@@ -902,6 +1031,8 @@ class UserDetailController extends Controller
                 'itemMappings',
                 'headEmployeeMappings',
                 'cashHeadEmployeeMappings',
+                'customerTouchMappings',
+                'headUserMappings',
                 'role'
             ])
                 ->where('user_id', $id)
@@ -926,13 +1057,20 @@ class UserDetailController extends Controller
             unset($userArray['otp']);
             $userArray['password'] = '';
             $userArray['confirm_password'] = '';
-            $userArray['gm'] = sprintf('%0.3f', $user->grams_grand_total ?? 0);
-            $userArray['purity'] = sprintf('%0.3f', $user->purity_grand_total ?? 0);
+            // Same rule as the model's toArray() (BalanceVisibility): these were
+            // added after it and leaked any user's grams/purity to anyone.
+            if (\App\Support\BalanceVisibility::canSeeBalancesOf($user->user_id)) {
+                $userArray['gm'] = sprintf('%0.3f', $user->grams_grand_total ?? 0);
+                $userArray['purity'] = sprintf('%0.3f', $user->purity_grand_total ?? 0);
+            }
             $userArray['id'] = $user->user_id;
             $userArray['full_name'] = $user->name;
             $userArray['phone_number'] = $user->phone_no;
             $userArray['profile_img'] = $user->profile_image ? asset('storage/' . $user->profile_image) : null;
             $userArray['type'] = $user->role ? $user->role->role : null;
+            // The report password is never sent back; the form only needs to
+            // know whether one is set (2026-11-21).
+            $userArray['has_report_password'] = !empty($user->report_password);
 
             return response()->json([
 
@@ -961,6 +1099,10 @@ class UserDetailController extends Controller
                             $user->aadhar_image
                         )
                         : null,
+
+                    // HEAD form images (2026-11-21).
+                    'image_url' => $user->image_url ? asset('storage/' . $user->image_url) : null,
+                    'aadhar_back_image_url' => $user->aadhar_back_image ? asset('storage/' . $user->aadhar_back_image) : null,
                 ]
 
             ], 200);
@@ -1108,6 +1250,29 @@ class UserDetailController extends Controller
 
                     /*
                     |--------------------------------------------------------------------------
+                    | HEADS (2026-11-21) — sent only when the admin changed them;
+                    | replaces the user's set. Needs the special password
+                    | (routes/admin.php). Null = none (multipart can't send []).
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'head_mappings' =>
+                        'nullable|array',
+
+                    'head_mappings.*.head_id' =>
+                        'required|integer|distinct|exists:user_details,user_id',
+
+                    'cash_head_mappings' =>
+                        'nullable|array',
+
+                    'cash_head_mappings.*.head_id' =>
+                        'required|integer|distinct|exists:user_details,user_id',
+
+                    ...self::formSectionRules(),
+
+
+                    /*
+                    |--------------------------------------------------------------------------
                     | BOOLEAN FIELDS
                     |--------------------------------------------------------------------------
                     */
@@ -1250,7 +1415,9 @@ class UserDetailController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            DB::transaction(function () use ($request, $user) {
+            $sync = app(\App\Services\UserMappingSyncService::class);
+
+            DB::transaction(function () use ($request, $user, $sync) {
 
                 /*
                 |--------------------------------------------------------------------------
@@ -1276,6 +1443,7 @@ class UserDetailController extends Controller
                     'mailing_name',
                     'category_name',
                     'system_id',
+                    'joining_date',
 
                     'is_active',
                     'is_delete',
@@ -1504,6 +1672,11 @@ class UserDetailController extends Controller
                     now();
 
 
+                // HEAD form (2026-11-21): only what was sent changes; a new
+                // image replaces (and deletes) the old file.
+                $userData = array_merge($userData, $this->headFormData($request, $user));
+
+
                 /*
                 |--------------------------------------------------------------------------
                 | SAVE USER
@@ -1578,6 +1751,39 @@ class UserDetailController extends Controller
                             ]);
                         }
                     }
+                } elseif ($request->has('item_mappings') && \App\Support\BalanceVisibility::viewerIsAdmin()) {
+                    // Admins (2026-11-21): which items and which is primary;
+                    // totals are kept, and an item holding a balance can't go.
+                    $sync->syncItemsKeepingTotals($user, (array) $request->input('item_mappings', []));
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | HEADS, CASH HEADS, CUSTOMER TOUCHES (user form, 2026-11-21)
+                |--------------------------------------------------------------------------
+                | Each is synced only when sent: the admin console sends the head
+                | lists only when they changed (needing the special password), and
+                | a role whose profile leaves a section out never gets it this far
+                | (ApplyUserFormProfile).
+                */
+
+                if ($request->exists('head_mappings')) {
+                    $sync->syncHeads($user, $request->input('head_mappings'), HeadEmployeeMapping::class);
+                }
+
+                if ($request->exists('cash_head_mappings')) {
+                    $sync->syncHeads($user, $request->input('cash_head_mappings'), CashHeadEmployeeMapping::class);
+                }
+
+                if ($request->exists('customer_touch_mappings')) {
+                    $sync->syncCustomerTouches($user, $request->input('customer_touch_mappings'));
+                }
+
+                // Head side (HEAD form's "Head Users"): sent only when changed,
+                // needs the special password like any head assignment.
+                if ($request->exists('head_user_mappings')) {
+                    $sync->syncHeadUsers($user, $request->input('head_user_mappings'));
                 }
             });
 
@@ -1629,6 +1835,10 @@ class UserDetailController extends Controller
             ], 200);
 
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Raised inside the transaction (e.g. removing an item that still
+            // holds a balance): a 422 with the field error, not a 500.
+            throw $e;
         } catch (\Exception $e) {
             report($e);
 
@@ -1717,6 +1927,13 @@ class UserDetailController extends Controller
                         ->delete(
                             $user->aadhar_image
                         );
+                }
+
+                // HEAD form images (2026-11-21).
+                foreach (['image_url', 'aadhar_back_image'] as $field) {
+                    if ($user->{$field} && Storage::disk('public')->exists($user->{$field})) {
+                        Storage::disk('public')->delete($user->{$field});
+                    }
                 }
 
 

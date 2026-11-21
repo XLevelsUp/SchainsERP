@@ -93,6 +93,18 @@ class UserDetail extends Model
         'is_cus_fitem_pur_in_shown',
         'is_need_show_order_display_in_head_login',
         'is_metal_stock_shown',
+
+        'joining_date',
+
+        // HEAD user form (2026-11-21).
+        'aadhar_number',
+        'aadhar_back_image',
+        'image_url', // the form's "Image" (legacy "Image Url"), a stored file path
+        'per_day_salary',
+        'report_password',
+        'is_item_change_need_shown',
+        'is_item_conversion_need_shown',
+        'is_phone_book_need_shown',
         'grams_grand_total',
         'purity_grand_total',
         'rak_cash_balance',
@@ -145,6 +157,12 @@ class UserDetail extends Model
     protected $casts = [
 
         'role_id' => 'integer',
+
+        'joining_date' => 'date:Y-m-d',
+
+        'is_item_change_need_shown' => 'boolean',
+        'is_item_conversion_need_shown' => 'boolean',
+        'is_phone_book_need_shown' => 'boolean',
 
         'is_act_as_head_enabled' => 'boolean',
 
@@ -229,6 +247,38 @@ class UserDetail extends Model
         return $this->hasMany(
             CashHeadEmployeeMapping::class,
             'employee_id',
+            'user_id'
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CUSTOMER TOUCH MAPPINGS
+    |--------------------------------------------------------------------------
+    | The touches this user is given (customer_touch_user_mappings). Set on
+    | the user form's "Customer touches" section.
+    */
+
+    /*
+    | The users under this head (head_employee_mappings where this user is
+    | the head) — the HEAD form's "Head Users". headEmployeeMappings() above
+    | is the other direction: the heads this user reports to.
+    */
+    public function headUserMappings()
+    {
+        return $this->hasMany(
+            HeadEmployeeMapping::class,
+            'head_id',
+            'user_id'
+        );
+    }
+
+    public function customerTouchMappings()
+    {
+        return $this->hasMany(
+            CustomerTouchUserMapping::class,
+            'user_id',
             'user_id'
         );
     }

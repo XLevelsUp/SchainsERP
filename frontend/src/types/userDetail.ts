@@ -23,6 +23,12 @@ export interface UserDetailListItem {
   phone_number: string
   profile_img: string | null
   is_active: boolean
+  // Added 2026-11-21 for the admin console's Users list. Optional so the
+  // app's many pickers don't have to care.
+  user_name?: string
+  role_id?: number | null
+  is_salary_person?: boolean
+  per_day_salary?: string | number | null
   // module=stock (or omitted — the backend defaults to 'stock')
   gm?: string
   purity?: string
@@ -60,6 +66,13 @@ export interface UserDetail extends Partial<UserFeatureFlags> {
   rak_rtgs_balance: number
   grams_grand_total: number
   purity_grand_total: number
+  // 2026-11-21 (YYYY-MM-DD).
+  joining_date?: string | null
+  per_day_salary?: string | number | null
+  // HEAD form (2026-11-21).
+  aadhar_number?: string | null
+  // The report password itself is never sent back.
+  has_report_password?: boolean
   added_at?: string
   updated_at?: string
   // Per-user feature toggles. GET /user-details/{id} and index() return all
@@ -76,6 +89,28 @@ export interface UserDetail extends Partial<UserFeatureFlags> {
   item_mappings?: UserItemMapping[]
   head_employee_mappings?: UserHeadMapping[]
   cash_head_employee_mappings?: UserHeadMapping[]
+  customer_touch_mappings?: UserCustomerTouchMapping[]
+  // For a head: the users under them (head_employee_mappings, head side).
+  head_user_mappings?: UserHeadMapping[]
+}
+
+// customer_touch_user_mappings row as show() returns it.
+export interface UserCustomerTouchMapping {
+  id: number
+  user_id: number
+  customer_touch_id: number
+  is_active: boolean
+}
+
+// For a head: one user under them, sent with the user create / update.
+export interface HeadUserMappingInput {
+  employee_id: number | null
+}
+
+// One customer touch given to a user, sent with the user create / update.
+export interface CustomerTouchMappingInput {
+  customer_touch_id: number | null
+  is_active: boolean
 }
 
 // users_items_mappings row as show() returns it. The totals are running
@@ -147,6 +182,10 @@ export type UserFeatureFlagKey =
   | 'is_admin_login_otp_need_to_shown'
   | 'is_freeze_entry_need_to_shown'
   | 'is_act_as_head_enabled'
+  // 2026-11-21 — checked by the app when the user is signed in.
+  | 'is_item_change_need_shown'
+  | 'is_item_conversion_need_shown'
+  | 'is_phone_book_need_shown'
 
 export type UserFeatureFlags = Record<UserFeatureFlagKey, boolean>
 
@@ -195,4 +234,20 @@ export interface UserDetailFormValues extends UserFeatureFlags {
   // field. Optional so forms that never collect it (AddRetailerModal) don't
   // have to carry it; null/absent = keep whatever is already stored.
   aadhar_image?: File | null
+  // 2026-11-21, the admin console's role-driven form. Optional for the same
+  // reason as aadhar_image. '' = no joining date.
+  joining_date?: string
+  customer_touch_mappings?: CustomerTouchMappingInput[]
+  // The user's picture (`profile_image` file field); null = keep the stored one.
+  profile_image?: File | null
+  // HEAD form (2026-11-21). Files: null = keep the stored one.
+  head_user_mappings?: HeadUserMappingInput[]
+  aadhar_number?: string
+  aadhar_back_image?: File | null
+  // The form's "Image" (the image_url column).
+  image_file?: File | null
+  // '' = 0. Only sent when the role has the salary section.
+  per_day_salary?: string
+  // Blank keeps the current one.
+  report_password?: string
 }

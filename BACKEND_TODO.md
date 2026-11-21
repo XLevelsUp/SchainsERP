@@ -513,36 +513,8 @@ Also worth confirming: is `proff` (varchar 155) the legacy slot for the
 proof document's path? If proof now lives in `aadhar_image`, `proff` could
 be dropped from `store()`'s required list entirely.
 
-## 14. Roles cannot be activated or deactivated  `#39`
-
-**Where:** `database/migrations/2026_07_23_125520_create_roles_table.php`,
-`app/Models/Role.php`, `app/Http/Controllers/Api/RoleController.php`
-
-The Roles screen now has an Active / Inactive toggle, but the backend has
-nowhere to keep it. The `roles` table has only `id`, `role`, `added_at` and
-`touch`; `Role::$fillable` has no status; and `store()` / `update()` validate
-only `role`, `added_at` and `touch`. So `PUT /roles/{id}` with
-`{ "is_active": false }` answers **200** and changes nothing — `validate()`
-silently drops the field.
-
-**What the frontend sends and expects** — the same shape items, cash
-categories and bank details already use:
-
-- a new migration adding `$table->boolean('is_active')->default(true);` to `roles`
-- `Role`: `is_active` in `$fillable`, cast to `boolean`
-- `store()` and `update()`: `'is_active' => 'sometimes|boolean'`
-- `index()`, `show()` and both write responses return `is_active`
-- `index()` keeps returning **all** roles, inactive included — the Users,
-  Phone Book and Cash Management filters still need them
-
-Nothing else is needed from the frontend once that lands: the on-screen
-warning on Roles disappears by itself, the toggle starts saving, and inactive
-roles drop out of the Role picker when creating or editing a user or client
-(someone already on an inactive role keeps it).
-
-Open question: should deactivating a role do anything to the users already
-on it (block login, hide them)? The frontend currently only stops *new*
-assignments.
+*(§14 was fixed on 2026-11-20 and removed: roles have `is_active`, and admins
+create roles in the admin console. See PENDING_WORK.md, "Admin console".)*
 
 ## 19. Daywise Grand: "Customer" matches retailer tags, not the customer
 

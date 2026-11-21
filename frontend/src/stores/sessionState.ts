@@ -1,4 +1,5 @@
 import { computed, ref, type Ref } from 'vue'
+import { APP_PERMISSIONS } from '@/lib/appPermissions'
 import type { LoginPayload, SessionAuthApi } from '@/lib/authApi'
 import type { AuthSessionStore } from '@/lib/authSession'
 import type { AuthSession, AuthUser, AuthUserPayload } from '@/types'
@@ -13,6 +14,7 @@ export function toAuthUser(raw: AuthUserPayload): AuthUser {
     role_id: raw.role_id,
     role_name: raw.role?.role ?? null,
     is_act_as_head_enabled: Boolean(raw.is_act_as_head_enabled),
+    permissions: Object.fromEntries(APP_PERMISSIONS.map((key) => [key, Boolean(raw[key])])),
   }
 }
 

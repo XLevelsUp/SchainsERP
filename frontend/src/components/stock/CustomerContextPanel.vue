@@ -9,6 +9,7 @@ import { userDetailsApi } from '@/lib/userDetailsApi'
 import { customerTouchApi } from '@/lib/customerTouchApi'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
+import { useAuthStore } from '@/stores/auth'
 import type { CustomerTouch, UserDetail } from '@/types'
 
 /*
@@ -108,8 +109,14 @@ const isEmployee = computed(() => props.role === 'EMPLOYEE')
 | not — so the per-user flag still governs — while the EMPLOYEE account
 | never shows it at all, so the role governs too.
 */
+// Also the signed-in user's own permission (2026-11-21, lib/appPermissions.ts):
+// the app shows a user only the features an admin switched on for them.
+const auth = useAuthStore()
 const showTouch = computed(
-  () => isCustomer.value && (detail.value?.is_customer_touch_need_shown ?? false),
+  () =>
+    auth.can('is_customer_touch_need_shown') &&
+    isCustomer.value &&
+    (detail.value?.is_customer_touch_need_shown ?? false),
 )
 
 // Comments stay flag-only: every role in the reference screenshots shows the

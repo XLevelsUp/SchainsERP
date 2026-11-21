@@ -19,9 +19,186 @@ fixed, struck through, with what changed — this file is the record.
 > When a backend item is fixed: strike it through here with the evidence, and
 > delete it from `BACKEND_TODO.md`.
 
-**Last updated:** 2026-11-20
+**Last updated:** 2026-11-21
 **Backend baseline:** `982afd78` (PR #53) plus our own uncommitted backend
 fixes below. Since 2026-11-06 we own the backend too.
+
+### HEAD form + the app shows only what's switched on (2026-11-21)
+
+Following the legacy head user form. **Agreed with the user:** existing
+users start from what's saved, with no backfill. Most switches are off on
+Aiven today, so features stay hidden until an admin switches them on per
+user.
+
+**Backend**
+- Migration `2026_11_21_000100_add_head_form_fields_to_user_details_table`
+  adds:
+  - `aadhar_number` (`proff` holds free-text proof notes, not this);
+  - `aadhar_back_image`;
+  - three permissions, default off: `is_item_change_need_shown`,
+    `is_item_conversion_need_shown`, `is_phone_book_need_shown`.
+- **HEAD profile** (`UserFormProfiles`):
+  - Sections: head users, items, balances, image, profile picture, proof
+    (Aadhar number, front and back), salary (per-day salary with Salary
+    person), joining date, report password, permissions.
+  - 15 flags.
+  - Role can change on edit; ADMIN's can't (`lock_role_on_edit`, enforced
+    in `ApplyUserFormProfile`).
+- **ADMIN's "Image Url"** is now `image` (the `image_url` column), not the
+  profile picture. The HEAD form shows the two side by side.
+- **Head users:**
+  - `head_user_mappings: [{employee_id}]` is the head side of
+    `head_employee_mappings`, synced by `UserMappingSyncService::syncHeadUsers`.
+  - It's a head assignment, so the special password applies.
+  - A head may list themselves, as the legacy form does. The employee-side
+    sync leaves that row alone.
+- **Stored on save:** `per_day_salary`. `report_password` is **hashed**
+  (blank keeps it). `show()` returns only `has_report_password`, plus
+  `image_url` / `aadhar_back_image_url`. `destroy()` deletes the new files.
+- ~~**Login and `/me` leaked `report_password` and `otp`.**~~ **Fixed.**
+  `AuthUser` hid only `password_hash`.
+- **`EnsureUserPermission` (`user.permission:<flag>`)** refuses a feature's
+  own endpoint when the signed-in user's switch is off:
+  - item-change → item change;
+  - item-conversion → item conversion;
+  - stock cash-out → cash management;
+  - phone-book index/show → phone book;
+  - `POST orders` → create order.
+  Shared endpoints (cash in/out) are left to the screens.
+- Tests: `AdminHeadFormTest` (6), plus `ItemChangeTest` / `OrderAccessTest`.
+  Their fixtures now carry the permissions, and each has a "refused without
+  it" test. Full suite 101/101.
+
+**Frontend**
+- HEAD form in `UserFormCard`:
+  - Head users (every user, the head included);
+  - Image and Profile picture;
+  - Aadhar number, front and back;
+  - Salary person with per-day salary (editable when Yes);
+  - joining date;
+  - report password ("Set" with Change, write-only);
+  - 14 switches, two columns.
+  Role is editable on edit unless locked. The view dialog shows the same
+  sections.
+- `lib/appPermissions.ts` lists which permissions the app checks.
+  `AuthUser.permissions` is filled from login / `/me`, and
+  `useAuthStore().can()` reads it.
+- Gated by the signed-in user's permissions:
+  - Stock → Item Change / Item Conversion buttons;
+  - Stock → Cash Out / Cash In;
+  - Phone Book (nav link and route);
+  - Orders → New order;
+  - Stock → customer touch panel (the user's switch **and**, as before, the
+    customer's).
+- Stored but not wired yet (no such feature in the app): delivery item /
+  checks, polish needed / checks, WhatsApp share, thermal cash amount,
+  complete history, cash reminder.
+
+**Postgres verification (2026-11-21):**
+- Migration applied.
+- Signed in as `admin`, created test HEAD `zz_headform_test` (id 13)
+  multipart with three images. The special password was required (head
+  users); customer comments were dropped; the report password was set but
+  never returned.
+- Signed in to the app as that head:
+  - permissions arrived, with no report password / otp in the response;
+  - phone book (on) → 200;
+  - item conversion, cash out, new order (off) → 403;
+  - item change (on) → past the gate.
+- Head-users edit needed the special password, and a self entry was
+  allowed. Deleted afterwards: no rows, files or live tokens left.
+
+### Admin console — Users page, role-driven form (2026-11-21)
+
+Modelled on the legacy "User Details" list and the legacy admin user form.
+**Each role gets its own form.** The sections and permissions offered
+depend on the user's role. ADMIN is defined from the user's screenshots.
+HEAD and the others come next; until each is specified, a role gets the full
+form, exactly as before.
+
+**Backend**
+- `App\Support\UserFormProfiles` is the single source of truth: role name →
+  sections + permission flags.
+  - Sections: contact, remarks, customer_comments, heads, cash_heads, items,
+    balances, customer_touches, profile_image, proof, joining_date, account,
+    flags.
+  - Always on the form: role, name, user name, phone, password, category.
+  - **ADMIN:** heads, customer comments, items, balances, customer touches,
+    image, joining date, and 6 flags. The flags are cash reminder, WhatsApp
+    share in stock, delivery item (head), delivery checks (employee), cash
+    amount on thermal print, and customer touch.
+  - Adding HEAD's set is one entry here.
+- `GET /api/v1/admin/user-form-profiles` returns the catalog (`by_role_id`,
+  `default`).
+- `ApplyUserFormProfile` (`user.profile`) runs on admin user create/update. It
+  drops input the role doesn't allow (flags outside it, sections it lacks) so
+  the backend defaults apply. On create, the three calculation engines default
+  on, the same as the column defaults, so the same as the legacy form.
+- New user-form behaviour (store / update, `UserMappingSyncService`):
+  - joining date: migration `2026_11_21_000000_add_joining_date_to_user_details_table`;
+  - customer touches saved with the user, `customer_touch_mappings`,
+    replaced as a set on edit;
+  - head lists editable on edit: sent only when changed, replace the set
+    (`[]` clears it), and need the special password.
+    `RequireSpecialPassword` now triggers on "sent", not "filled", so
+    clearing counts;
+  - admins pick items and the primary flag, but **never totals**:
+    - new rows start at 0, also on create;
+    - kept rows keep their totals;
+    - an item still holding a balance can't be removed (422 naming it).
+- Head ids are now validated with `exists` and `distinct` (an unknown id
+  used to 500 on the foreign key).
+- **Admins see balances, read-only** (`BalanceVisibility::viewerIsAdmin`),
+  as the legacy admin form shows them. `viewerIsHead()` stays false for
+  admins, so the head-only writes still refuse.
+- ~~**`GET /user-details/{id}` leaked any user's grams/purity.**~~
+  **Fixed.** `show()` added `gm` / `purity` after the model had hidden the
+  balances, so any signed-in user could read anyone's. Now gated by
+  `canSeeBalancesOf`.
+- The list (`index`) also returns `user_name`, `role_id`,
+  `is_salary_person` and `per_day_salary`.
+- `PATCH /admin/user-details/{id}/status`: the list's Active toggle,
+  audited as `USER_STATUS_CHANGE`. `GET /admin/customer-touch` is read-only,
+  for the touch picker.
+- Tests: `AdminUserFormTest` (9). Full suite 93/93.
+
+**Frontend**
+- `admin/views/UsersView.vue` (rewritten):
+  - columns: user name, phone, role, salary person, per-day salary, status,
+    plus view / edit / delete;
+  - one filter per column (status starts on Active, like the legacy list);
+  - 20 a page with "Show all";
+  - status toggle behind a confirm.
+- `admin/components/users/UserFormCard.vue`: the role-driven form.
+  - Role is picked first on create and read-only on edit.
+  - Sections render from the profile.
+  - Item totals and balances are read-only, and rows holding a balance can't
+    change item or be removed.
+  - A short flag list shows flat in two columns; the full set stays grouped.
+  - The special password is asked for inline when heads go out.
+- `admin/components/users/UserViewDialog.vue`: read-only view, same sections.
+- `admin/lib/userForm.ts` and `admin/lib/userFormProfiles.ts` hold the
+  helpers.
+- `userDetailsApi`:
+  - `update()` takes `includeHeadMappings`;
+  - profile image goes multipart;
+  - `joining_date` and `customer_touch_mappings` are in the payload;
+  - an empty list goes multipart as `''`;
+  - new `setStatus()`.
+- Catalog labels for the six legacy-named flags now use the legacy wording.
+
+**Postgres verification (2026-11-21), signed in as `admin`:**
+- Created role **ADMIN** (id 7) through the Roles API. It's kept, since the
+  ADMIN form needs it.
+- An ADMIN-role test user (`zz_userform_test`, id 12) checked:
+  - the special password on create and on a heads change (rename needed none);
+  - cash heads, remarks and act-as-head dropped by the profile;
+  - item total 0 although 77 was sent;
+  - balances visible;
+  - joining date and touch saved;
+  - status toggle;
+  - delete with the special password.
+- The user was deleted, with no orphan rows. Its audit rows stay.
 
 ### Admin console — 2026-11-20
 
@@ -31,10 +208,12 @@ Rules agreed with the user:
 - **An admin is not a head.** Admins are their own accounts (new table
   `admins`, `App\Models\Admin`). They don't hold balances and don't appear in
   any picker.
-- **Admins create users and assign them to heads.** That's all the console
-  does: Users, Head Employee Mappings (stock and cash), and the admin's own
-  passwords. Heads keep everything else in the app, as before: items, fitem
-  boxes, roles, customer touch (+ mappings), banks, cash categories,
+- **Admins create users, assign them to heads, and create roles.** The
+  console has Users, Head Employee Mappings (stock and cash), Roles (create
+  and view: name + active status, no edit or delete — added on a follow-up
+  the same day, modelled on the legacy admin Roles screen), and the admin's
+  own passwords. Heads keep everything else in the app, as before: items,
+  fitem boxes, customer touch (+ mappings), banks, cash categories,
   settings, System Logs.
 - **The special password.** Each admin has a second password, asked for
   again for sensitive changes: assigning or changing heads (stock and cash,
@@ -102,17 +281,38 @@ Rules agreed with the user:
   methods.**~~ **Fixed.** Only the methods that exist are registered.
 - `LoginRejectedException` renders the envelope and isn't reported, so a
   wrong password no longer writes a stack trace to the log.
+- **Roles** (follow-up, same day):
+  - BACKEND_TODO §14 fixed: `2026_11_20_000200_add_is_active_to_roles_table`
+    (default true), `Role` cast, and `RoleController` validates and returns
+    `is_active`.
+  - `store()` saves names trimmed and in capitals and refuses duplicates
+    ignoring case (422). Several checks match role names exactly (e.g.
+    `'CUSTOMER'`), so "Customer" or a second "HEAD" would quietly break them.
+  - Admin routes: roles index / store / show. The app keeps reading roles but
+    lost role writes (`roles` added to `$adminOwned`). `ROLE_CREATE` is
+    audited.
+- ~~**Creating a role failed on Aiven.**~~ **Fixed.** The roles had been
+  seeded with explicit ids 1–5, but the id sequence was left at 1, so the
+  first insert hit `duplicate key … roles_pkey (id)=(1)`.
+  `2026_11_20_000300_resync_roles_id_sequence` moves the sequence past the
+  highest id (PostgreSQL only, safe to re-run). A scan of every serial
+  column on Aiven found no other drifted sequence.
 - Tests: `AdminAuthTest` (8, real tokens, admin #1 vs user #1),
-  `AdminAccessTest` (13), `AdminCommandsTest` (3). In `RecordAccessTest`,
-  the item-totals test was rewritten (see Open below). 83/83 passing.
+  `AdminAccessTest` (14), `AdminCommandsTest` (3). In `RecordAccessTest`,
+  the item-totals test was rewritten (see Open below). 84/84 passing.
 
 **Frontend**
 - `src/admin/`:
   - client and the special-password client (`adminApi.ts`);
   - auth API and account API;
   - store, shell, nav, routes;
-  - Users, Head Employee Mappings and My account (`AdminAccountView`);
+  - Users, Head Employee Mappings, Roles and My account (`AdminAccountView`);
   - `SpecialPasswordDialog`.
+- Admin Roles screen (`admin/views/RolesView.vue`): # / Role / Status / view,
+  name search, status filter (starts on Active, like the legacy screen),
+  "Showing N of M", Refresh, an inline "New role" form (name + Active), and
+  a view dialog (role, status, added, id). It replaces the heads' app
+  `views/RolesView.vue`, which is deleted along with its route and nav entry.
 - The special password is asked for:
   - inline on the Users form, only when a new user has heads or cash heads;
   - inline on every Head Employee Mappings save;
@@ -125,7 +325,7 @@ Rules agreed with the user:
   generic over the realm's account type (`AuthUser` / `AdminUser`). The admin
   session key is now `schainserp:admin-auth:v2`. `lib/api.ts` clients take
   default headers.
-- Restored to the app for heads: Items, Fitem Boxes, System Settings, Roles,
+- Restored to the app for heads: Items, Fitem Boxes, System Settings,
   Customer Touch (+ mappings), Bank Details, System Logs. The System Logs
   "Performed by" column shows "Name (admin)" on ADMIN rows.
 - Stock screen: "Add User" and `components/user/AddUserModal.vue` removed;
@@ -145,11 +345,21 @@ through the endpoints. Left behind:
 - `system_logs` rows 52–58.
 All safe to delete.
 
+Roles, on Aiven: the `is_active` and sequence migrations were applied
+(existing roles all active). Signed in as `admin`, a test role `ZZ TEST
+ROLE` (id 6, inactive) was created, a different-case duplicate was refused
+(422), and the role was viewed. The test role was then deleted. Its
+`ROLE_CREATE` log row (65) stays.
+
+**Dev account:** `admin` / `admin` (admin id 2), special password
+`special123`, created on request for testing. It's weaker than the
+8-character rule. Change it before go-live: My account, or
+`php artisan admin:reset-password admin`.
+
 **Open**
-- **No screen edits a user's item totals any more.** Heads used to do it on
-  the app's Users screen, which is now admin-only, and admins aren't heads.
-  Needs a decision: give heads a small item-totals editor in the app, or let
-  admins edit totals.
+- ~~**No screen edits a user's item totals any more.**~~ Settled 2026-11-21
+  by the legacy admin user form: item totals are read-only there too
+  (transactions keep them). See "Users page" above.
 - `user_details.is_admin_login_otp_need_to_shown` belongs to the old idea of
   an "admin login" for users. It does nothing now.
 - Create the real admin(s) on the server: `php artisan admin:create <name>`.
@@ -2728,7 +2938,15 @@ the head check will not recognise.
 
 <a id="39"></a>
 
-39. **Roles have no status at all, so activate/deactivate cannot be saved.**
+39. ~~**Roles have no status at all, so activate/deactivate cannot be saved.**~~
+    **Fixed 2026-11-20** (BACKEND_TODO §14, removed). Migration
+    `2026_11_20_000200_add_is_active_to_roles_table` (default true);
+    `Role` casts it; `RoleController` validates `is_active` and returns it.
+    Roles moved to the admin console at the same time: create and view only,
+    names stored in capitals and unique ignoring case. The heads' app
+    `RolesView.vue` (toggle, edit, delete, banner) is gone. See "Admin
+    console — 2026-11-20". Original finding below.
+
     Asked for an activate/deactivate option on the Roles screen. Checked the
     backend first: the `roles` migration has only `id`/`role`/`added_at`/
     `touch`, `Role::$fillable` matches, and `RoleController::store()`/

@@ -70,7 +70,21 @@ class OrderAccessTest extends TestCase
             'is_active' => true,
             'is_delete' => false,
             'is_billable' => true,
+            // Creating orders needs this permission (2026-11-21).
+            'is_create_order_shown' => true,
         ]);
+    }
+
+    public function test_creating_an_order_needs_the_create_order_permission(): void
+    {
+        $this->customerA->update(['is_create_order_shown' => false]);
+        $this->signInAs($this->customerA);
+
+        $this->postJson('/api/v1/orders', [
+            'customer_id' => $this->customerA->user_id, 'item_id' => $this->item->item_id, 'grams' => 5, 'status' => 'PENDING',
+        ])->assertStatus(403);
+        // Seeing their orders doesn't.
+        $this->getJson('/api/v1/orders')->assertOk();
     }
 
     private function order(UserDetail $customer, string $status): OrderDetail

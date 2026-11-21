@@ -15,6 +15,7 @@ import { userOptionLabel } from '@/lib/userLabel'
 import { formatDateTime } from '@/lib/date'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
+import { useAuthStore } from '@/stores/auth'
 import { ORDER_STATUSES } from '@/types'
 import type { DataTableColumn, Item, Order, UserDetailListItem } from '@/types'
 
@@ -39,6 +40,8 @@ import type { DataTableColumn, Item, Order, UserDetailListItem } from '@/types'
 const PER_PAGE = 50
 
 const toast = useToastStore()
+// "New order" needs the Create order permission (lib/appPermissions.ts).
+const auth = useAuthStore()
 
 const orders = ref<Order[]>([])
 const users = ref<UserDetailListItem[]>([])
@@ -356,7 +359,7 @@ onMounted(async () => {
         >
           Refresh
         </BaseButton>
-        <BaseButton :icon="Plus" @click="openCreate">New order</BaseButton>
+        <BaseButton v-if="auth.can('is_create_order_shown')" :icon="Plus" @click="openCreate">New order</BaseButton>
       </template>
     </PageHeader>
 

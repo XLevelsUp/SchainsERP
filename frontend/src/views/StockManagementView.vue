@@ -558,8 +558,21 @@ async function handleSubmitAll() {
         <h2 id="stock-out-heading"><DirectionTag direction="out" /></h2>
         <div class="flex flex-wrap gap-2">
           <BaseButton variant="outflow" :icon="Plus" @click="handleAddStockOutRow">Stock Out</BaseButton>
-          <BaseButton variant="outflow-soft" @click="openModal('item-change')">Item Change</BaseButton>
-          <BaseButton variant="outflow-soft" @click="openModal('item-conversion')">Item Conversion</BaseButton>
+          <!-- Each shown only with its permission (lib/appPermissions.ts). -->
+          <BaseButton
+            v-if="auth.can('is_item_change_need_shown')"
+            variant="outflow-soft"
+            @click="openModal('item-change')"
+          >
+            Item Change
+          </BaseButton>
+          <BaseButton
+            v-if="auth.can('is_item_conversion_need_shown')"
+            variant="outflow-soft"
+            @click="openModal('item-conversion')"
+          >
+            Item Conversion
+          </BaseButton>
           <BaseButton variant="outflow-soft" @click="openModal('gms-out')">GMS Out</BaseButton>
           <BaseButton variant="outflow-soft" :icon="Plus" @click="handleAddNumericWastageOutRow">
             Numeric Wastage Out
@@ -579,7 +592,13 @@ async function handleSubmitAll() {
             >
               Reply Out
             </BaseButton>
-            <BaseButton variant="outflow-soft" @click="openModal('cash-out')">Cash Out</BaseButton>
+            <BaseButton
+              v-if="auth.can('is_cash_mngmt_need_to_shown')"
+              variant="outflow-soft"
+              @click="openModal('cash-out')"
+            >
+              Cash Out
+            </BaseButton>
           </template>
         </div>
         <p
@@ -624,7 +643,13 @@ async function handleSubmitAll() {
             >
               Reply In
             </BaseButton>
-            <BaseButton variant="inflow-soft" @click="openModal('cash-in')">Cash In</BaseButton>
+            <BaseButton
+              v-if="auth.can('is_cash_mngmt_need_to_shown')"
+              variant="inflow-soft"
+              @click="openModal('cash-in')"
+            >
+              Cash In
+            </BaseButton>
           </template>
         </div>
         <p
