@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { Plus, Trash, Layers, X } from 'lucide-vue-next'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -10,6 +10,8 @@ import { stockApi } from '@/lib/stockApi'
 import { ApiError } from '@/lib/api'
 import { nowDateTimeInputValue, toBackendDateTime } from '@/lib/date'
 import { isMetalItem } from '@/lib/metalItem'
+import { useOwnItemBalances } from '@/lib/ownItemBalances'
+import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 import type { Item, ItemChangeItemInput, MetalPickerSelection } from '@/types'
 
@@ -23,10 +25,12 @@ import type { Item, ItemChangeItemInput, MetalPickerSelection } from '@/types'
 | — this one, Item Conversion, and GMS Out submit standalone instead of
 | queuing rows).
 |
-| Scoped to `userId` (selectedUserId from the page's UserPickerPanel, the
-| user whose stock composition is being changed) rather than an internal
-| user picker — matches the panel it replaces. actingUserId sent as
-| userId too (X-User-ID header), same as the panel — not changed here.
+| Always the logged-in user's own stock (2026-11-13): no user needs to be
+| picked in the left panel, and the backend takes the user from the token
+| (it refuses anyone else's user_id or lot). Saving moves the gold between
+| the two items in your item totals and your overall purity total, and the
+| page then refreshes your stock summary. Before, it used the picked user
+| and changed *their* stock.
 |
 | stock_in_id (the source lot) was `required` in ItemChangeRequest with no
 | way to obtain one, which used to make every submission fail. Backend
@@ -37,7 +41,7 @@ import type { Item, ItemChangeItemInput, MetalPickerSelection } from '@/types'
 | It's still worth sending one where we can: with a lot the service
 | deducts that lot's balance, completes it at zero, and records real
 | OB/CB purity against it; without one those snapshot fields land as 0.
-| Selecting a From item therefore opens MetalPickerModal scoped to `userId`
+| Selecting a From item therefore opens MetalPickerModal scoped to you
 | — createItemChange sets both given_by and given_to to that same user,
 | which matches both endpoints' own `where('given_to', ...)` query. Saving
 | there replaces the triggering row with one row per lot taken, carrying
@@ -53,12 +57,24 @@ import type { Item, ItemChangeItemInput, MetalPickerSelection } from '@/types'
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ items: Item[]; userId: number | null; reloadItems?: () => unknown }>()
-const emit = defineEmits<{ close: []; saved: []; missingUser: [] }>()
+const props = defineProps<{ items: Item[]; reloadItems?: () => unknown }>()
+const emit = defineEmits<{ close: []; saved: [] }>()
 
 const toast = useToastStore()
+const auth = useAuthStore()
+// Whose stock changes: always the logged-in user's.
+const userId = computed(() => auth.user?.user_id ?? null)
 
-const itemOptions = computed(() => props.items.map((i) => ({ value: i.item_id, label: i.item_name })))
+// Each item shows your available grams beside it, like the legacy
+// "GOLD => 0" dropdowns — display only; nothing here limits the grams.
+const balances = useOwnItemBalances()
+const itemOptions = computed(() =>
+  props.items.map((i) => ({ value: i.item_id, label: i.item_name, hint: balances.balanceHint(i.item_id) })),
+)
+// The dropdowns' reload button refreshes the balances along with the list.
+async function reloadItemOptions() {
+  await Promise.all([props.reloadItems?.(), balances.load()])
+}
 
 function makeEmptyRow(): ItemChangeItemInput {
   return {
@@ -173,22 +189,9 @@ function validate(): boolean {
   return true
 }
 
-// Shown as an inline banner rather than eagerly — only set once an actual
-// submit was attempted with no user picked, matching the page-wide 2026-10
-// change to stop blocking people before they've had a chance to fill
-// anything in.
-const showMissingUserWarning = ref(false)
-watch(
-  () => props.userId,
-  (v) => {
-    if (v !== null) showMissingUserWarning.value = false
-  },
-)
-
 async function handleSubmit() {
-  if (props.userId === null) {
-    showMissingUserWarning.value = true
-    emit('missingUser')
+  if (userId.value === null) {
+    toast.show('You must be signed in to record an item change.', 'error')
     return
   }
   if (!validate()) return
@@ -197,13 +200,12 @@ async function handleSubmit() {
   try {
     const result = await stockApi.postItemChange(
       {
-        user_id: props.userId,
         items: rows.value.map((row) => ({
           ...row,
           added_at: toBackendDateTime(row.added_at),
         })),
       },
-      props.userId,
+      userId.value,
     )
     toast.show(`Item change recorded — ${result.length} item(s).`, 'success')
     emit('saved')
@@ -225,11 +227,13 @@ async function handleSubmit() {
 
 <template>
   <BaseModal title="Item Change" badge="OUT" badge-class="bg-red-600" max-width="max-w-4xl" @close="emit('close')">
-    <p
-      v-if="showMissingUserWarning"
-      class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-    >
-      Select a user in the left panel before recording an Item Change.
+    <p class="text-sm text-slate-600">
+      Changes your own stock<span v-if="auth.user">
+        (<span class="font-medium text-slate-900">{{ auth.user.name }}</span>)</span>. The user picked on the
+      left isn't used.
+    </p>
+    <p v-if="balances.loadError.value" class="text-xs text-amber-700">
+      Couldn't load your item balances ({{ balances.loadError.value }}), so the item lists show no grams.
     </p>
 
     <form class="flex flex-col gap-6" @submit.prevent="handleSubmit">
@@ -251,7 +255,7 @@ async function handleSubmit() {
                 size="sm"
                 placeholder="Current item…"
                 :options="itemOptions"
-                :reload="reloadItems"
+                :reload="reloadItems ? reloadItemOptions : undefined"
                 :error="fieldErrors[`${index}.from_item_id`]"
                 @update:model-value="(v) => onFromItemSelect(row, index, v as number | null)"
               />
@@ -285,7 +289,7 @@ async function handleSubmit() {
               size="sm"
               placeholder="New item…"
               :options="itemOptions"
-              :reload="reloadItems"
+              :reload="reloadItems ? reloadItemOptions : undefined"
               :error="fieldErrors[`${index}.to_item_id`]"
               @update:model-value="(v) => (row.to_item_id = v as number | null)"
             />

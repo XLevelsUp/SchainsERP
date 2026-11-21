@@ -1,4 +1,4 @@
-import { api, type ApiResponse } from './api'
+import { api as appApi, type ApiClient, type ApiResponse } from './api'
 import { buildMultipartForm } from './multipartForm'
 import { USER_FEATURE_FLAG_KEYS } from './userFeatureFlags'
 import type { UserDetail, UserDetailFormValues, UserDetailListItem } from '@/types'
@@ -105,79 +105,89 @@ interface CustomerCommentsResult {
   customer_commants: string | null
 }
 
-export const userDetailsApi = {
-  // Flattened summary shape (PR #15) — fine for pickers/tables, not for
-  // editing. Pass ?type= to filter by role (HEAD/EMPLOYEE/CUSTOMER/...).
-  // Pass ?module= to pick which extra fields come back: 'stock' adds
-  // gm/purity, 'cash' adds hand_cash/rtgs_cash — see UserDetailListItem.
-  list: (type?: string, module?: 'stock' | 'cash') => {
-    const params = new URLSearchParams()
-    if (type) params.set('type', type)
-    if (module) params.set('module', module)
-    const qs = params.toString()
-    return api
-      .get<ApiResponse<UserDetailListItem[]>>(qs ? `${RESOURCE}?${qs}` : RESOURCE)
-      .then((r) => r.data)
-  },
+// Written against ApiClient so the admin console reuses it with its own
+// client (admin/lib/resources.ts). `userDetailsApi` below is the app's.
+export function createUserDetailsApi(api: ApiClient) {
+  return {
+    // Flattened summary shape (PR #15) — fine for pickers/tables, not for
+    // editing. Pass ?type= to filter by role (HEAD/EMPLOYEE/CUSTOMER/...).
+    // Pass ?module= to pick which extra fields come back: 'stock' adds
+    // gm/purity, 'cash' adds hand_cash/rtgs_cash — see UserDetailListItem.
+    // mappedOnly: only the signed-in user and the users mapped to them
+    // (head_employee_mappings, or the cash ones for module=cash), whatever
+    // their role — the Stock screen's user pickers.
+    list: (type?: string, module?: 'stock' | 'cash', options: { mappedOnly?: boolean } = {}) => {
+      const params = new URLSearchParams()
+      if (type) params.set('type', type)
+      if (module) params.set('module', module)
+      if (options.mappedOnly) params.set('mapped_only', '1')
+      const qs = params.toString()
+      return api
+        .get<ApiResponse<UserDetailListItem[]>>(qs ? `${RESOURCE}?${qs}` : RESOURCE)
+        .then((r) => r.data)
+    },
 
-  get: (id: number) =>
-    api.get<ApiResponse<UserDetailEnvelope>>(`${RESOURCE}/${id}`).then((r) => r.data),
+    get: (id: number) =>
+      api.get<ApiResponse<UserDetailEnvelope>>(`${RESOURCE}/${id}`).then((r) => r.data),
 
-  create: (form: UserDetailFormValues) => {
-    const payload = toPayload(form)
-    return (
-      form.aadhar_image
-        ? api.postForm<ApiResponse<UserDetailEnvelope>>(
-            RESOURCE,
-            toMultipart(payload, form.aadhar_image),
-          )
-        : api.post<ApiResponse<UserDetailEnvelope>>(RESOURCE, payload)
-    ).then((r) => r.data)
-  },
+    create: (form: UserDetailFormValues) => {
+      const payload = toPayload(form)
+      return (
+        form.aadhar_image
+          ? api.postForm<ApiResponse<UserDetailEnvelope>>(
+              RESOURCE,
+              toMultipart(payload, form.aadhar_image),
+            )
+          : api.post<ApiResponse<UserDetailEnvelope>>(RESOURCE, payload)
+      ).then((r) => r.data)
+    },
 
-  // Frontend-ready for when the backend adds PUT /user-details/{id}.
-  // Password only sent if the user typed a new one. With a new proof image
-  // the request goes as POST + _method=PUT: PHP only parses multipart bodies
-  // on POST, and Laravel's method override still routes it to update().
-  // includeItemMappings: false leaves item_mappings out entirely, for
-  // non-heads, who can't see the item totals (the backend ignores theirs too).
-  update: (
-    id: number,
-    form: UserDetailFormValues,
-    options: { includeItemMappings?: boolean } = {},
-  ) => {
-    const payload = toPayload(form, form.password.length > 0)
-    if (options.includeItemMappings === false) {
-      delete payload.item_mappings
-    } else if (!form.aadhar_image && payload.item_mappings === undefined) {
-      // update() syncs item mappings only when the key is present (PR #53),
-      // and toPayload() leaves an empty list out, so removing a user's last
-      // item never reached the server. Send [] so it clears. JSON only:
-      // FormData can't carry an empty array, and the '' fallback reaches
-      // update() as null, which crashes its array_column() (BACKEND_TODO §10).
-      payload.item_mappings = []
-    }
-    return (
-      form.aadhar_image
-        ? api.postForm<ApiResponse<UserDetailEnvelope>>(
-            `${RESOURCE}/${id}`,
-            toMultipart(payload, form.aadhar_image, { _method: 'PUT' }),
-          )
-        : api.put<ApiResponse<UserDetailEnvelope>>(`${RESOURCE}/${id}`, payload)
-    ).then((r) => r.data)
-  },
+    // Frontend-ready for when the backend adds PUT /user-details/{id}.
+    // Password only sent if the user typed a new one. With a new proof image
+    // the request goes as POST + _method=PUT: PHP only parses multipart bodies
+    // on POST, and Laravel's method override still routes it to update().
+    // includeItemMappings: false leaves item_mappings out entirely, for
+    // non-heads, who can't see the item totals (the backend ignores theirs too).
+    update: (
+      id: number,
+      form: UserDetailFormValues,
+      options: { includeItemMappings?: boolean } = {},
+    ) => {
+      const payload = toPayload(form, form.password.length > 0)
+      if (options.includeItemMappings === false) {
+        delete payload.item_mappings
+      } else if (!form.aadhar_image && payload.item_mappings === undefined) {
+        // update() syncs item mappings only when the key is present (PR #53),
+        // and toPayload() leaves an empty list out, so removing a user's last
+        // item never reached the server. Send [] so it clears. JSON only:
+        // FormData can't carry an empty array, and the '' fallback reaches
+        // update() as null, which crashes its array_column() (BACKEND_TODO §10).
+        payload.item_mappings = []
+      }
+      return (
+        form.aadhar_image
+          ? api.postForm<ApiResponse<UserDetailEnvelope>>(
+              `${RESOURCE}/${id}`,
+              toMultipart(payload, form.aadhar_image, { _method: 'PUT' }),
+            )
+          : api.put<ApiResponse<UserDetailEnvelope>>(`${RESOURCE}/${id}`, payload)
+      ).then((r) => r.data)
+    },
 
-  remove: (id: number) => api.delete<ApiResponse<null>>(`${RESOURCE}/${id}`),
+    remove: (id: number) => api.delete<ApiResponse<null>>(`${RESOURCE}/${id}`),
 
-  // PUT /user-details/{id}/update-cc (UserDetailController::updateCc, added
-  // in PR #32) — a dedicated single-field endpoint so the customer comments
-  // box can be saved on its own, without round-tripping the whole user
-  // record through update()'s much larger validated payload.
-  // UpdateCcRequest caps the text at 1500 characters and allows null.
-  updateCustomerComments: (id: number, customerComments: string | null) =>
-    api
-      .put<ApiResponse<CustomerCommentsResult>>(`${RESOURCE}/${id}/update-cc`, {
-        customer_commants: customerComments,
-      })
-      .then((r) => r.data),
+    // PUT /user-details/{id}/update-cc (UserDetailController::updateCc, added
+    // in PR #32) — a dedicated single-field endpoint so the customer comments
+    // box can be saved on its own, without round-tripping the whole user
+    // record through update()'s much larger validated payload.
+    // UpdateCcRequest caps the text at 1500 characters and allows null.
+    updateCustomerComments: (id: number, customerComments: string | null) =>
+      api
+        .put<ApiResponse<CustomerCommentsResult>>(`${RESOURCE}/${id}/update-cc`, {
+          customer_commants: customerComments,
+        })
+        .then((r) => r.data),
+  }
 }
+
+export const userDetailsApi = createUserDetailsApi(appApi)

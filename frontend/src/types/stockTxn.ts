@@ -18,8 +18,9 @@ export interface ItemChangeItemInput {
   added_at: string
 }
 
+// No user: Item Change is always on the logged-in user's own stock, and the
+// backend takes the user from the token (2026-11-13).
 export interface ItemChangeFormValues {
-  user_id: number | null
   items: ItemChangeItemInput[]
 }
 
@@ -60,8 +61,8 @@ export interface ItemConversionItemInput {
   added_at: string
 }
 
+// No user: like Item Change, always the logged-in user's own stock (2026-11-13).
 export interface ItemConversionFormValues {
-  user_id: number | null
   items: ItemConversionItemInput[]
 }
 

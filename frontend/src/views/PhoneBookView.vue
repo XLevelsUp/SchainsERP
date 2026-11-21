@@ -168,8 +168,9 @@ onMounted(() => {
     >
       <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
       <p>
-        <strong>Read-only (PENDING_WORK.md #26-27).</strong> Add and edit contacts on the
-        <RouterLink to="/users" class="font-semibold underline">Users</RouterLink> screen. The
+        <strong>Read-only (PENDING_WORK.md #26-27).</strong> Contacts are users: an admin adds
+        and edits them in the admin console (customers can also be quick-added with Add
+        Retailer on the Stock screen). The
         phone book's own create route issues a working ERP login with a shared hardcoded password,
         and its delete route deactivates the shared user record, so neither is wired up here. The
         Role column stays empty until the backend reads the right column.

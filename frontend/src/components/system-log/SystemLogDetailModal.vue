@@ -55,6 +55,9 @@ const payloadJson = computed(() => {
 })
 
 const performedBy = computed(() => {
+  // Admin console entries are made by an admin account, not a user.
+  const admin = props.log.admin
+  if (admin) return `${admin.name} (${admin.user_name}) · admin console`
   const user = props.log.user
   if (user) return user.user_name ? `${user.name} (${user.user_name})` : user.name
   return systemLogPartyLabel(props.log.user_id, props.nameOf)

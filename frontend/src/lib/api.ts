@@ -1,4 +1,4 @@
-import { clearSession, getToken, notifyUnauthorized } from './authSession'
+import { appSession, type AuthSessionStore } from './authSession'
 
 // Shared API envelope returned by the Laravel backend: { success, message, data }
 export interface ApiResponse<T> {
@@ -41,16 +41,30 @@ function asErrorBody(body: unknown): ErrorBody {
   return typeof body === 'object' && body !== null ? (body as ErrorBody) : {}
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// What a client is bound to: where its API lives and whose token it sends.
+// The app and the admin console each have one (see createApiClient below).
+interface ApiClientConfig {
+  baseUrl: string
+  session: AuthSessionStore<unknown>
+  // Sent on every request this client makes, e.g. the admin console's
+  // X-Special-Password for one sensitive change (admin/lib/adminApi.ts).
+  headers?: Record<string, string>
+}
+
+async function request<T>(
+  config: ApiClientConfig,
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   // Let the browser set the multipart boundary itself for FormData bodies.
   const isFormData = options.body instanceof FormData
   // Read once: the same value decides whether a 401 means "expired session"
   // or "bad credentials" further down.
-  const token = getToken()
+  const token = config.session.getToken()
 
   let response: Response
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${config.baseUrl}${path}`, {
       ...options,
       headers: {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
@@ -60,6 +74,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         // Every route but POST /login sits behind `auth:api` since PR #32.
         // Listed before ...options.headers so a caller can still override it.
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...config.headers,
         ...options.headers,
       },
     })
@@ -88,8 +103,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     // Gated on `token` on purpose: a 401 from POST /login is a wrong
     // username/password and must reach the form as a normal error instead.
     if (response.status === 401 && token) {
-      clearSession()
-      notifyUnauthorized()
+      config.session.clear()
+      config.session.notifyUnauthorized()
       throw new ApiError('Your session has expired. Please sign in again.', 401)
     }
 
@@ -101,14 +116,31 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return body as T
 }
 
-export const api = {
-  get: <T>(path: string, headers?: Record<string, string>) =>
-    request<T>(path, { method: 'GET', headers }),
-  post: <T>(path: string, data: unknown, headers?: Record<string, string>) =>
-    request<T>(path, { method: 'POST', body: JSON.stringify(data), headers }),
-  put: <T>(path: string, data: unknown) =>
-    request<T>(path, { method: 'PUT', body: JSON.stringify(data) }),
-  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
-  postForm: <T>(path: string, data: FormData, headers?: Record<string, string>) =>
-    request<T>(path, { method: 'POST', body: data, headers }),
+export interface ApiClient {
+  get<T>(path: string, headers?: Record<string, string>): Promise<T>
+  post<T>(path: string, data: unknown, headers?: Record<string, string>): Promise<T>
+  put<T>(path: string, data: unknown): Promise<T>
+  delete<T>(path: string): Promise<T>
+  postForm<T>(path: string, data: FormData, headers?: Record<string, string>): Promise<T>
 }
+
+// Resource modules (itemsApi, rolesApi, ...) are written against ApiClient,
+// so the same request code serves both realms: `api` below for the app, and
+// the admin console's client (admin/lib/adminApi.ts), which points at
+// /api/v1/admin and sends the admin session's token.
+export function createApiClient(config: ApiClientConfig): ApiClient {
+  return {
+    get: <T>(path: string, headers?: Record<string, string>) =>
+      request<T>(config, path, { method: 'GET', headers }),
+    post: <T>(path: string, data: unknown, headers?: Record<string, string>) =>
+      request<T>(config, path, { method: 'POST', body: JSON.stringify(data), headers }),
+    put: <T>(path: string, data: unknown) =>
+      request<T>(config, path, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: <T>(path: string) => request<T>(config, path, { method: 'DELETE' }),
+    postForm: <T>(path: string, data: FormData, headers?: Record<string, string>) =>
+      request<T>(config, path, { method: 'POST', body: data, headers }),
+  }
+}
+
+// The operational app's client: /api/v1 with the app session's token.
+export const api = createApiClient({ baseUrl: API_BASE_URL, session: appSession })

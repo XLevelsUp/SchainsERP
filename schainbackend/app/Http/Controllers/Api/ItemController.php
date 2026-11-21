@@ -4,15 +4,27 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Item;
+use App\Models\UsersItemsMapping;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class ItemController extends Controller
 {
     // GET: /api/items
-    public function index(): JsonResponse
+    // ?mapped_only=1 (the Stock screen's pickers): only the items mapped to
+    // the signed-in user in users_items_mappings. Without it, every item.
+    public function index(Request $request): JsonResponse
     {
-        $items = Item::orderBy('item_id', 'desc')->get();
+        $query = Item::orderBy('item_id', 'desc');
+
+        if ($request->boolean('mapped_only')) {
+            $query->whereIn(
+                'item_id',
+                UsersItemsMapping::where('user_id', $request->user()->user_id)->select('item_id')
+            );
+        }
+
+        $items = $query->get();
 
         return response()->json([
             'success' => true,

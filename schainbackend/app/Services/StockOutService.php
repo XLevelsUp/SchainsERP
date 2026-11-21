@@ -175,19 +175,23 @@ class StockOutService extends BaseStockService
 
     /**
      * 2. Swaps stock weight from one item category to another (Item Change) - supports dynamic arrays
+     *
+     * Always on the acting user's own stock (2026-11-13): $addedBy, the
+     * logged-in user, is the user whose items change. A lot (stock_in_id)
+     * must be one of theirs and of the item being changed.
      */
     public function createItemChange(array $data, int $addedBy): array
     {
         return DB::transaction(function () use ($data, $addedBy) {
-            $user = UserDetail::findOrFail($data['user_id']);
+            $user = UserDetail::where('user_id', $addedBy)->lockForUpdate()->firstOrFail();
             $addedAt = isset($data['added_at']) ? \Illuminate\Support\Carbon::parse($data['added_at']) : now();
 
             $createdHistories = [];
 
             foreach ($data['items'] as $itemData) {
                 $stockInId = $itemData['stock_in_id'] ?? null;
-                $parentStock = $stockInId ? StockDetails::findOrFail($stockInId) : null;
-                
+                $parentStock = $stockInId ? StockDetails::where('stock_id', $stockInId)->lockForUpdate()->firstOrFail() : null;
+
                 $grams = $itemData['grams'];
                 $fromTouch = $itemData['from_touch'];
                 $reqTouch = $itemData['req_touch'];
@@ -196,8 +200,17 @@ class StockOutService extends BaseStockService
                 $remarks = $itemData['remarks'] ?? null;
                 $itemRemarks = $itemData['item_remarks'] ?? null;
 
+                if ($parentStock && (int) $parentStock->given_to !== (int) $user->user_id) {
+                    throw new \InvalidArgumentException("Lot #{$stockInId} isn't in your stock.");
+                }
+                if ($parentStock && (int) $parentStock->item_id !== (int) $fromItemId) {
+                    throw new \InvalidArgumentException("Lot #{$stockInId} is a different item from the one being changed.");
+                }
+
                 // Purity calculations (or use frontend purity)
                 $totalPurity = $itemData['purity'] ?? $this->div($this->mul($grams, $reqTouch), '100');
+                // What leaves the From item: its grams at the From touch.
+                $fromPurity = $this->div($this->mul($grams, $fromTouch), '100');
 
                 // Snapshot OB
                 $obSnapshot = [
@@ -229,7 +242,7 @@ class StockOutService extends BaseStockService
                     'stock_type' => 'OUT',
                     'grams' => $grams,
                     'touch' => $fromTouch,
-                    'purity' => $this->div($this->mul($grams, $fromTouch), '100'),
+                    'purity' => $fromPurity,
                     'remarks' => $remarks ?? ("Item Change from: " . $fromItemId),
                     'item_remarks' => $itemRemarks,
                     'balance' => $grams,
@@ -290,9 +303,17 @@ class StockOutService extends BaseStockService
 
                 // Update item-specific user mappings balances
                 // OUT mapping update
-                $this->updateUserItemBalance($user->user_id, $fromItemId, "-$grams", "-" . $this->div($this->mul($grams, $fromTouch), '100'));
+                $this->updateUserItemBalance($user->user_id, $fromItemId, "-$grams", "-$fromPurity");
                 // IN mapping update
                 $this->updateUserItemBalance($user->user_id, $toItemId, $grams, $totalPurity);
+
+                // Keep the user's overall totals equal to the sum of their item
+                // totals, as every other stock movement does. The same grams
+                // leave one item and enter the other, so grams don't change;
+                // purity moves by the difference between the two touches.
+                // (Until 2026-11-13 only the item totals moved.)
+                $user->purity_grand_total = $this->add($this->sub($user->purity_grand_total, $fromPurity), $totalPurity);
+                $user->save();
 
                 // Snapshot CB
                 $cbSnapshot = [
@@ -355,11 +376,15 @@ class StockOutService extends BaseStockService
 
     /**
      * 3. Item conversion submodule (Item Conversion) - supports dynamic arrays
+     *
+     * Always on the acting user's own stock (2026-11-13), like Item Change:
+     * $addedBy, the logged-in user, is the user whose items convert. A lot
+     * (stock_in_id) must be one of theirs and of the source item.
      */
     public function createItemConversion(array $data, int $addedBy): array
     {
         return DB::transaction(function () use ($data, $addedBy) {
-            $user = UserDetail::findOrFail($data['user_id']);
+            $user = UserDetail::where('user_id', $addedBy)->lockForUpdate()->firstOrFail();
             $addedAt = isset($data['added_at']) ? \Illuminate\Support\Carbon::parse($data['added_at']) : now();
 
             $createdConversions = [];
@@ -415,7 +440,13 @@ class StockOutService extends BaseStockService
                 $parentStock = null;
 
                 if ($stockInId) {
-                    $parentStock = StockDetails::find($stockInId);
+                    $parentStock = StockDetails::where('stock_id', $stockInId)->lockForUpdate()->first();
+                    if ($parentStock && (int) $parentStock->given_to !== (int) $user->user_id) {
+                        throw new \InvalidArgumentException("Lot #{$stockInId} isn't in your stock.");
+                    }
+                    if ($parentStock && (int) $parentStock->item_id !== (int) $sourceItemId) {
+                        throw new \InvalidArgumentException("Lot #{$stockInId} is a different item from the one being converted.");
+                    }
                     if ($parentStock) {
                         $stockInOb = $parentStock->balance;
                         $stockInCb = $this->sub($parentStock->balance, $sourceGrams);
@@ -498,6 +529,15 @@ class StockOutService extends BaseStockService
                 $this->updateUserItemBalance($user->user_id, $sourceItemId, "-$sourceGrams", "-$outPurity");
                 $this->updateUserItemBalance($user->user_id, $targetItemId, $convertedGrams, $inPurity);
 
+                // Keep the user's overall totals equal to the sum of their item
+                // totals, as every other stock movement does. Grams change
+                // (source grams out, converted grams in); purity moves by the
+                // difference too, which is nil when the formula is used.
+                // (Until 2026-11-13 only the item totals moved.)
+                $user->grams_grand_total = $this->add($this->sub($user->grams_grand_total, $sourceGrams), $convertedGrams);
+                $user->purity_grand_total = $this->add($this->sub($user->purity_grand_total, $outPurity), $inPurity);
+                $user->save();
+
                 // Snapshot CB
                 $cbSnapshot = [
                     'given_by_details' => [
@@ -507,19 +547,25 @@ class StockOutService extends BaseStockService
 
                 $snapshot = array_merge_recursive($obSnapshot, $cbSnapshot);
 
-                // Save CB snapshots and direct CB columns
+                // Save CB snapshots and direct CB columns. The target item's
+                // CB is in given_by_details.cb.to_item_details (there is no
+                // given_to_details here: it's one user); it used to read
+                // given_to_details and always save 0.
+                $targetCbGrams = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_grams'] ?? 0;
+                $targetCbPurity = $cbSnapshot['given_by_details']['cb']['to_item_details']['cb_purity'] ?? 0;
+
                 $outStock->obcb_details = $snapshot;
                 $outStock->given_by_item_grams_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_grams'] ?? 0;
-                $outStock->given_to_item_grams_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_grams'] ?? 0;
+                $outStock->given_to_item_grams_cb = $targetCbGrams;
                 $outStock->given_by_item_purity_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_purity'] ?? 0;
-                $outStock->given_to_item_purity_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_purity'] ?? 0;
+                $outStock->given_to_item_purity_cb = $targetCbPurity;
                 $outStock->saveQuietly();
 
                 $inStock->obcb_details = $snapshot;
                 $inStock->given_by_item_grams_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_grams'] ?? 0;
-                $inStock->given_to_item_grams_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_grams'] ?? 0;
+                $inStock->given_to_item_grams_cb = $targetCbGrams;
                 $inStock->given_by_item_purity_cb = $cbSnapshot['given_by_details']['cb']['item_details']['cb_purity'] ?? 0;
-                $inStock->given_to_item_purity_cb = $cbSnapshot['given_to_details']['cb']['to_item_details']['cb_purity'] ?? 0;
+                $inStock->given_to_item_purity_cb = $targetCbPurity;
                 $inStock->saveQuietly();
 
                 // Save Gold Conversion record

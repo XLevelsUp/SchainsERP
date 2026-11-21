@@ -122,7 +122,8 @@ class StockDetailsController extends Controller
             $headId = $request->query('head_id') ?? $this->getActingUserId($request);
             $filters = $request->all();
             
-            $result = $this->reportService->getStockHistory($filters, $headId);
+            // Rows are labelled In/Out from the logged-in user's side.
+            $result = $this->reportService->getStockHistory($filters, $headId, $this->getActingUserId($request));
 
             return response()->json([
                 'success' => true,
@@ -196,6 +197,16 @@ class StockDetailsController extends Controller
     {
         try {
             $addedBy = $this->getActingUserId($request);
+
+            // Item Change is only ever on your own stock (2026-11-13).
+            if ($request->filled('user_id') && (int) $request->input('user_id') !== $addedBy) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Item Change is for your own stock only.',
+                    'errors' => ['user_id' => ['Item Change is for your own stock only.']],
+                ], 422);
+            }
+
             $history = $this->stockOutService->createItemChange($request->validated(), $addedBy);
 
             return response()->json([
@@ -203,6 +214,9 @@ class StockDetailsController extends Controller
                 'message' => 'Item Changed Successfully',
                 'data' => $history,
             ], 201);
+        } catch (\InvalidArgumentException $e) {
+            // Our own checks: the lot isn't the user's, or is another item.
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
             Log::error('StockDetailsController::postItemChange failed', ['error' => $e->getMessage()]);
             return response()->json([
@@ -219,6 +233,16 @@ class StockDetailsController extends Controller
     {
         try {
             $addedBy = $this->getActingUserId($request);
+
+            // Item Conversion is only ever on your own stock (2026-11-13).
+            if ($request->filled('user_id') && (int) $request->input('user_id') !== $addedBy) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Item Conversion is for your own stock only.',
+                    'errors' => ['user_id' => ['Item Conversion is for your own stock only.']],
+                ], 422);
+            }
+
             $conversions = $this->stockOutService->createItemConversion($request->validated(), $addedBy);
 
             return response()->json([
@@ -226,6 +250,9 @@ class StockDetailsController extends Controller
                 'message' => 'Item Converted Successfully',
                 'data' => $conversions,
             ], 201);
+        } catch (\InvalidArgumentException $e) {
+            // Our own checks: the lot isn't the user's, or is another item.
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
             Log::error('StockDetailsController::postItemConversion failed', ['error' => $e->getMessage()]);
             return response()->json([

@@ -258,6 +258,8 @@ function refresh() {
 }
 
 function performedBy(row: SystemLog): string {
+  // Admin console entries are made by an admin account, not a user.
+  if (row.admin) return `${row.admin.name} (admin)`
   if (row.user) return row.user.name
   return systemLogPartyLabel(row.user_id, nameOf)
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Admin;
 use App\Models\SystemLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -23,6 +24,12 @@ class SystemLogService
         'access_token',
         'secret',
         'authorization',
+        // Admin console secrets (AdminAccountController, RequireSpecialPassword).
+        'current_password',
+        'special_password',
+        'special_password_confirmation',
+        'current_special_password',
+        'x-special-password',
     ];
 
     /**
@@ -36,6 +43,7 @@ class SystemLogService
      * @param string|null $description Human-readable message
      * @param array|null $payload Request data (will be automatically sanitized)
      * @param array|null $metadata Contextual summary (totals, grams, balances)
+     * @param int|null $adminId Acting admin console account (admins.id), for ADMIN entries
      * @return SystemLog|null
      */
     public static function log(
@@ -46,7 +54,8 @@ class SystemLogService
         ?string $referenceTable = null,
         ?string $description = null,
         ?array $payload = null,
-        ?array $metadata = null
+        ?array $metadata = null,
+        ?int $adminId = null
     ): ?SystemLog {
         try {
             $sanitizedPayload = $payload ? self::sanitize($payload) : null;
@@ -57,8 +66,16 @@ class SystemLogService
             if (function_exists('request') && request()) {
                 $ipAddress = request()->ip();
                 $userAgent = request()->userAgent();
-                if (!$userId && request()->user()) {
-                    $userId = request()->user()->user_id ?? request()->user()->id;
+
+                // The actor comes from the token. An admin goes in admin_id,
+                // never user_id: their id is an admins.id, and reading it as
+                // a user_details id would credit the entry to whoever has
+                // that user_id.
+                $actor = request()->user();
+                if ($actor instanceof Admin) {
+                    $adminId ??= $actor->getKey();
+                } elseif (!$userId && $actor) {
+                    $userId = $actor->user_id ?? null;
                 }
             }
 
@@ -72,6 +89,7 @@ class SystemLogService
                 'module' => strtoupper($module),
                 'action' => strtoupper($action),
                 'user_id' => $userId,
+                'admin_id' => $adminId,
                 'reference_id' => $referenceId,
                 'reference_table' => $referenceTable,
                 'description' => $description,

@@ -224,7 +224,6 @@ function toAutoEntryPayload(form: AutoEntryFormValues) {
 
 function toItemChangePayload(form: ItemChangeFormValues) {
   return {
-    user_id: form.user_id,
     items: form.items.map((item) => ({
       stock_in_id: item.stock_in_id,
       from_item_id: item.from_item_id,
@@ -241,7 +240,6 @@ function toItemChangePayload(form: ItemChangeFormValues) {
 
 function toItemConversionPayload(form: ItemConversionFormValues) {
   return {
-    user_id: form.user_id,
     items: form.items.map((item) => ({
       stock_in_id: item.stock_in_id,
       source_item_id: item.source_item_id,

@@ -1,142 +1,30 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
-import { authApi, type LoginPayload } from '@/lib/authApi'
-import { clearSession, loadSession, saveSession } from '@/lib/authSession'
-import type { AuthSession, AuthUser, AuthUserPayload } from '@/types'
-
-// Keeps only what the app needs from the login / me payload, flattening the
-// role relation to its name.
-function toAuthUser(raw: AuthUserPayload): AuthUser {
-  return {
-    user_id: raw.user_id,
-    name: raw.name,
-    user_name: raw.user_name,
-    role_id: raw.role_id,
-    role_name: raw.role?.role ?? null,
-    is_act_as_head_enabled: Boolean(raw.is_act_as_head_enabled),
-  }
-}
+import { computed } from 'vue'
+import { authApi } from '@/lib/authApi'
+import { appSession } from '@/lib/authSession'
+import { toAuthUser, useSessionState } from './sessionState'
 
 /*
 |--------------------------------------------------------------------------
-| Auth store — the app-facing view of the session owned by authSession.ts.
+| Auth store — the operational app's session (POST /api/v1/login).
 |--------------------------------------------------------------------------
-| The token is what actually grants access, so isAuthenticated is derived
-| from it rather than from the user object.
-|
-| PR #38 added GET /me, so a restored session is now verified on boot
-| (validateSession below) instead of waiting for the first real request to
-| 401. The 401 path still exists and is still the safety net — validation is
-| best-effort and never blocks the app from rendering.
+| Login, logout, boot validation and cross-tab adoption live in
+| useSessionState, shared with the admin console's store
+| (admin/stores/adminAuth.ts). The two are different accounts: heads and
+| other user_details users sign in here, admins in the admin console.
 |--------------------------------------------------------------------------
 */
-
 export const useAuthStore = defineStore('auth', () => {
-  const stored = loadSession()
-
-  const user = ref<AuthUser | null>(stored?.user ?? null)
-  const token = ref<string | null>(stored?.token ?? null)
-  const isLoggingOut = ref(false)
-
-  const isAuthenticated = computed(() => token.value !== null)
+  const state = useSessionState(appSession, authApi, toAuthUser)
 
   // Mirrors the backend's access rules (ScopesRecordAccess, EnsureCanActAsHead):
   // heads see and do everything; the "can act as head" permission lets a user
   // enter values for any head but not see balances. Display only: the API
   // enforces all of it.
-  const isHead = computed(() => (user.value?.role_name ?? '').toUpperCase() === 'HEAD')
-  const canActAsHead = computed(() => isHead.value || user.value?.is_act_as_head_enabled === true)
+  const isHead = computed(() => (state.user.value?.role_name ?? '').toUpperCase() === 'HEAD')
+  const canActAsHead = computed(
+    () => isHead.value || state.user.value?.is_act_as_head_enabled === true,
+  )
 
-  // Local sign-out: forgets the session without calling the backend. Used by
-  // the expired-token handler, where the token is already dead server-side.
-  function clear() {
-    user.value = null
-    token.value = null
-    clearSession()
-  }
-
-  async function login(payload: LoginPayload) {
-    // Drop any stale session first, so a dead token can't ride along on the
-    // login request and a failed attempt leaves the app cleanly signed out.
-    clear()
-
-    const result = await authApi.login(payload)
-    const next = toAuthUser(result.user)
-
-    user.value = next
-    token.value = result.token
-    saveSession({ user: next, token: result.token })
-  }
-
-  async function logout() {
-    if (isLoggingOut.value) return
-    isLoggingOut.value = true
-    try {
-      // Best effort — revoke the token server-side so it can't be reused.
-      await authApi.logout()
-    } catch {
-      // Offline, or the token was already rejected. Either way the local
-      // session still goes below: never leave an operator stranded on a
-      // screen they can no longer use.
-    } finally {
-      clear()
-      isLoggingOut.value = false
-    }
-  }
-
-  // Verifies a session restored from localStorage against the server, and
-  // refreshes the cached user with whatever the server currently holds (a
-  // rename or a role change made elsewhere lands here).
-  //
-  // Deliberately best-effort:
-  //  - A dead token 401s, and api.ts has already cleared the session and
-  //    fired the unauthorized handler by the time this catch runs. Nothing
-  //    left to do here.
-  //  - Any other failure (offline, a 500, the server asleep on Render's free
-  //    tier) must NOT sign the operator out. They keep the session they had
-  //    and the first real request decides.
-  async function validateSession() {
-    if (!token.value) return
-
-    try {
-      const me = await authApi.me()
-
-      // is_active can flip while a session is open. Login blocks deactivated
-      // accounts (403) but an already-issued token keeps working, so this is
-      // the only place the app finds out.
-      if (!me.is_active) {
-        await logout()
-        return
-      }
-
-      const next = toAuthUser(me)
-      user.value = next
-      saveSession({ user: next, token: token.value })
-    } catch {
-      // See above — never clears the session on its own.
-    }
-  }
-
-  // Adopts a session another tab wrote. The storage write already happened
-  // in that tab and authSession has already updated its mirror, so this only
-  // brings the reactive refs in line — calling saveSession/clearSession here
-  // would write the value straight back out again.
-  function adoptExternalSession(session: AuthSession | null) {
-    user.value = session?.user ?? null
-    token.value = session?.token ?? null
-  }
-
-  return {
-    user,
-    token,
-    isAuthenticated,
-    isHead,
-    canActAsHead,
-    isLoggingOut,
-    login,
-    logout,
-    clear,
-    validateSession,
-    adoptExternalSession,
-  }
+  return { ...state, isHead, canActAsHead }
 })

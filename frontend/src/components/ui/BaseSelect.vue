@@ -7,6 +7,10 @@ interface SelectOption<T> {
   value: T
   label: string
   disabled?: boolean
+  // Secondary figure shown right-aligned beside the label, in the list and
+  // on the closed box — e.g. an item's available grams, the way the legacy
+  // "GOLD => 0" dropdowns read. Search still matches the label only.
+  hint?: string
 }
 
 // Deliberately NOT inheritAttrs:false — class/style (e.g. the "flex-1" a
@@ -202,8 +206,13 @@ onBeforeUnmount(removeListeners)
         :aria-expanded="isOpen"
         @click="toggle"
       >
-        <span class="truncate" :class="selectedOption ? '' : 'text-slate-400'">
-          {{ selectedOption?.label ?? placeholder ?? 'Select…' }}
+        <span class="flex min-w-0 items-baseline gap-1.5">
+          <span class="truncate" :class="selectedOption ? '' : 'text-slate-400'">
+            {{ selectedOption?.label ?? placeholder ?? 'Select…' }}
+          </span>
+          <span v-if="selectedOption?.hint" class="shrink-0 font-figure text-xs tabular-nums text-slate-500">
+            {{ selectedOption.hint }}
+          </span>
         </span>
         <span class="flex shrink-0 items-center gap-1">
           <span
@@ -266,7 +275,7 @@ onBeforeUnmount(removeListeners)
             :key="String(option.value)"
             role="option"
             :aria-selected="option.value === modelValue"
-            class="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm"
+            class="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm"
             :class="[
               option.disabled
                 ? 'cursor-not-allowed text-slate-300'
@@ -277,7 +286,14 @@ onBeforeUnmount(removeListeners)
             @click="selectOption(option)"
             @mouseenter="highlightedIndex = index"
           >
-            <span class="truncate">{{ option.label }}</span>
+            <span class="min-w-0 flex-1 truncate">{{ option.label }}</span>
+            <span
+              v-if="option.hint"
+              class="shrink-0 font-figure text-xs tabular-nums"
+              :class="option.disabled ? '' : 'text-slate-500'"
+            >
+              {{ option.hint }}
+            </span>
             <Check v-if="option.value === modelValue" class="h-4 w-4 shrink-0" />
           </li>
         </ul>

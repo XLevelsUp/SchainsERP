@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import AuthLayout from '@/components/layout/AuthLayout.vue'
+import { adminRoutes } from '@/admin/routes'
 import { authGuard } from './guards'
 
 const router = createRouter({
@@ -9,12 +10,13 @@ const router = createRouter({
     {
       path: '/login',
       component: AuthLayout,
+      meta: { realm: 'app', guestOnly: true },
       children: [{ path: '', name: 'login', component: () => import('@/views/LoginView.vue') }],
     },
     {
       path: '/',
       component: AppShell,
-      meta: { requiresAuth: true },
+      meta: { realm: 'app', requiresAuth: true },
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
         { path: 'items', name: 'items', component: () => import('@/views/ItemsView.vue') },
@@ -24,7 +26,8 @@ const router = createRouter({
           component: () => import('@/views/FitemBoxesView.vue'),
         },
         { path: 'roles', name: 'roles', component: () => import('@/views/RolesView.vue') },
-        { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue') },
+        // Users and Head Employee Mappings live in the admin console
+        // (admin/routes.ts): admins create users and assign them to heads.
         { path: 'clients', name: 'clients', component: () => import('@/views/ClientsView.vue') },
         {
           path: 'customer-touch',
@@ -35,11 +38,6 @@ const router = createRouter({
           path: 'customer-touch-mappings',
           name: 'customer-touch-mappings',
           component: () => import('@/views/CustomerTouchMappingsView.vue'),
-        },
-        {
-          path: 'head-employee-mappings',
-          name: 'head-employee-mappings',
-          component: () => import('@/views/HeadEmployeeMappingsView.vue'),
         },
         {
           path: 'bank-details',
@@ -144,6 +142,9 @@ const router = createRouter({
         { path: 'pages', name: 'pages', component: () => import('@/views/PagesView.vue') },
       ],
     },
+    // The admin console (admin accounts create users and assign them to
+    // heads) has its own sign-in and layout under /admin — admin/routes.ts.
+    ...adminRoutes,
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

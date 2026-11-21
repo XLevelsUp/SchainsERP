@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\AuthUser;
+use App\Http\Requests\LoginRequest;
+use App\Services\AuthService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
@@ -55,40 +55,15 @@ class AuthController extends Controller
      *     )
      * )
      */
-    public function login(Request $request)
+    public function login(LoginRequest $request, AuthService $auth)
     {
-        // Validate username and password
-        $request->validate([
-            'user_name' => 'required|string',
-            'password' => 'required|string',
-        ]);
+        // 401 for a wrong username/password, 403 for a deactivated account
+        // (LoginRejectedException renders both).
+        $user = $auth->verifyCredentials($request->user_name, $request->password);
 
-        // Check username in user_details table
-        $user = AuthUser::where(
-            'user_name',
-            $request->user_name
-        )->first();
-
-        // Username not found or password doesn't match
-        if (!$user || !Hash::check($request->password, $user->password_hash)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid username or password'
-            ], 401);
-        }
-
-        // Block deactivated accounts
-        if (!$user->is_active) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Your account has been deactivated. Please contact your administrator.'
-            ], 403);
-        }
-
-        // Generate Passport Token
-        $token = $user->createToken('auth_token')->accessToken;
-
-        $user->load('role');
+        // An app token carries no scopes, so it never opens the admin
+        // console; heads sign in there separately (Admin\AdminAuthController).
+        $token = $auth->issueAppToken($user);
 
         // Login successful - Secure Response
         return response()->json([

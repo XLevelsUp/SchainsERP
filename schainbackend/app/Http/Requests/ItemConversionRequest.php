@@ -14,7 +14,10 @@ class ItemConversionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'user_id' => 'required|integer|exists:user_details,user_id',
+            // Item Conversion is always on the logged-in user's own stock; the
+            // service takes the user from the token. Older clients may still
+            // send user_id; the controller refuses anyone else's.
+            'user_id' => 'nullable|integer',
             'added_at' => 'nullable|date',
             'items' => 'required|array|min:1',
             'items.*.stock_in_id' => 'nullable|integer|exists:stock_details,stock_id',
@@ -22,7 +25,9 @@ class ItemConversionRequest extends FormRequest
             'items.*.target_item_id' => 'required|integer|exists:items,item_id|different:items.*.source_item_id',
             'items.*.source_grams' => 'required|numeric|gt:0',
             'items.*.source_touch' => 'required|numeric|between:0,100',
-            'items.*.target_touch' => 'required|numeric|between:0,100',
+            // Converted grams = source grams × source touch ÷ target touch, so
+            // 0 is refused (it used to convert the gold into 0 g).
+            'items.*.target_touch' => 'required|numeric|gt:0|max:100',
             'items.*.remarks' => 'nullable|string',
             'items.*.item_remarks' => 'nullable|string',
             'items.*.alloys' => 'nullable|array',

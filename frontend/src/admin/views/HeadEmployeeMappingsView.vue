@@ -6,8 +6,12 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import { headEmployeeMappingsApi } from '@/lib/headEmployeeMappingsApi'
-import { userDetailsApi } from '@/lib/userDetailsApi'
+import {
+  createHeadEmployeeMappingsApi,
+  headEmployeeMappingsApi,
+} from '@/admin/lib/headEmployeeMappingsApi'
+import { adminApiWithSpecialPassword } from '@/admin/lib/adminApi'
+import { userDetailsApi } from '@/admin/lib/resources'
 import { userOptionLabel } from '@/lib/userLabel'
 import { ApiError } from '@/lib/api'
 import type { HeadEmployeeMappingGroup, UserDetailListItem } from '@/types'
@@ -32,6 +36,10 @@ import type { HeadEmployeeMappingGroup, UserDetailListItem } from '@/types'
 |
 | No pagination — the backend returns the full set in one response, same as
 | Customer Touch Mappings.
+|
+| Admin console only (agreed 2026-11-20): assigning users to heads is the
+| admin's job, and every save needs the admin's special password, entered
+| in the form and sent as a header (never in the body, never kept).
 |--------------------------------------------------------------------------
 */
 
@@ -119,6 +127,9 @@ const form = reactive({
 })
 const formError = ref('')
 const isSaving = ref(false)
+// Asked on every save; cleared whenever the form opens or closes.
+const specialPassword = ref('')
+const specialPasswordError = ref('')
 
 function addHeadRow() {
   form.head_ids.push({ head_id: null })
@@ -132,6 +143,8 @@ function openCreate() {
   form.employee_id = null
   form.head_ids = [{ head_id: null }]
   formError.value = ''
+  specialPassword.value = ''
+  specialPasswordError.value = ''
   isFormOpen.value = true
 }
 
@@ -141,12 +154,16 @@ function openEdit(group: HeadEmployeeMappingGroup) {
   form.head_ids = group.heads.map((h) => ({ head_id: h.head_id }))
   if (form.head_ids.length === 0) form.head_ids.push({ head_id: null })
   formError.value = ''
+  specialPassword.value = ''
+  specialPasswordError.value = ''
   isFormOpen.value = true
 }
 
 function closeForm() {
   isFormOpen.value = false
   formError.value = ''
+  specialPassword.value = ''
+  specialPasswordError.value = ''
 }
 
 async function saveForm() {
@@ -164,14 +181,20 @@ async function saveForm() {
     formError.value = 'Select at least one head.'
     return
   }
+  specialPasswordError.value = ''
+  if (!specialPassword.value) {
+    specialPasswordError.value = 'Enter your special password to assign heads.'
+    return
+  }
 
   isSaving.value = true
   formError.value = ''
   try {
+    const mappings = createHeadEmployeeMappingsApi(adminApiWithSpecialPassword(specialPassword.value))
     if (editingEmployeeId.value !== null) {
-      await headEmployeeMappingsApi.update(editingEmployeeId.value, { head_ids: headIds })
+      await mappings.update(editingEmployeeId.value, { head_ids: headIds })
     } else {
-      await headEmployeeMappingsApi.create({
+      await mappings.create({
         employee_id: form.employee_id as number,
         head_ids: headIds,
       })
@@ -179,7 +202,10 @@ async function saveForm() {
     closeForm()
     await loadGroups()
   } catch (err) {
-    if (err instanceof ApiError) {
+    if (err instanceof ApiError && err.errors?.special_password) {
+      // Wrong or missing special password: the mapping wasn't touched.
+      specialPasswordError.value = err.errors.special_password[0]
+    } else if (err instanceof ApiError) {
       formError.value = err.errors ? (Object.values(err.errors)[0]?.[0] ?? err.message) : err.message
     } else {
       formError.value = 'Failed to save the mapping.'
@@ -306,6 +332,17 @@ onMounted(async () => {
             </button>
           </div>
         </div>
+
+        <BaseInput
+          id="head_mapping_special_password"
+          v-model="specialPassword"
+          label="Special password"
+          type="password"
+          autocomplete="off"
+          placeholder="Required to assign heads"
+          required
+          :error="specialPasswordError"
+        />
 
         <p v-if="formError" class="text-sm text-red-600">{{ formError }}</p>
 

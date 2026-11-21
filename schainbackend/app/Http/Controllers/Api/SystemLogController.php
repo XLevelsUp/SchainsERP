@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SystemLogResource;
+use App\Models\Role;
 use App\Models\SystemLog;
 use App\Models\UserDetail;
 use Carbon\Carbon;
@@ -29,7 +30,7 @@ class SystemLogController extends Controller
         }
 
         try {
-            $query = SystemLog::with(['user:user_id,name,user_name,role_id']);
+            $query = SystemLog::with(['user:user_id,name,user_name,role_id', 'admin:id,name,user_name']);
 
             // 1. Module filter (supports single value, array, or comma-separated string, case-insensitive)
             if ($request->filled('module')) {
@@ -198,7 +199,7 @@ class SystemLogController extends Controller
         }
 
         try {
-            $log = SystemLog::with(['user:user_id,name,user_name,role_id'])->find($id);
+            $log = SystemLog::with(['user:user_id,name,user_name,role_id', 'admin:id,name,user_name'])->find($id);
 
             if (!$log) {
                 return response()->json([
@@ -274,10 +275,17 @@ class SystemLogController extends Controller
                 ->pluck('reference_table');
 
             // 5. Customers for dropdown (with display name, username, label, value)
+            // CUSTOMER = retail customer, PURCHASE = retailer/buyer. Role ids
+            // are looked up first: user_details.role_id is a varchar and
+            // roles.id a bigint, so whereHas('role') compared them in SQL and
+            // PostgreSQL rejected it (operator does not exist: character
+            // varying = bigint), failing this whole endpoint.
+            $customerRoleIds = Role::whereIn('role', ['CUSTOMER', 'PURCHASE'])
+                ->pluck('id')
+                ->map(fn ($id) => (string) $id);
+
             $customers = UserDetail::where('is_delete', false)
-                ->whereHas('role', function ($q) {
-                    $q->whereIn('role', ['CUSTOMER', 'PURCHASE']); // CUSTOMER = retail customer, PURCHASE = retailer/buyer
-                })
+                ->whereIn('role_id', $customerRoleIds)
                 ->select('user_id', 'name', 'user_name')
                 ->orderBy('name')
                 ->get()

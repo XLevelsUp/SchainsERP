@@ -1,5 +1,5 @@
 import { API_BASE_URL, ApiError } from './api'
-import { clearSession, getToken, notifyUnauthorized } from './authSession'
+import { appSession } from './authSession'
 
 /*
 |--------------------------------------------------------------------------
@@ -59,7 +59,8 @@ async function errorFrom(response: Response): Promise<ApiError> {
  * @param fallback Filename to use when the response carries no Content-Disposition.
  */
 export async function downloadFile(path: string, fallback: string): Promise<void> {
-  const token = getToken()
+  // The report exports are app routes, so they use the app session.
+  const token = appSession.getToken()
 
   let response: Response
   try {
@@ -78,8 +79,8 @@ export async function downloadFile(path: string, fallback: string): Promise<void
   }
 
   if (response.status === 401 && token) {
-    clearSession()
-    notifyUnauthorized()
+    appSession.clear()
+    appSession.notifyUnauthorized()
     throw new ApiError('Your session has expired. Please sign in again.', 401)
   }
 

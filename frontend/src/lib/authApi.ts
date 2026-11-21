@@ -1,15 +1,27 @@
 import { api, type ApiResponse } from './api'
-import type { AuthMeResult, LoginResult } from '@/types'
+import type { AuthMeResult, AuthUserPayload, LoginResult } from '@/types'
 
 export interface LoginPayload {
   user_name: string
   password: string
 }
 
-export const authApi = {
+// What a session store needs from its realm's auth endpoints. The app's
+// authApi below and the admin console's adminAuthApi both satisfy it, so
+// both stores share stores/sessionState.ts. TAccount is the realm's account
+// as the server sends it; me() always carries is_active.
+export interface SessionAuthApi<TAccount> {
+  login(payload: LoginPayload): Promise<{ account: TAccount; token: string }>
+  logout(): Promise<unknown>
+  me(): Promise<TAccount & { is_active: boolean }>
+}
+
+export const authApi: SessionAuthApi<AuthUserPayload> = {
   // POST /api/v1/login — the only route outside the `auth:api` middleware.
   login: (payload: LoginPayload) =>
-    api.post<ApiResponse<LoginResult>>('/login', payload).then((r) => r.data),
+    api
+      .post<ApiResponse<LoginResult>>('/login', payload)
+      .then((r) => ({ account: r.data.user, token: r.data.token })),
 
   // POST /api/v1/logout — revokes the token the request was made with
   // (AuthController::logout). Returns no data, only the success envelope.

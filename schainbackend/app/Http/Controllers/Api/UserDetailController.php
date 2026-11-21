@@ -31,7 +31,12 @@ class UserDetailController extends Controller
         try {
 
             $actingUserId = (int) $request->user()->user_id;
-            $headId = $request->query('head_id') ? (int)$request->query('head_id') : $actingUserId;
+
+            // ?mapped_only=1 (the Stock screen's pickers): only the signed-in
+            // user and the users mapped to them, whatever their role. Always
+            // the token's user: head_id and all/unfiltered are ignored with it.
+            $mappedOnly = $request->boolean('mapped_only');
+            $headId = (!$mappedOnly && $request->query('head_id')) ? (int) $request->query('head_id') : $actingUserId;
 
             $query = UserDetail::with([
                 'itemMappings',
@@ -42,14 +47,14 @@ class UserDetailController extends Controller
             ->orderBy('user_id', 'desc');
 
             $module = $request->query('module', 'stock'); // Default to stock
-            $isAll = $request->boolean('all') || $request->boolean('unfiltered');
+            $isAll = !$mappedOnly && ($request->boolean('all') || $request->boolean('unfiltered'));
 
             // Apply mapped users filter for Head / Mapped queries
             if (!$isAll && $headId) {
                 $actingUser = UserDetail::find($headId);
-                $isHead = $actingUser && (strtoupper(optional($actingUser->role)->role) === 'HEAD' || $actingUser->role_id == 3);
+                $isHead = $actingUser && strtoupper((string) optional($actingUser->role)->role) === 'HEAD';
 
-                if ($isHead || $request->has('head_id') || $request->boolean('mapped_only')) {
+                if ($isHead || $request->has('head_id') || $mappedOnly) {
                     if (strtolower($module) === 'cash') {
                         $mappedIds = CashHeadEmployeeMapping::where('head_id', $headId)->pluck('employee_id')->toArray();
                     } else {
@@ -473,9 +478,13 @@ class UserDetailController extends Controller
         /*
         | A user with "Can act as head" may create users (e.g. Add Retailer on
         | the Stock screen), but only a head may create another head or hand
-        | out that permission (BACKEND_TODO §26, agreed 2026-11-12).
+        | out that permission (BACKEND_TODO §26, agreed 2026-11-12). Admins
+        | create and set up users (agreed 2026-11-20), so they may too. In the
+        | app this route only takes Add Retailer's customer anyway
+        | (EnsureQuickAddCustomer).
         */
-        if (!\App\Support\BalanceVisibility::viewerIsHead()) {
+        if (!\App\Support\BalanceVisibility::viewerIsHead()
+            && !\App\Support\AdminAccess::isAdmin($request->user())) {
             $headRoleIds = \App\Models\Role::whereRaw('UPPER(role) = ?', ['HEAD'])
                 ->pluck('id')
                 ->map(fn ($id) => (string) $id)

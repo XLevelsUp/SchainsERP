@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { Plus, Trash, Layers, X } from 'lucide-vue-next'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -9,7 +9,9 @@ import MetalPickerModal from '@/components/stock/MetalPickerModal.vue'
 import { stockApi } from '@/lib/stockApi'
 import { ApiError } from '@/lib/api'
 import { isMetalItem } from '@/lib/metalItem'
+import { useOwnItemBalances } from '@/lib/ownItemBalances'
 import { nowDateTimeInputValue, toBackendDateTime } from '@/lib/date'
+import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 import type {
   Item,
@@ -27,9 +29,13 @@ import type {
 | ItemChangeModal's comment for why (this one, Item Change, and GMS Out
 | submit standalone instead of queuing rows).
 |
-| Scoped to `userId` (selectedUserId from the page's UserPickerPanel),
-| same as the panel it replaces. actingUserId sent as userId too
-| (X-User-ID header) — not changed here.
+| Always the logged-in user's own stock (2026-11-13), like Item Change: no
+| user needs to be picked in the left panel, and the backend takes the user
+| from the token (it refuses anyone else's user_id or lot). Saving takes
+| the source grams out of the source item and puts the converted grams into
+| the target item, in your item totals and your overall totals, and the page
+| then refreshes your stock summary. Before, it used the picked user and
+| changed *their* stock.
 |
 | stock_in_id is nullable in ItemConversionRequest.php and used to be sent
 | as null always, because no endpoint could list lots for a non-metal item.
@@ -50,12 +56,29 @@ import type {
 |--------------------------------------------------------------------------
 */
 
-const props = defineProps<{ items: Item[]; userId: number | null; reloadItems?: () => unknown }>()
-const emit = defineEmits<{ close: []; saved: []; missingUser: [] }>()
+const props = defineProps<{ items: Item[]; reloadItems?: () => unknown }>()
+const emit = defineEmits<{ close: []; saved: [] }>()
 
 const toast = useToastStore()
+const auth = useAuthStore()
+// Whose stock converts: always the logged-in user's.
+const userId = computed(() => auth.user?.user_id ?? null)
 
 const itemOptions = computed(() => props.items.map((i) => ({ value: i.item_id, label: i.item_name })))
+
+// Source and target show your available grams beside each item, like the
+// legacy Item Change dropdowns — display only; nothing here limits the
+// grams. Alloys keep the plain list: createItemConversion only records
+// them in gold_conversion_alloys and never draws them from your items, so
+// a balance there would suggest a deduction that doesn't happen.
+const balances = useOwnItemBalances()
+const stockItemOptions = computed(() =>
+  props.items.map((i) => ({ value: i.item_id, label: i.item_name, hint: balances.balanceHint(i.item_id) })),
+)
+// Their reload button refreshes the balances along with the list.
+async function reloadStockItemOptions() {
+  await Promise.all([props.reloadItems?.(), balances.load()])
+}
 
 function makeEmptyAlloy(): ItemConversionAlloyInput {
   return { alloy_item_id: null, alloy_percentage: null, alloy_grams: null }
@@ -191,8 +214,9 @@ function validate(): boolean {
     if (row.source_touch === null || row.source_touch < 0 || row.source_touch > 100) {
       fieldErrors.value[`${index}.source_touch`] = `Row ${index + 1}: source touch must be between 0 and 100.`
     }
-    if (row.target_touch === null || row.target_touch < 0 || row.target_touch > 100) {
-      fieldErrors.value[`${index}.target_touch`] = `Row ${index + 1}: target touch must be between 0 and 100.`
+    // Above 0: converted grams divide by it (the backend refuses 0 too).
+    if (row.target_touch === null || row.target_touch <= 0 || row.target_touch > 100) {
+      fieldErrors.value[`${index}.target_touch`] = `Row ${index + 1}: target touch must be above 0 and at most 100.`
     }
     row.alloys.forEach((alloy, alloyIndex) => {
       if (alloy.alloy_item_id === null) {
@@ -218,22 +242,9 @@ function validate(): boolean {
   return true
 }
 
-// Shown as an inline banner rather than eagerly — only set once an actual
-// submit was attempted with no user picked, matching the page-wide 2026-10
-// change to stop blocking people before they've had a chance to fill
-// anything in.
-const showMissingUserWarning = ref(false)
-watch(
-  () => props.userId,
-  (v) => {
-    if (v !== null) showMissingUserWarning.value = false
-  },
-)
-
 async function handleSubmit() {
-  if (props.userId === null) {
-    showMissingUserWarning.value = true
-    emit('missingUser')
+  if (userId.value === null) {
+    toast.show('You must be signed in to record an item conversion.', 'error')
     return
   }
   if (!validate()) return
@@ -242,14 +253,13 @@ async function handleSubmit() {
   try {
     const result = await stockApi.postItemConversion(
       {
-        user_id: props.userId,
         items: rows.value.map((row) => ({
           ...row,
           added_at: toBackendDateTime(row.added_at),
           alloys: row.alloys.filter((a) => a.alloy_item_id !== null),
         })),
       },
-      props.userId,
+      userId.value,
     )
     toast.show(`Item conversion recorded — ${result.length} item(s).`, 'success')
     emit('saved')
@@ -271,11 +281,13 @@ async function handleSubmit() {
 
 <template>
   <BaseModal title="Item Conversion" badge="OUT" badge-class="bg-red-600" max-width="max-w-5xl" @close="emit('close')">
-    <p
-      v-if="showMissingUserWarning"
-      class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-    >
-      Select a user in the left panel before recording an Item Conversion.
+    <p class="text-sm text-slate-600">
+      Converts your own stock<span v-if="auth.user">
+        (<span class="font-medium text-slate-900">{{ auth.user.name }}</span>)</span>. The user picked on the
+      left isn't used.
+    </p>
+    <p v-if="balances.loadError.value" class="text-xs text-amber-700">
+      Couldn't load your item balances ({{ balances.loadError.value }}), so the item lists show no grams.
     </p>
 
     <form class="flex flex-col gap-6" @submit.prevent="handleSubmit">
@@ -296,8 +308,8 @@ async function handleSubmit() {
                 label="Source item"
                 size="sm"
                 placeholder="Select item…"
-                :options="itemOptions"
-                :reload="reloadItems"
+                :options="stockItemOptions"
+                :reload="reloadItems ? reloadStockItemOptions : undefined"
                 :error="fieldErrors[`${index}.source_item_id`]"
                 @update:model-value="(v) => onSourceItemSelect(row, index, v as number | null)"
               />
@@ -330,8 +342,8 @@ async function handleSubmit() {
               label="Target item"
               size="sm"
               placeholder="Select item…"
-              :options="itemOptions"
-              :reload="reloadItems"
+              :options="stockItemOptions"
+              :reload="reloadItems ? reloadStockItemOptions : undefined"
               :error="fieldErrors[`${index}.target_item_id`]"
               @update:model-value="(v) => (row.target_item_id = v as number | null)"
             />

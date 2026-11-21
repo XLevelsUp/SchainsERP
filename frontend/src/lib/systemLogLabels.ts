@@ -24,6 +24,17 @@ const ACTION_LABELS: Record<string, string> = {
   SALE_GOLD: 'Sale Gold',
   CASH_TO_GOLD: 'Cash To Gold',
   GOLD_TO_CASH: 'Gold To Cash',
+  // module ADMIN — the admin console (AdminAuthController, LogAdminAction).
+  ADMIN_LOGIN: 'Admin Sign-in',
+  ADMIN_LOGOUT: 'Admin Sign-out',
+  USER_CREATE: 'User Created',
+  USER_UPDATE: 'User Updated',
+  USER_DELETE: 'User Deleted',
+  HEAD_ASSIGN: 'Heads Assigned',
+  CASH_HEAD_ASSIGN: 'Cash Heads Assigned',
+  CASH_HEAD_UNASSIGN: 'Cash Head Removed',
+  ADMIN_PASSWORD_CHANGE: 'Admin Password Changed',
+  ADMIN_SPECIAL_PASSWORD_CHANGE: 'Admin Special Password Changed',
 }
 
 function humanize(code: string): string {
@@ -46,6 +57,8 @@ export function systemLogModuleLabel(module: string): string {
 // Same STOCK/CASH palette One Day Action uses for its Source column.
 export function systemLogModuleClass(module: string): string {
   if (module === 'CASH') return 'bg-amber-50 text-amber-700'
+  // Admin console entries stand apart from the day's transactions.
+  if (module === 'ADMIN') return 'bg-slate-800 text-white'
   return 'bg-slate-100 text-slate-600'
 }
 

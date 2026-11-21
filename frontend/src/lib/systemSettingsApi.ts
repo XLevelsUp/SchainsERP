@@ -1,4 +1,4 @@
-import { api, type ApiResponse } from './api'
+import { api as appApi, type ApiClient, type ApiResponse } from './api'
 import type { SystemSetting, SystemSettingCreate, SystemSettingUpdate } from '@/types'
 
 const RESOURCE = '/settings'
@@ -9,19 +9,27 @@ const RESOURCE = '/settings'
 // need escaping in a path segment, so encode them.
 const keyPath = (key: string) => `${RESOURCE}/${encodeURIComponent(key)}`
 
-export const systemSettingsApi = {
-  list: () => api.get<ApiResponse<SystemSetting[]>>(RESOURCE).then((r) => r.data),
+// Written against ApiClient so the admin console reuses it with its own
+// client (admin/lib/resources.ts). `systemSettingsApi` below is the app's,
+// which can only read (lib/metalItem.ts reads metal_popup_items); changes
+// go through the admin console.
+export function createSystemSettingsApi(api: ApiClient) {
+  return {
+    list: () => api.get<ApiResponse<SystemSetting[]>>(RESOURCE).then((r) => r.data),
 
-  get: (key: string) => api.get<ApiResponse<SystemSetting>>(keyPath(key)).then((r) => r.data),
+    get: (key: string) => api.get<ApiResponse<SystemSetting>>(keyPath(key)).then((r) => r.data),
 
-  // 201. `setting_key` must be unique and `setting_value` must be a JSON
-  // object or array — a scalar fails validation with a 422.
-  create: (payload: SystemSettingCreate) =>
-    api.post<ApiResponse<SystemSetting>>(RESOURCE, payload).then((r) => r.data),
+    // 201. `setting_key` must be unique and `setting_value` must be a JSON
+    // object or array — a scalar fails validation with a 422.
+    create: (payload: SystemSettingCreate) =>
+      api.post<ApiResponse<SystemSetting>>(RESOURCE, payload).then((r) => r.data),
 
-  // Partial; `setting_key` is not updatable (see SystemSettingUpdate).
-  update: (key: string, payload: SystemSettingUpdate) =>
-    api.put<ApiResponse<SystemSetting>>(keyPath(key), payload).then((r) => r.data),
+    // Partial; `setting_key` is not updatable (see SystemSettingUpdate).
+    update: (key: string, payload: SystemSettingUpdate) =>
+      api.put<ApiResponse<SystemSetting>>(keyPath(key), payload).then((r) => r.data),
 
-  remove: (key: string) => api.delete<ApiResponse<null>>(keyPath(key)).then((r) => r.data),
+    remove: (key: string) => api.delete<ApiResponse<null>>(keyPath(key)).then((r) => r.data),
+  }
 }
+
+export const systemSettingsApi = createSystemSettingsApi(appApi)

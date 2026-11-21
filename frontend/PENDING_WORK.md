@@ -19,9 +19,140 @@ fixed, struck through, with what changed — this file is the record.
 > When a backend item is fixed: strike it through here with the evidence, and
 > delete it from `BACKEND_TODO.md`.
 
-**Last updated:** 2026-11-12
+**Last updated:** 2026-11-20
 **Backend baseline:** `982afd78` (PR #53) plus our own uncommitted backend
 fixes below. Since 2026-11-06 we own the backend too.
+
+### Admin console — 2026-11-20
+
+A separate admin console with its own accounts, sign-in, layout and API.
+Rules agreed with the user:
+
+- **An admin is not a head.** Admins are their own accounts (new table
+  `admins`, `App\Models\Admin`). They don't hold balances and don't appear in
+  any picker.
+- **Admins create users and assign them to heads.** That's all the console
+  does: Users, Head Employee Mappings (stock and cash), and the admin's own
+  passwords. Heads keep everything else in the app, as before: items, fitem
+  boxes, roles, customer touch (+ mappings), banks, cash categories,
+  settings, System Logs.
+- **The special password.** Each admin has a second password, asked for
+  again for sensitive changes: assigning or changing heads (stock and cash,
+  including when creating a user with heads) and deleting a user.
+- **The app keeps Add Retailer only.** The Stock screen's full "Add User"
+  is gone.
+
+**Backend**
+- Migrations: `2026_11_20_000000_create_admins_table` (name, user_name,
+  password_hash, special_password_hash, is_active, last_login_at,
+  password/special changed timestamps) and
+  `2026_11_20_000100_add_admin_id_to_system_logs_table` (nullable FK,
+  `nullOnDelete`). Both additive and reversible. **Already applied to Aiven
+  2026-11-20.**
+- Auth: `admin` guard (Passport) on its own `admins` provider. Realms are
+  kept apart twice:
+  - Admin tokens come from a personal access client pinned to `admins`, so
+    Passport refuses them on `auth:api`, and app tokens on `auth:admin`. Each
+    side gets a 401.
+  - Admin tokens also carry the `admin` scope, which `EnsureAdminSession`
+    requires.
+  `docker/entrypoint.sh` now creates the `admins` personal access client on
+  deploy. It was created on Aiven by hand on 2026-11-20.
+- `routes/admin.php` (`/api/v1/admin`, `admin.` names):
+  - login (throttled 5/min per user+IP), logout, me;
+  - `account/password` and `account/special-password` (each needs the
+    current value; the two must differ);
+  - user-details CRUD;
+  - head-employee-mappings index/store/update;
+  - cash-head-employee-mappings;
+  - read-only roles and items for the Users form's pickers.
+- `RequireSpecialPassword` (`special.password`): reads the
+  `X-Special-Password` header. Missing or wrong → 422 on `special_password`;
+  5 wrong tries → 429 for 5 minutes. It applies:
+  - always on delete and on the mapping writes;
+  - on create only when `head_mappings` / `cash_head_mappings` are filled.
+    `update()` never touches head mappings, so edits don't need it.
+- `LogAdminAction` (`admin.audit`) writes one audit row per successful admin
+  change. Module `ADMIN`, `admin_id` set, `user_id` null. Actions:
+  USER_CREATE / USER_UPDATE / USER_DELETE (keeps the deleted user's name),
+  HEAD_ASSIGN, CASH_HEAD_ASSIGN / CASH_HEAD_UNASSIGN, ADMIN_PASSWORD_CHANGE,
+  ADMIN_SPECIAL_PASSWORD_CHANGE (no payload). ADMIN_LOGIN / ADMIN_LOGOUT are
+  logged by the controller. Metadata records `special_password_verified`.
+- `SystemLogService`:
+  - takes `adminId`, and no longer reads `user()->id` as a user id (that
+    would have credited admin #1's actions to user #1);
+  - also redacts the new password fields.
+- `routes/api.php`:
+  - heads' admin writes are back (`head.only`), and System Logs is back for
+    heads;
+  - user update/delete and head-mapping writes are gone from the app (405);
+  - `POST user-details` gets `EnsureQuickAddCustomer`: CUSTOMER only, mapped
+    to the signed-in user only, no cash heads, no act-as-head flag. That is
+    Add Retailer's exact payload.
+- `UserDetailController::store` lets admins create heads and grant "Can act
+  as head".
+- Artisan: `admin:create {user_name} --name=` and
+  `admin:reset-password {user_name} [--special]`. Both ask for passwords
+  hidden, and reset signs the admin out everywhere. There is no screen for
+  creating admins.
+- ~~**`GET /system-logs/filters` 500'd on PostgreSQL.**~~ **Fixed.**
+  `whereHas('role')` compared varchar `role_id` with bigint `roles.id`, so
+  the filter dropdowns never loaded. Role ids are now looked up first.
+- ~~**`head-employee-mappings` show/destroy routes pointed at missing
+  methods.**~~ **Fixed.** Only the methods that exist are registered.
+- `LoginRejectedException` renders the envelope and isn't reported, so a
+  wrong password no longer writes a stack trace to the log.
+- Tests: `AdminAuthTest` (8, real tokens, admin #1 vs user #1),
+  `AdminAccessTest` (13), `AdminCommandsTest` (3). In `RecordAccessTest`,
+  the item-totals test was rewritten (see Open below). 83/83 passing.
+
+**Frontend**
+- `src/admin/`:
+  - client and the special-password client (`adminApi.ts`);
+  - auth API and account API;
+  - store, shell, nav, routes;
+  - Users, Head Employee Mappings and My account (`AdminAccountView`);
+  - `SpecialPasswordDialog`.
+- The special password is asked for:
+  - inline on the Users form, only when a new user has heads or cash heads;
+  - inline on every Head Employee Mappings save;
+  - in `SpecialPasswordDialog` for Delete user, which replaces the old
+    confirm popover.
+  It's sent as a header, never in the body or kept.
+- Admin Users screen: assigned items are read-only when editing, because
+  totals are balances and the backend ignores an admin's.
+- `lib/authSession.ts`, `stores/sessionState.ts` and `lib/authApi.ts` are
+  generic over the realm's account type (`AuthUser` / `AdminUser`). The admin
+  session key is now `schainserp:admin-auth:v2`. `lib/api.ts` clients take
+  default headers.
+- Restored to the app for heads: Items, Fitem Boxes, System Settings, Roles,
+  Customer Touch (+ mappings), Bank Details, System Logs. The System Logs
+  "Performed by" column shows "Name (admin)" on ADMIN rows.
+- Stock screen: "Add User" and `components/user/AddUserModal.vue` removed;
+  Add Retailer unchanged.
+
+**Postgres verification (2026-11-20).** Through the running API on Aiven:
+- a test admin `zz_admin_console_test_admin` (id 1) signed in;
+- the special password was required (missing / wrong → 422) and accepted;
+- tokens were refused across realms both ways;
+- Add Retailer's restriction held;
+- heads saw the ADMIN entries in System Logs.
+
+Test users 10 (employee) and 11 (customer) were created and deleted again
+through the endpoints. Left behind:
+- admin 1, deactivated;
+- head test user 8, deactivated again;
+- `system_logs` rows 52–58.
+All safe to delete.
+
+**Open**
+- **No screen edits a user's item totals any more.** Heads used to do it on
+  the app's Users screen, which is now admin-only, and admins aren't heads.
+  Needs a decision: give heads a small item-totals editor in the app, or let
+  admins edit totals.
+- `user_details.is_admin_login_otp_need_to_shown` belongs to the old idea of
+  an "admin login" for users. It does nothing now.
+- Create the real admin(s) on the server: `php artisan admin:create <name>`.
 
 ### Step 2 (security) — 2026-11-12
 
@@ -326,9 +457,9 @@ non-heads never see balances.
   - Verified on Aiven for head 1: All 47 rows / 496.001 g = In 3 / 110.001 g
     \+ Out 44 / 386 g, every row under exactly one filter (on 2026-11-06, 2
     rows were under neither).
-  - Still true, and not part of §23: a transfer between two of the head's
-    employees shows under All but under neither In nor Out, because it's
-    neither the head's send nor receive.
+  - (A transfer between two of the head's employees used to show under All
+    but under neither In nor Out. The 2026-11-13 direction fix below closed
+    that.)
 - ~~**BACKEND_TODO §16 (code part) — a failed log write rolled back the
   entry it was logging.**~~ **Fixed.**
   - `SystemLogService::log()` writes the log row in its own nested
@@ -343,6 +474,96 @@ non-heads never see balances.
     can't show the abort itself. Suite 53/53.
   - §16 stays open for the two non-code steps: check the other databases,
     and ask operators about entries made between 2026-10-22 and 2026-11-04.
+- ~~**Stock history showed a Stock Out as "In" (reported 2026-11-13).**~~
+  **Fixed.**
+  - **Cause:** the Transaction History panel always sends the picked user
+    (`head_id = employee_id = picked user`), and `getStockHistory` then
+    labelled every row from *that user's* side. A head's Stock Out to
+    Employee One is Employee One receiving gold, so it showed as In. Since
+    §23 the In/Out filter went by the saved `stock_type`, so with a user
+    picked, the Out filter even listed rows tagged In.
+  - **Fix:** rows are labelled from the logged-in user's side: Out if they
+    gave the gold, In if they received it. Rows they aren't a party to (the
+    picked employee's transfer to another employee) fall back to the picked
+    user's side, and rows neither gave nor received keep their saved
+    `stock_type`. Item changes and conversions keep `stock_type` as before.
+    The label and the filter share one rule
+    (`stockHistoryDirection()` / `stockHistoryDirectionSql()`), so a row
+    always sits under the filter matching its label. The counterparty column
+    follows: an Out row names who received it, so the head's view of
+    Employee One shows "Employee One" rather than the head's own name.
+  - The controller passes the token user as the viewer; the request and
+    response shapes are unchanged. Only a comment changed in
+    `TransactionHistoryPanel.vue`.
+  - `StockHistoryFilterTest` now covers both views (nobody picked, and the
+    screen's picked-user query), including a transfer between two employees.
+    It fails on the old code at "labels, picked view". Suite 53/53.
+  - Verified on Aiven: your Stock Outs #49 (2 g) and #50 (345 g), head 1 →
+    Employee One, now show Out with Employee One picked. With user 7 picked:
+    All 16 = In 1 + Out 15; with nobody picked: All 49 = In 3 + Out 46. Zero
+    rows whose label differs from their filter.
+- ~~**Item Change: always the logged-in user's own stock, and their totals
+  updated (requested 2026-11-13).**~~ **Done.**
+  - **Before:** the Stock screen sent the user picked on the left, refused to
+    save without one, and the backend changed *that* user's stock. It also
+    moved only the two item totals. Overall `purity_grand_total` stayed put,
+    so with different touches the overall total stopped matching the sum of
+    the item totals (0.99 of user 5's drift on Aiven came from their
+    2026-10-20 item change).
+  - **Backend:** `createItemChange` works on the acting user (token),
+    locked. `user_id` is now optional in `ItemChangeRequest`, and anyone
+    else's id gets `422` "Item Change is for your own stock only.". A lot
+    must be the user's own and of the From item, else `422`. The overall
+    purity total now moves by (To purity − From purity); grams don't
+    change.
+  - **Head stock summary as of a date/time:** for an Item Change or
+    Conversion's IN row it read the From item's opening balance, so the To
+    item showed as From balance − grams. It now reads the To item's opening
+    balance (`ReportService::getHeadStocks`).
+  - **Frontend:** `ItemChangeModal` uses the logged-in user (also for the
+    lot picker), no longer needs a picked user, and says "Changes your own
+    stock (name). The user picked on the left isn't used." `user_id` is gone
+    from `ItemChangeFormValues` and the payload. The page already refreshed
+    the head stock summary after saving.
+  - `ItemChangeTest` (3 tests): own items and totals change, the head stock
+    summary is right live and as of a time, a lot is drawn down, and another
+    user's id, another user's lot or a different item's lot are refused with
+    nothing changed. Suite 56/56.
+  - Verified on Aiven as head_admin: another user's id → `422`. 1 g Metal
+    (92) → Earrings (99.9): Metal −1 g / −0.92, Earrings +1 g / +0.999,
+    overall grams unchanged and purity +0.079. The head stock panel showed
+    it live and as of 23:59:59. Then changed back; head_admin is exactly as
+    before. Test rows: stock #51–#54.
+- ~~**Item Conversion: the same, and the converted items' totals reflected
+  (confirmed 2026-11-13).**~~ **Done.**
+  - **Before:** it also used the picked user, and moved only the two item
+    totals. Its grams genuinely change (converted grams = source grams ×
+    source touch ÷ target touch), so the overall grams total drifted too.
+    The target item's closing balance on both rows read a snapshot key that
+    doesn't exist, so the Items OB/CB report always got 0 for it.
+  - **Backend:** `createItemConversion` works on the acting user (token),
+    locked. `user_id` is optional and anyone else's gets `422` "Item
+    Conversion is for your own stock only.". A lot must be yours and of the
+    source item. Overall grams move by (converted − source) and purity by
+    (in − out), which is nil with the formula. Both rows now save the target
+    item's closing balance. `target_touch` must be above 0: with 0 the
+    division helper returned 0, turning the gold into 0 g.
+  - **Head stock summary as of a date/time:** covered by the Item Change
+    fix above (the IN row now reads the target item's opening balance).
+  - **Frontend:** `ItemConversionModal` uses the logged-in user, no longer
+    needs a picked user, says "Converts your own stock (name)", and its
+    target touch check is now "above 0". `user_id` is gone from
+    `ItemConversionFormValues` and the payload.
+  - `ItemChangeTest::test_conversion_…`: items and overall totals, both
+    rows' target-item closing balance, the head stock summary live and as
+    of a time, the three refusals (another user's id or lot, touch 0), and
+    a lot drawn down. Suite 57/57.
+  - Verified on Aiven as head_admin. Another user's id and touch 0 →
+    `422`. 1 g Metal (92) → Earrings (80) = 1.15 g: Metal −1 g / −0.92,
+    Earrings +1.15 g / +0.92, overall grams +0.15 and purity unchanged.
+    The head stock panel agreed live and as of 23:59:59, and both items'
+    closing balances were saved on rows #55/#56. Converted back (#57/#58);
+    head_admin is exactly as before.
 
 ### PR #53 pass — 2026-11-06
 

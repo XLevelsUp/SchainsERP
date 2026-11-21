@@ -425,6 +425,38 @@ today. We won't change the calculation until this is confirmed.
 
 ---
 
+## 28. Users' overall gold totals drift from their item totals
+
+A user's `grams_grand_total` / `purity_grand_total` should equal the sum of
+their `users_items_mappings` totals; every stock movement changes both
+together. Checked on Aiven on 2026-11-13: users 1–4 match, but three don't.
+
+| User | Overall g / pure | Sum of items g / pure |
+|---|---|---|
+| 5 Mahalaxmi N | −181 / −165.796 | −88.84 / −67.706 |
+| 6 New User 001 | 1289 / 1180.724 | 1398 / 1290.624 |
+| 7 Claude Test (test user) | −2.001 / −1.833 | −0.001 / −0.033 |
+
+Known causes:
+- **Item Change and Item Conversion** used to move only the item totals.
+  Both are fixed for new entries (2026-11-13). Item Change accounts for
+  0.99 of user 5's purity gap.
+- The rest is unexplained so far. User 7's gap of exactly 2 g / 1.8 pure
+  comes from the Sale Gold tests of 2026-11-06, so the gold services are the
+  next place to look.
+
+Also: `users_items_mappings.item_grams_total` and `item_purity_total` are
+`varchar(255)` columns (`create_users_items_mappings` migration), so
+PostgreSQL can't `SUM()` them, and any report that tries fails. A migration
+to `decimal(…, 4)` would fix that. It needs care: the column holds text
+today, so check every value parses first.
+
+Existing gaps aren't corrected automatically. Once the causes are fixed, a
+one-off recalculation would be needed, and that's your call (it changes
+stored balances).
+
+---
+
 # 🟡 When you can
 
 ## 11. The API testing doc is well behind the code  `#32`
@@ -440,6 +472,10 @@ today. We won't change the calculation until this is confirmed.
 - `apiResource('orders')` — everything except delete (list, show, create, update)
 - the login **403** for deactivated accounts
 - `GET /system-logs`, `/system-logs/{id}` and `/system-logs/filters` (PR #51)
+- the admin console API (2026-11-20, `routes/admin.php`): `POST /admin/login`
+  (401 / 403 / 429), `/admin/logout`, `/admin/me`, `/admin/account/*`, the
+  user and head-mapping routes, and the `X-Special-Password` header with its
+  422 / 429 responses
 
 And one active trap: **section 40 (Live Metal Balance) lists the query
 parameters and `item_id` is not among them** — the one parameter that decides
@@ -573,7 +609,9 @@ points are still open:
 - **Coverage.** Only the write services log: stock and cash creates, plus
   stock hide, unhide and cash-out. Nothing logs edits or deletes (cash
   `PUT` / `DELETE`, users, roles, items, banks, categories, settings,
-  mappings, orders, reminders) or sign-in and sign-out. The legacy system's
+  mappings, orders, reminders) or app sign-in and sign-out. (Since
+  2026-11-20 the admin console's sign-ins and its user and head-mapping
+  changes are logged, module `ADMIN`.) The legacy system's
   missing audit trail for edits and deletes is the gap the doc says this
   fixes.
 - **Names.** Descriptions say "User #12". The screen looks names up from the

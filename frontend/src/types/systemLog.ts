@@ -4,8 +4,16 @@ import type { ApiPagination } from './pagination'
 // trail added in commit 3d048b3c (SystemLogController, SystemLogResource).
 //
 // Rows are written by SystemLogService::log() from the stock and cash
-// services, and only when a transaction is created. Edits, deletes, logins,
-// and user/role/master-data changes are not logged yet.
+// services when a transaction is created, and (since 2026-11-20, module
+// ADMIN) for admin console sign-ins, user changes and head assignments.
+// App logins, edits, deletes and role/master-data changes are not logged yet.
+
+// The admin console account behind an ADMIN entry (admins table).
+export interface SystemLogAdmin {
+  id: number
+  name: string
+  user_name: string
+}
 
 export interface SystemLogUser {
   user_id: number
@@ -34,6 +42,9 @@ export interface SystemLog {
   user_id: number | null
   // Always eager-loaded by index and show; null if the user row is gone.
   user?: SystemLogUser | null
+  // Set instead of user_id on admin console entries (module ADMIN).
+  admin_id: number | null
+  admin?: SystemLogAdmin | null
   // Derived server-side from the payload's customer_id / recipient_id /
   // given_to, so for stock rows it is the receiving party, not always a
   // customer.

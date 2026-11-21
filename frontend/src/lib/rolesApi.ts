@@ -1,4 +1,4 @@
-import { api, type ApiResponse } from './api'
+import { api as appApi, type ApiClient, type ApiResponse } from './api'
 import type { Role, RoleFormValues } from '@/types'
 
 const RESOURCE = '/roles'
@@ -7,16 +7,22 @@ const RESOURCE = '/roles'
 // every role until `is_active` is actually returned (see types/role.ts).
 export const isRoleActive = (role: Role) => role.is_active !== false
 
-export const rolesApi = {
-  list: () => api.get<ApiResponse<Role[]>>(RESOURCE).then((r) => r.data),
+// Written against ApiClient so the admin console reuses it with its own
+// client (admin/lib/resources.ts). `rolesApi` below is the app's instance.
+export function createRolesApi(api: ApiClient) {
+  return {
+    list: () => api.get<ApiResponse<Role[]>>(RESOURCE).then((r) => r.data),
 
-  get: (id: number) => api.get<ApiResponse<Role>>(`${RESOURCE}/${id}`).then((r) => r.data),
+    get: (id: number) => api.get<ApiResponse<Role>>(`${RESOURCE}/${id}`).then((r) => r.data),
 
-  create: (payload: RoleFormValues) =>
-    api.post<ApiResponse<Role>>(RESOURCE, payload).then((r) => r.data),
+    create: (payload: RoleFormValues) =>
+      api.post<ApiResponse<Role>>(RESOURCE, payload).then((r) => r.data),
 
-  update: (id: number, payload: Partial<RoleFormValues>) =>
-    api.put<ApiResponse<Role>>(`${RESOURCE}/${id}`, payload).then((r) => r.data),
+    update: (id: number, payload: Partial<RoleFormValues>) =>
+      api.put<ApiResponse<Role>>(`${RESOURCE}/${id}`, payload).then((r) => r.data),
 
-  remove: (id: number) => api.delete<ApiResponse<null>>(`${RESOURCE}/${id}`),
+    remove: (id: number) => api.delete<ApiResponse<null>>(`${RESOURCE}/${id}`),
+  }
 }
+
+export const rolesApi = createRolesApi(appApi)

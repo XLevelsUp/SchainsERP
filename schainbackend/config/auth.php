@@ -46,6 +46,14 @@ return [
             'driver' => 'passport',
             'provider' => 'users',
         ],
+
+        // Admin console (App\Support\AdminAccess). Its own provider, so its
+        // tokens come from a personal access client pinned to `admins`, and
+        // Passport refuses them on the `api` guard (and app tokens here).
+        'admin' => [
+            'driver' => 'passport',
+            'provider' => 'admins',
+        ],
     ],
 
     /*
@@ -69,6 +77,11 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', App\Models\AuthUser::class),
+        ],
+
+        'admins' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\Admin::class,
         ],
 
         // 'users' => [

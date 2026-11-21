@@ -10,6 +10,7 @@ import { emptyUserFeatureFlags } from '@/lib/userFeatureFlags'
 import { userCategoryOptions } from '@/lib/userCategory'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
+import { useAuthStore } from '@/stores/auth'
 import type { CategoryName, UserDetailFormValues } from '@/types'
 
 /*
@@ -54,6 +55,7 @@ import type { CategoryName, UserDetailFormValues } from '@/types'
 const emit = defineEmits<{ close: []; saved: [userId: number] }>()
 
 const toast = useToastStore()
+const auth = useAuthStore()
 
 const form = reactive({ name: '', phone_no: '', category_name: null as CategoryName | null })
 const formError = ref('')
@@ -115,7 +117,10 @@ function synthesizeFormValues(): UserDetailFormValues {
     is_billable: false,
     ...emptyUserFeatureFlags(),
     item_mappings: [],
-    head_mappings: [],
+    // Mapped to whoever creates it: the Stock screen's pickers list only
+    // users mapped to the signed-in user, so an unmapped retailer would
+    // never show up in the Retailer dropdown it was just added from.
+    head_mappings: auth.user ? [{ head_id: auth.user.user_id }] : [],
     cash_head_mappings: [],
   }
 }

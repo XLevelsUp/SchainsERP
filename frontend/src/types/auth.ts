@@ -39,10 +39,44 @@ export interface LoginResult {
   token_type: string
 }
 
-// The slice of the login result we persist between page loads.
-export interface AuthSession {
-  user: AuthUser
+// The slice of the login result we persist between page loads. TUser is the
+// realm's account: AuthUser for the app, AdminUser for the admin console.
+export interface AuthSession<TUser = AuthUser> {
+  user: TUser
   token: string
+}
+
+// An admin console account (Admin\AdminAuthController::present). Not a
+// user_details row: admins are their own accounts, separate from heads.
+export interface AdminUser {
+  id: number
+  name: string
+  user_name: string
+  is_active: boolean
+  last_login_at: string | null
+  password_changed_at: string | null
+  special_password_changed_at: string | null
+}
+
+// `data` of POST /api/v1/admin/login.
+export interface AdminLoginResult {
+  admin: AdminUser
+  token: string
+  token_type: string
+}
+
+// Bodies of PUT /api/v1/admin/account/password and /special-password.
+// Each needs the current value of the secret being changed.
+export interface AdminPasswordChange {
+  current_password: string
+  password: string
+  password_confirmation: string
+}
+
+export interface AdminSpecialPasswordChange {
+  current_special_password: string
+  special_password: string
+  special_password_confirmation: string
 }
 
 // Mirrors the `data` envelope of AuthController::me() (PR #38).

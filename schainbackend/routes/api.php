@@ -29,16 +29,22 @@ Route::prefix('v1')->group(function () {
     // Public routes
     Route::post('/login', [AuthController::class, 'login']);
 
-    // Protected routes
+    // Protected routes. App tokens only: admin-console tokens belong to the
+    // `admins` provider and Passport refuses them on this guard
+    // (App\Support\AdminAccess).
     Route::middleware('auth:api')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
 
         // Administration (BACKEND_TODO §26, agreed 2026-11-12): anyone signed
         // in may read these (the screens' pickers need them); only a HEAD may
-        // change them. Creating a user is the one exception: users with
-        // "Can act as head" may too (Add Retailer on the Stock screen), and
-        // UserDetailController::store stops them creating a head.
+        // change them, below.
+        //
+        // Users, their heads and roles are the exception (agreed 2026-11-20):
+        // the admin console creates, edits and deletes users, assigns heads
+        // and creates roles (routes/admin.php). The app keeps one creation,
+        // Add Retailer on the Stock screen, limited to that customer by
+        // EnsureQuickAddCustomer.
         $adminResources = [
             'user-details' => UserDetailController::class,
             'items' => ItemController::class,
@@ -50,15 +56,20 @@ Route::prefix('v1')->group(function () {
             'cash-head-employee-mappings' => CashHeadEmployeeMappingController::class,
         ];
         foreach ($adminResources as $name => $controller) {
-            Route::apiResource($name, $controller)->only(['index', 'show']);
+            // HeadEmployeeMappingController has no show().
+            $only = $name === 'head-employee-mappings' ? ['index'] : ['index', 'show'];
+            Route::apiResource($name, $controller)->only($only);
         }
         Route::post('user-details', [UserDetailController::class, 'store'])
-            ->middleware('act.as.head')
+            ->middleware(['act.as.head', 'quick.add.customer'])
             ->name('user-details.store');
         Route::middleware('head.only')->group(function () use ($adminResources) {
+            // Changed only in the admin console (routes/admin.php).
+            $adminOwned = ['user-details', 'roles', 'head-employee-mappings', 'cash-head-employee-mappings'];
             foreach ($adminResources as $name => $controller) {
-                $except = $name === 'user-details' ? ['index', 'show', 'store'] : ['index', 'show'];
-                Route::apiResource($name, $controller)->except($except);
+                if (!in_array($name, $adminOwned, true)) {
+                    Route::apiResource($name, $controller)->except(['index', 'show']);
+                }
             }
 
             Route::post('customer-touch-user-mappings', [CustomerTouchUserMappingController::class, 'store']);
@@ -145,7 +156,8 @@ Route::prefix('v1')->group(function () {
             ->parameters(['settings' => 'key'])
             ->middleware('head.only');
 
-        // System Audit Logs (Admin Panel)
+        // System Audit Logs: heads only (checked in the controller). Admin
+        // console actions appear here too (module ADMIN).
         Route::get('system-logs/filters', [SystemLogController::class, 'filters']);
         Route::get('system-logs', [SystemLogController::class, 'index']);
         Route::get('system-logs/{id}', [SystemLogController::class, 'show']);

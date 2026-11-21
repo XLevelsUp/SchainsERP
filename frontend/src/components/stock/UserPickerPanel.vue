@@ -17,8 +17,9 @@ import type { UserDetailListItem } from '@/types'
 | EMPLOYEE, or CUSTOMER to scope the Transaction History table by (see
 | TransactionHistoryPanel's employeeId prop) and drive CustomerContextPanel.
 | No `type` filter is sent — unlike the doc's per-type examples, this
-| picker needs every user in one list, matching the legacy screen showing
-| HEAD/EMPLOYEE/CUSTOMER rows together.
+| picker needs every role in one list, matching the legacy screen showing
+| HEAD/EMPLOYEE/CUSTOMER rows together. It is limited to the users mapped
+| to the signed-in user (mapped_only), not every user in the system.
 |
 | The option label reproduces the legacy format exactly:
 |   "{name}({type}, {phone}) ==> P = {purity}, D = {last_txn_date} |
@@ -82,11 +83,15 @@ const userOptions = computed(() =>
   selectableUsers.value.map((user) => ({ value: user.id, label: formatUserLabel(user) })),
 )
 
+// Only the users mapped to the signed-in user (see StockManagementView's
+// "mapped to the signed-in user" note) — the backend filters from the token.
+const fetchMappedUsers = () => userDetailsApi.list(undefined, 'stock', { mappedOnly: true })
+
 async function load() {
   isLoading.value = true
   loadError.value = ''
   try {
-    users.value = await userDetailsApi.list(undefined, 'stock')
+    users.value = await fetchMappedUsers()
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load users.'
   } finally {
@@ -99,7 +104,7 @@ onMounted(load)
 // The dropdown's reload button: same fetch as load(), but without the
 // disabled/loading state or panel error, so the open picker stays usable.
 async function reloadUsers() {
-  users.value = await userDetailsApi.list(undefined, 'stock')
+  users.value = await fetchMappedUsers()
 }
 
 watch(selectedUserId, (id) => {

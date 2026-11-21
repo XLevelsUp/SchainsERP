@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Plus, RefreshCw, RotateCcw, UserPlus } from 'lucide-vue-next'
+import { Plus, RefreshCw, RotateCcw } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import DirectionTag from '@/components/ui/DirectionTag.vue'
@@ -10,7 +10,6 @@ import { bankDetailsApi } from '@/lib/bankDetailsApi'
 import { ApiError } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
-import AddUserModal from '@/components/user/AddUserModal.vue'
 import HeadStockSummaryPanel from '@/components/stock/HeadStockSummaryPanel.vue'
 import TransactionHistoryPanel from '@/components/stock/TransactionHistoryPanel.vue'
 import ViewNotesPanel from '@/components/stock/ViewNotesPanel.vue'
@@ -62,13 +61,12 @@ import type { BankDetail, Item, UserDetailListItem } from '@/types'
 |  - POST /v1/stock/cash-out likewise went from "implemented with no
 |    route" to routed — CashOutModal below.
 |
-| "Add User" (header action) opens AddUserModal, the full admin create
-| form. "Add Retailer" is deliberately NOT a header action any more — it
-| used to open the same AddUserModal under a different title, an 11-field
-| form for what the legacy screen treats as a two-field quick-add. It now
-| lives on RetailerPickerPanel itself (see that file and AddRetailerModal's
-| comment), positioned the same place the legacy screen puts it: directly
-| above the Retailer dropdown, not in the page header.
+| The full "Add User" header action is gone (agreed 2026-11-20): admins
+| create users and assign them to heads in the admin console. "Add Retailer"
+| stays — the two-field quick-add on RetailerPickerPanel itself (see that
+| file and AddRetailerModal's comment), directly above the Retailer
+| dropdown, the same place the legacy screen puts it. The backend accepts
+| only that customer from here (EnsureQuickAddCustomer).
 |
 | The legacy screen's item-wise stock summary panel (METAL/GOLD/FITEM/
 | STONE totals with grams/%/purity, Cash, Active Orders) is now
@@ -125,9 +123,10 @@ import type { BankDetail, Item, UserDetailListItem } from '@/types'
 | counterparts were, just presented as a dialog instead of a
 | page-embedded table — deliberately NOT an independent user picker per
 | modal like the legacy screenshots show, since the page already has one
-| source of truth for "who" (UserPickerPanel). ItemChangeModal still
-| carries forward the stock_in_id backend gap (see its own comment) —
-| not fixed here, just not silently dropped either. GmsInModal's comment
+| source of truth for "who" (UserPickerPanel). The exceptions are Item
+| Change and Item Conversion: since 2026-11-13 they are always on the
+| logged-in user's own stock, so they ignore the picked user (see their
+| modals). GmsInModal's comment
 | notes a "Customer Touch" field seen in the legacy dialog that isn't
 | part of GmsInRequest's validated payload — left out, not invented.
 | NumericWastageInModal similarly drops the legacy screenshot's disabled
@@ -297,6 +296,28 @@ const beam = computed(() => {
   return { out: (out / max) * 50, in: (inn / max) * 50 }
 })
 
+/*
+| Every item and user dropdown on this page lists only what is mapped to
+| the signed-in user (2026-11-16): items from users_items_mappings, users
+| from head_employee_mappings (plus themselves, which the pickers drop).
+| The backend applies it from the token (?mapped_only=1), for every role.
+| UserPickerPanel fetches its own copy with the same option.
+*/
+const fetchMappedItems = () => itemsApi.list({ mappedOnly: true })
+const fetchMappedUsers = () => userDetailsApi.list(undefined, 'stock', { mappedOnly: true })
+
+const hasLoaded = ref(false)
+
+// An empty list here means nothing is mapped yet, not a fault — say so
+// rather than leave the operator staring at empty dropdowns.
+const missingMappings = computed(() => {
+  if (!hasLoaded.value || loadError.value) return []
+  const missing: string[] = []
+  if (items.value.length === 0) missing.push('items')
+  if (!users.value.some((u) => u.id !== auth.user?.user_id)) missing.push('users')
+  return missing
+})
+
 async function loadData() {
   isLoading.value = true
   loadError.value = ''
@@ -306,13 +327,14 @@ async function loadData() {
     // rather than on open so the modal never shows an empty bank dropdown
     // while a request is in flight — it is a small, rarely-changing table.
     const [itemsData, usersData, banksData] = await Promise.all([
-      itemsApi.list(),
-      userDetailsApi.list(undefined, 'stock'),
+      fetchMappedItems(),
+      fetchMappedUsers(),
       bankDetailsApi.list(),
     ])
     items.value = itemsData
     users.value = usersData
     banks.value = banksData
+    hasLoaded.value = true
   } catch (err) {
     loadError.value = err instanceof ApiError ? err.message : 'Failed to load items/users.'
   } finally {
@@ -325,17 +347,16 @@ onMounted(loadData)
 // Dropdown reload buttons: each re-fetches one master with the same call
 // loadData() makes, leaving isLoading/loadError and every selection alone.
 async function reloadItems() {
-  items.value = await itemsApi.list()
+  items.value = await fetchMappedItems()
 }
 async function reloadUsers() {
-  users.value = await userDetailsApi.list(undefined, 'stock')
+  users.value = await fetchMappedUsers()
 }
 async function reloadBanks() {
   banks.value = await bankDetailsApi.list()
 }
 
 type ActiveModal =
-  | 'add-user'
   | 'item-change'
   | 'item-conversion'
   | 'gms-out'
@@ -363,14 +384,6 @@ function openModal(modal: ActiveModal) {
 function closeModal() {
   activeModal.value = null
 }
-// Add User / Add Retailer create a user_details row that the "Given
-// by/to"/"Retailer" pickers in the panels below need to see immediately,
-// so reload the shared users list instead of just closing.
-async function handleUserSaved() {
-  activeModal.value = null
-  await loadData()
-}
-
 function handleAddStockOutRow() {
   stockOutPanelRef.value?.addRow()
 }
@@ -432,7 +445,6 @@ async function handleSubmitAll() {
     >
       <template #actions>
         <BaseButton variant="secondary" :icon="RefreshCw" @click="loadData">Refresh</BaseButton>
-        <BaseButton variant="secondary" :icon="UserPlus" @click="openModal('add-user')">Add User</BaseButton>
       </template>
     </PageHeader>
 
@@ -441,6 +453,14 @@ async function handleSubmitAll() {
       class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
     >
       {{ loadError }}
+    </div>
+
+    <div
+      v-if="missingMappings.length"
+      class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+    >
+      No {{ missingMappings.join(' or ') }} are mapped to you yet, so those dropdowns are empty. A
+      head can map them to you on the Users screen.
     </div>
 
     <!--
@@ -704,29 +724,21 @@ async function handleSubmitAll() {
       </div>
     </div>
 
-    <AddUserModal
-      v-if="activeModal === 'add-user'"
-      title="Add User"
-      @close="closeModal"
-      @saved="handleUserSaved"
-    />
+    <!-- Always the logged-in user's own stock: no picked user needed. -->
     <ItemChangeModal
       v-if="activeModal === 'item-change'"
       :items="items"
       :reload-items="reloadItems"
-      :user-id="selectedUserId"
       @close="closeModal"
       @saved="handleModalSaved"
-      @missing-user="flagMissingUserSelection"
     />
+    <!-- Always the logged-in user's own stock: no picked user needed. -->
     <ItemConversionModal
       v-if="activeModal === 'item-conversion'"
       :items="items"
       :reload-items="reloadItems"
-      :user-id="selectedUserId"
       @close="closeModal"
       @saved="handleModalSaved"
-      @missing-user="flagMissingUserSelection"
     />
     <GmsOutModal
       v-if="activeModal === 'gms-out'"

@@ -44,6 +44,15 @@ class SystemLogResource extends JsonResource
                     'role_id'   => $this->user->role_id,
                 ] : null;
             }),
+            // Admin console entries (module ADMIN) have an admin instead of a user.
+            'admin_id'        => $this->admin_id,
+            'admin'           => $this->whenLoaded('admin', function () {
+                return $this->admin ? [
+                    'id'        => $this->admin->id,
+                    'name'      => $this->admin->name,
+                    'user_name' => $this->admin->user_name,
+                ] : null;
+            }),
             'customer_id'     => $customerId ? (int) $customerId : null,
             'customer_name'   => $customerName,
             'customer'        => $customerId ? [

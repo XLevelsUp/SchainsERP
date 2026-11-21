@@ -4,10 +4,11 @@ import {
   Package,
   Settings,
   ShieldCheck,
-  UserCog,
   Users,
   Hand,
   Landmark,
+  SlidersHorizontal,
+  ScrollText,
   ArrowLeftRight,
   Coins,
   Banknote,
@@ -16,16 +17,13 @@ import {
   FileText,
   ChartBar,
   ArrowUpDown,
-  Network,
   Activity,
   CalendarClock,
   CalendarRange,
   BookUser,
   FlaskConical,
   MoreHorizontal,
-  SlidersHorizontal,
   ClipboardList,
-  ScrollText,
 } from 'lucide-vue-next'
 import type { NavItem } from '@/types/nav'
 
@@ -49,12 +47,12 @@ export const navItems: NavItem[] = [
     type: 'group',
     label: 'Administration',
     icon: ShieldCheck,
+    // Users and Head Employee Mappings are in the admin console
+    // (admin/lib/nav.ts): admin accounts create users and assign heads.
     children: [
       { type: 'link', label: 'Roles', to: '/roles', icon: ShieldCheck },
-      { type: 'link', label: 'Users', to: '/users', icon: UserCog },
       { type: 'link', label: 'Customer Touch', to: '/customer-touch', icon: Hand },
       { type: 'link', label: 'Customer Touch Mappings', to: '/customer-touch-mappings', icon: Hand },
-      { type: 'link', label: 'Head Employee Mappings', to: '/head-employee-mappings', icon: Network },
       { type: 'link', label: 'Bank Details', to: '/bank-details', icon: Landmark },
       { type: 'link', label: 'System Logs', to: '/system-logs', icon: ScrollText },
     ],

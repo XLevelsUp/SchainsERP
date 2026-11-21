@@ -14,5 +14,10 @@ class Role extends Model
         'role',
         'added_at',
         'touch',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
     ];
 }

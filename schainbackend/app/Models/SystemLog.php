@@ -15,6 +15,7 @@ class SystemLog extends Model
         'module',
         'action',
         'user_id',
+        'admin_id',
         'reference_id',
         'reference_table',
         'description',
@@ -34,5 +35,11 @@ class SystemLog extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(UserDetail::class, 'user_id', 'user_id');
+    }
+
+    /** Set instead of user() on admin console entries (module ADMIN). */
+    public function admin(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'admin_id');
     }
 }

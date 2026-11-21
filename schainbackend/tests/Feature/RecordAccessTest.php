@@ -8,6 +8,7 @@ use App\Models\Item;
 use App\Models\Role;
 use App\Models\StockDetails;
 use App\Models\UserDetail;
+use App\Support\AdminAccess;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Laravel\Passport\Passport;
@@ -261,7 +262,7 @@ class RecordAccessTest extends TestCase
             ->assertJsonMissingPath('data.recipient_opening_cash');
     }
 
-    public function test_only_a_head_can_change_item_mappings_on_user_edit(): void
+    public function test_user_edits_do_not_change_item_totals(): void
     {
         \App\Models\UsersItemsMapping::create([
             'user_id' => $this->customer->user_id,
@@ -279,16 +280,22 @@ class RecordAccessTest extends TestCase
         ];
         $blank = ['item_mappings' => [['item_id' => $this->item->item_id, 'item_grams_total' => '0', 'item_purity_total' => '0', 'is_primary' => 1]]];
 
-        // A delegated non-head can't edit users at all (§26), so the totals stay.
+        // Nobody edits users in the app any more (agreed 2026-11-20), so a
+        // delegated non-head can't reach update() at all. Totals stay.
         $this->employee->update(['is_act_as_head_enabled' => true]);
         $this->signInAs($this->employee);
-        $this->putJson('/api/v1/user-details/' . $this->customer->user_id, $base + $blank)->assertStatus(403);
+        $this->putJson('/api/v1/user-details/' . $this->customer->user_id, $base + $blank)->assertStatus(405);
         $this->assertDatabaseHas('users_items_mappings', ['user_id' => $this->customer->user_id, 'item_grams_total' => '25']);
 
-        // A head's are applied.
-        $this->signInAs($this->head);
-        $this->putJson('/api/v1/user-details/' . $this->customer->user_id, $base + $blank)->assertStatus(200);
-        $this->assertDatabaseHas('users_items_mappings', ['user_id' => $this->customer->user_id, 'item_grams_total' => '0']);
+        // Admins edit users, but they aren't heads: the gram and purity
+        // totals are balances, so update() ignores theirs (BalanceVisibility).
+        $admin = \App\Models\Admin::create([
+            'name' => 'Admin', 'user_name' => 'admin_a',
+            'password_hash' => 'x', 'special_password_hash' => 'y', 'is_active' => true,
+        ]);
+        Passport::actingAs($admin, [AdminAccess::SCOPE], 'admin');
+        $this->putJson('/api/v1/admin/user-details/' . $this->customer->user_id, $base + $blank)->assertStatus(200);
+        $this->assertDatabaseHas('users_items_mappings', ['user_id' => $this->customer->user_id, 'item_grams_total' => '25']);
     }
 
     public function test_only_heads_and_permitted_users_can_enter_values(): void

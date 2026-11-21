@@ -99,20 +99,29 @@ fi
 # Non-fatal: a bug in this block should not be able to brick every deploy.
 echo "Ensuring a Passport personal access client exists..."
 
+# One per provider: the app (`users`) and the admin console (`admins`,
+# App\Support\AdminAccess). Each client is pinned to its provider, which is
+# what stops a token from one realm being accepted by the other.
 if ! php artisan tinker --execute='
     $repo = app(Laravel\Passport\ClientRepository::class);
-    $provider = config("auth.guards.api.provider");
-    try {
-        $client = $repo->personalAccessClient($provider);
-        echo "Personal access client already present (id {$client->id}).\n";
-    } catch (RuntimeException $e) {
-        $client = $repo->createPersonalAccessGrantClient("SchainsERP Personal Access Client", $provider);
-        echo "Created personal access client (id {$client->id}).\n";
+    $clients = [
+        config("auth.guards.api.provider") => "SchainsERP Personal Access Client",
+        config("auth.guards.admin.provider") => "SchainsERP Admin Console Personal Access Client",
+    ];
+    foreach ($clients as $provider => $name) {
+        try {
+            $client = $repo->personalAccessClient($provider);
+            echo "Personal access client for {$provider} already present (id {$client->id}).\n";
+        } catch (RuntimeException $e) {
+            $client = $repo->createPersonalAccessGrantClient($name, $provider);
+            echo "Created personal access client for {$provider} (id {$client->id}).\n";
+        }
     }
 '; then
     echo "!! Could not verify or create the personal access client."
-    echo "!! Starting anyway - non-auth routes will work, but POST /api/login"
-    echo "!! will 500 with \"Personal access client not found\" until this is fixed."
+    echo "!! Starting anyway - non-auth routes will work, but POST /api/v1/login"
+    echo "!! and /api/v1/admin/login will 500 with \"Personal access client not"
+    echo "!! found\" until this is fixed."
 fi
 
 echo "Caching Laravel configuration..."

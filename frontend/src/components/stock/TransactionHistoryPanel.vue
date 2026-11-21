@@ -125,11 +125,11 @@ async function load() {
   selectedIds.value = new Set()
   try {
     const result = await stockHistoryApi.list({
-      // Report from the picked user's perspective when one is selected — the
-      // backend derives each row's IN/OUT direction and counterparty name from
-      // head_id, so this has to follow the picker, not the session. Falls back
-      // to the logged-in head when nothing is picked. employee_id stays for an
-      // unchanged payload shape; it duplicates head_id and is a no-op filter.
+      // Scope the list to the picked user when one is selected, else the
+      // logged-in head. Each row's In/Out label and counterparty come from the
+      // logged-in user's side (since 2026-11-13: a head's Stock Out shows as
+      // Out, not as the picked user's In). Rows they aren't a party to fall
+      // back to the picked user's side. The Type filter uses the same rule.
       head_id: props.employeeId ?? auth.user.user_id,
       employee_id: props.employeeId ?? undefined,
       type: typeFilter.value ?? undefined,

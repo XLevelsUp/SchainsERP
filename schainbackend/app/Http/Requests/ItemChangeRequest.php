@@ -14,7 +14,10 @@ class ItemChangeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'user_id' => 'required|integer|exists:user_details,user_id',
+            // Item Change is always on the logged-in user's own stock; the
+            // service takes the user from the token. Older clients may still
+            // send user_id; the controller refuses anyone else's.
+            'user_id' => 'nullable|integer',
             'added_at' => 'nullable|date',
             'items' => 'required|array|min:1',
             'items.*.stock_in_id' => 'nullable|integer|exists:stock_details,stock_id',

@@ -1,15 +1,34 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ChevronsLeft, ChevronsRight, LogOut, Menu, X } from 'lucide-vue-next'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
-import { navItems } from '@/lib/nav'
-import { APP_NAME } from '@/lib/constants'
+import { ChevronsLeft, ChevronsRight, LogOut, Menu, ShieldCheck, X } from 'lucide-vue-next'
+import { RouterLink, useRoute } from 'vue-router'
+import type { NavItem, NavLink } from '@/types/nav'
 import NavGroupItem from './NavGroupItem.vue'
 
+/*
+| Presentational: the shells own the session. AppShell passes the app's
+| navigation and store, AdminShell the admin console's, so both realms share
+| one sidebar and look like one product. `variant: 'admin'` swaps the mark
+| for a shield and shows the badge, so it's always clear which side you're on.
+*/
+const props = withDefaults(
+  defineProps<{
+    items: NavItem[]
+    title: string
+    variant?: 'app' | 'admin'
+    // Short label beside the title, e.g. "Admin".
+    badge?: string
+    userName?: string | null
+    isSigningOut?: boolean
+    // A link above Sign out, e.g. into the admin console or back to the app.
+    footerLink?: NavLink | null
+  }>(),
+  { variant: 'app', badge: undefined, userName: null, isSigningOut: false, footerLink: null },
+)
+
+const emit = defineEmits<{ (e: 'sign-out'): void }>()
+
 const route = useRoute()
-const router = useRouter()
-const auth = useAuthStore()
 
 const isCollapsed = ref(false)
 const isMobileOpen = ref(false)
@@ -22,12 +41,7 @@ function expandSidebar() {
   isCollapsed.value = false
 }
 
-// auth.logout() revokes the token server-side before clearing the local
-// session, and never rejects — so the redirect below always runs.
-async function handleLogout() {
-  await auth.logout()
-  router.push({ name: 'login' })
-}
+const markClass = props.variant === 'admin' ? 'bg-slate-900' : 'bg-brand-600'
 </script>
 
 <template>
@@ -36,11 +50,18 @@ async function handleLogout() {
   >
     <div class="flex items-center gap-2">
       <div
-        class="flex h-8 w-8 items-center justify-center rounded-md bg-brand-600 text-sm font-semibold text-white"
+        class="flex h-8 w-8 items-center justify-center rounded-md text-sm font-semibold text-white"
+        :class="markClass"
       >
-        S
+        <ShieldCheck v-if="variant === 'admin'" class="h-4 w-4" aria-hidden="true" />
+        <template v-else>S</template>
       </div>
-      <span class="text-sm font-semibold text-slate-900">{{ APP_NAME }}</span>
+      <span class="text-sm font-semibold text-slate-900">{{ title }}</span>
+      <span
+        v-if="badge"
+        class="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase"
+        >{{ badge }}</span
+      >
     </div>
     <button
       type="button"
@@ -64,17 +85,24 @@ async function handleLogout() {
   >
     <div class="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 px-4">
       <div
-        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-600 text-sm font-semibold text-white"
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sm font-semibold text-white"
+        :class="markClass"
       >
-        S
+        <ShieldCheck v-if="variant === 'admin'" class="h-4 w-4" aria-hidden="true" />
+        <template v-else>S</template>
       </div>
       <span v-if="!isCollapsed" class="truncate text-sm font-semibold text-slate-900">{{
-        APP_NAME
+        title
       }}</span>
+      <span
+        v-if="badge && !isCollapsed"
+        class="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase"
+        >{{ badge }}</span
+      >
     </div>
 
     <nav class="flex-1 space-y-1 overflow-y-auto p-3">
-      <template v-for="item in navItems" :key="item.label">
+      <template v-for="item in items" :key="item.label">
         <NavGroupItem
           v-if="item.type === 'group'"
           :group="item"
@@ -101,19 +129,30 @@ async function handleLogout() {
     </nav>
 
     <div class="shrink-0 border-t border-slate-200 p-3">
-      <div v-if="auth.user && !isCollapsed" class="truncate px-3 pb-2 text-sm text-slate-600">
-        {{ auth.user.name }}
+      <div v-if="userName && !isCollapsed" class="truncate px-3 pb-2 text-sm text-slate-600">
+        {{ userName }}
       </div>
+      <RouterLink
+        v-if="footerLink"
+        :to="footerLink.to"
+        class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        :class="isCollapsed ? 'justify-center' : ''"
+        :title="isCollapsed ? footerLink.label : undefined"
+        @click="isMobileOpen = false"
+      >
+        <component :is="footerLink.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span v-if="!isCollapsed">{{ footerLink.label }}</span>
+      </RouterLink>
       <button
         type="button"
         class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
         :class="isCollapsed ? 'justify-center' : ''"
         :title="isCollapsed ? 'Sign out' : undefined"
-        :disabled="auth.isLoggingOut"
-        @click="handleLogout"
+        :disabled="isSigningOut"
+        @click="emit('sign-out')"
       >
         <LogOut class="h-4 w-4 shrink-0" />
-        <span v-if="!isCollapsed">{{ auth.isLoggingOut ? 'Signing out…' : 'Sign out' }}</span>
+        <span v-if="!isCollapsed">{{ isSigningOut ? 'Signing out…' : 'Sign out' }}</span>
       </button>
       <button
         type="button"

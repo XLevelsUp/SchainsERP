@@ -695,7 +695,17 @@ class ReportService
                     ->first();
 
                 if ($headStock) {
-                    if ($headStock->given_by == $headId) {
+                    // Item Change / Conversion write two rows on the user's
+                    // own stock (given_by = given_to). Both carry the From
+                    // item's OB in given_by_*_op and the To item's OB in
+                    // given_to_*_op, so the IN row (the To item) has to read
+                    // given_to_*_op. It used to fall into the given_by branch
+                    // and show the From item's balance minus the grams.
+                    $selfIn = in_array($headStock->type, ['ITEMCHANGE', 'ITEMCONVERSION'], true)
+                        && $headStock->given_by == $headStock->given_to
+                        && $headStock->stock_type === 'IN';
+
+                    if ($headStock->given_by == $headId && !$selfIn) {
                         $grams = $headStock->given_by_item_grams_op - $headStock->grams;
                         $purity = $headStock->given_by_item_purity_op - $headStock->purity;
                     } else {
@@ -751,9 +761,45 @@ class ReportService
     }
 
     /**
-     * Fetch Paginated Transaction History
+     * In or Out for one history row: from the first perspective user who
+     * gave or received it, else its saved stock_type. See getStockHistory().
      */
-    public function getStockHistory(array $filters, int $headId): array
+    private function stockHistoryDirection($txn, array $perspectiveIds): string
+    {
+        if ($txn->type !== 'ITEMCHANGE' && $txn->type !== 'ITEMCONVERSION') {
+            foreach ($perspectiveIds as $id) {
+                if ($txn->given_by == $id && $txn->given_to != $id) {
+                    return 'OUT';
+                }
+                if ($txn->given_to == $id && $txn->given_by != $id) {
+                    return 'IN';
+                }
+            }
+        }
+
+        return $txn->stock_type ?: 'OUT';
+    }
+
+    /** The same rule as stockHistoryDirection(), as SQL: [expression, bindings]. */
+    private function stockHistoryDirectionSql(array $perspectiveIds): array
+    {
+        $sql = "CASE WHEN type IN ('ITEMCHANGE', 'ITEMCONVERSION') THEN COALESCE(stock_type, 'OUT')";
+        $bindings = [];
+        foreach ($perspectiveIds as $id) {
+            $sql .= " WHEN given_by = ? AND COALESCE(given_to, 0) <> ? THEN 'OUT'"
+                . " WHEN given_to = ? AND COALESCE(given_by, 0) <> ? THEN 'IN'";
+            array_push($bindings, (int) $id, (int) $id, (int) $id, (int) $id);
+        }
+
+        return [$sql . " ELSE COALESCE(stock_type, 'OUT') END", $bindings];
+    }
+
+    /**
+     * Fetch Paginated Transaction History.
+     *
+     * @param int|null $viewerId the logged-in user; rows are labelled In/Out from their side
+     */
+    public function getStockHistory(array $filters, int $headId, ?int $viewerId = null): array
     {
         $employeeId = $filters['employee_id'] ?? null;
         $itemId = $filters['item_id'] ?? null;
@@ -787,40 +833,32 @@ class ReportService
         
         /*
         |--------------------------------------------------------------------------
-        | TYPE FILTER â€” Entry-Type-Aware (Yii2 Parity)
+        | Direction (In / Out) of each row: one rule for the label and the filter
         |--------------------------------------------------------------------------
-        | The Yii2 legacy uses entry_type-aware CASE logic to determine
-        | IN/OUT direction from a user's perspective. For auto-entry types
-        | (EMPTOHEAD, EMPTOEMP, HEADTOHEAD, ANOTHERHEADTOEMP), the DB
-        | stock_type is always 'OUT', but the display must flip based on
-        | who is the sender vs receiver (given_by / given_to).
+        | A row is labelled from the side of the person viewing it ($viewerId,
+        | the logged-in user), so a head's Stock Out shows as Out: OUT when
+        | they gave the gold, IN when they received it. Rows they aren't a
+        | party to (say, the picked employee's transfer to another employee)
+        | fall back to the picked user's side ($employeeId, else head_id).
+        | Rows neither of them gave or received, and item changes /
+        | conversions, keep their saved stock_type.
         |
-        | ROOT CAUSE OF BUG: The old orWhere('given_by', $headId) breaks
-        | out of the stock_type constraint entirely, pulling ALL records
-        | where head is sender regardless of stock_type.
+        | Until 2026-11-13 a picked user switched every row to that user's
+        | side. The Stock screen always sends the picked user, so a head's
+        | Stock Out to Ravi showed as In (Ravi received it), while the In/Out
+        | filter (BACKEND_TODO §23) went by the saved stock_type. The two now
+        | share stockHistoryDirection() / stockHistoryDirectionSql(), so every
+        | row shows under exactly one of In and Out, with the label it has
+        | in the list.
         */
+        $perspectiveIds = array_values(array_unique(array_filter(
+            [$viewerId, $employeeId ?: $headId],
+            fn ($id) => $id !== null && $id !== ''
+        )));
 
-        // BACKEND_TODO §23: only the four transfer types are special-cased.
-        // Every other row matches on its own stock_type. The old version
-        // listed allowed entry_type names instead, and several didn't match
-        // what the services save (Postgres compares exactly: 'CashToGold',
-        // 'GOLDCASHCONVERSION', 'SALES', 'OUT_CASH_CONVERTER',
-        // 'IN_CASH_CONVERTER'), so gold trading rows vanished under In and Out.
         if ($type === 'IN' || $type === 'OUT') {
-            $filterUserId = $employeeId ?: $headId;
-            $transferTypes = ['EMPTOHEAD', 'EMPTOEMP', 'HEADTOHEAD', 'ANOTHERHEADTOEMP'];
-            // A transfer is OUT for its sender and IN for its receiver.
-            $partyColumn = $type === 'OUT' ? 'given_by' : 'given_to';
-
-            $query->where(function ($q) use ($type, $filterUserId, $transferTypes, $partyColumn) {
-                $q->where(function ($sub) use ($type, $transferTypes) {
-                    $sub->where(function ($e) use ($transferTypes) {
-                        $e->whereNotIn('entry_type', $transferTypes)->orWhereNull('entry_type');
-                    })->where('stock_type', $type);
-                })->orWhere(function ($sub) use ($filterUserId, $transferTypes, $partyColumn) {
-                    $sub->whereIn('entry_type', $transferTypes)->where($partyColumn, $filterUserId);
-                });
-            });
+            [$directionSql, $bindings] = $this->stockHistoryDirectionSql($perspectiveIds);
+            $query->whereRaw("({$directionSql}) = ?", [...$bindings, $type]);
         }
         
         if ($fromDate) {
@@ -840,48 +878,19 @@ class ReportService
         $paginated = $query->orderBy('stock_id', 'desc')->paginate($perPage);
 
         // Format the output specifically for the frontend Transaction History table
-        $paginated->getCollection()->transform(function ($txn) use ($headId, $employeeId) {
-            $stockType = $txn->stock_type ?: 'OUT';
-            $userName = '';
-            $userId = null;
+        $paginated->getCollection()->transform(function ($txn) use ($perspectiveIds) {
+            $stockType = $this->stockHistoryDirection($txn, $perspectiveIds);
             $remarks = $txn->remarks;
-            
+
+            // The counterparty: who received it on an Out row, who gave it on
+            // an In row, from the side the row is labelled from.
             if ($txn->type === 'ITEMCHANGE' || $txn->type === 'ITEMCONVERSION') {
-                $stockType = $txn->stock_type ?: 'OUT';
                 $user = $txn->givenBy ?: $txn->givenTo;
-                $userName = $user ? $user->name : '';
-                $userId = $user ? $user->user_id : null;
-            } elseif ($employeeId) {
-                if ($txn->given_by == $employeeId && $txn->given_to != $employeeId) {
-                    $stockType = 'OUT';
-                    $userName = $txn->givenTo ? $txn->givenTo->name : $txn->remarks;
-                    $userId = $txn->given_to;
-                } elseif ($txn->given_to == $employeeId && $txn->given_by != $employeeId) {
-                    $stockType = 'IN';
-                    $userName = $txn->givenBy ? $txn->givenBy->name : $txn->remarks;
-                    $userId = $txn->given_by;
-                } else {
-                    $stockType = $txn->stock_type ?: 'IN';
-                    $user = $txn->givenTo ?: $txn->givenBy;
-                    $userName = $user ? $user->name : '';
-                    $userId = $user ? $user->user_id : null;
-                }
             } else {
-                if ($txn->given_by == $headId && $txn->given_to != $headId) {
-                    $stockType = 'OUT';
-                    $userName = $txn->givenTo ? $txn->givenTo->name : $txn->remarks;
-                    $userId = $txn->given_to;
-                } elseif ($txn->given_to == $headId && $txn->given_by != $headId) {
-                    $stockType = 'IN';
-                    $userName = $txn->givenBy ? $txn->givenBy->name : $txn->remarks;
-                    $userId = $txn->given_by;
-                } else {
-                    $stockType = $txn->stock_type ?: ($txn->given_by == $headId ? 'OUT' : 'IN');
-                    $user = ($stockType === 'OUT') ? ($txn->givenTo ?: $txn->givenBy) : ($txn->givenBy ?: $txn->givenTo);
-                    $userName = $user ? $user->name : $txn->remarks;
-                    $userId = $user ? $user->user_id : null;
-                }
+                $user = ($stockType === 'OUT') ? ($txn->givenTo ?: $txn->givenBy) : ($txn->givenBy ?: $txn->givenTo);
             }
+            $userName = $user ? $user->name : $txn->remarks;
+            $userId = $user ? $user->user_id : null;
 
             // Clean up remarks if they were used for the User column (e.g., MELTING)
             if ($userName === $remarks && !$txn->givenTo && !$txn->givenBy) {

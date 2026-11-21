@@ -10,10 +10,11 @@ import BaseMultiSelect from '@/components/ui/BaseMultiSelect.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import BaseFileInput from '@/components/ui/BaseFileInput.vue'
 import DataTable from '@/components/ui/DataTable.vue'
-import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
-import { userDetailsApi } from '@/lib/userDetailsApi'
-import { itemsApi } from '@/lib/itemsApi'
-import { isRoleActive, rolesApi } from '@/lib/rolesApi'
+import SpecialPasswordDialog from '@/admin/components/SpecialPasswordDialog.vue'
+import { itemsApi, rolesApi, userDetailsApi } from '@/admin/lib/resources'
+import { adminApiWithSpecialPassword } from '@/admin/lib/adminApi'
+import { createUserDetailsApi } from '@/lib/userDetailsApi'
+import { isRoleActive } from '@/lib/rolesApi'
 import { userCategoryOptions } from '@/lib/userCategory'
 import { userOptionLabel } from '@/lib/userLabel'
 import { ApiError } from '@/lib/api'
@@ -24,7 +25,6 @@ import {
 } from '@/lib/userFeatureFlags'
 import type { UserFeatureFlagGroup } from '@/lib/userFeatureFlags'
 import { useToastStore } from '@/stores/toast'
-import { useAuthStore } from '@/stores/auth'
 import type {
   DataTableColumn,
   UserDetailFormValues,
@@ -135,11 +135,23 @@ function makeEmptyForm(): UserDetailFormValues {
 const isFormOpen = ref(false)
 const editingId = ref<number | null>(null)
 
-// Assigned items carry running gram/purity totals that only heads can see, so
-// only a head may change them on an existing user. The backend ignores
-// item_mappings from anyone else; the section is read-only for them here.
-const authStore = useAuthStore()
-const itemsLocked = computed(() => editingId.value !== null && !authStore.isHead)
+// Assigned items carry running gram/purity totals, which are balances: only
+// heads see or change them on an existing user, and admins aren't heads. The
+// backend ignores item_mappings on an admin's edit, so the section is
+// read-only when editing. A new user's items and opening totals are set here.
+const itemsLocked = computed(() => editingId.value !== null)
+
+// Assigning heads needs the admin's special password (agreed 2026-11-20).
+// Only create() saves head mappings (update() leaves them alone), so it's
+// asked for when a new user has heads or cash heads. Sent as a header, never
+// in the body, and cleared whenever the form opens or closes.
+const specialPassword = ref('')
+const needsSpecialPassword = computed(
+  () =>
+    editingId.value === null &&
+    (form.head_mappings.some((m) => m.head_id !== null) ||
+      form.cash_head_mappings.some((m) => m.head_id !== null)),
+)
 const form = reactive<UserDetailFormValues>(makeEmptyForm())
 const formError = ref('')
 const isSaving = ref(false)
@@ -185,6 +197,7 @@ function openCreateForm() {
   resetForm(makeEmptyForm())
   formError.value = ''
   clearFieldErrors()
+  specialPassword.value = ''
   isFormOpen.value = true
 }
 
@@ -263,6 +276,7 @@ async function openEditForm(row: UserDetailListItem) {
 
 function closeForm() {
   isFormOpen.value = false
+  specialPassword.value = ''
 }
 
 // ----- mapping row helpers -----
@@ -388,15 +402,23 @@ function validate(): boolean {
 async function handleSubmit() {
   if (!validate()) return
 
+  if (needsSpecialPassword.value && !specialPassword.value) {
+    fieldErrors.special_password = 'Enter your special password to assign heads.'
+    return
+  }
+
   isSaving.value = true
   try {
     if (editingId.value !== null) {
       await userDetailsApi.update(editingId.value, { ...form }, {
         includeItemMappings: !itemsLocked.value,
       })
+    } else if (needsSpecialPassword.value) {
+      await createUserDetailsApi(adminApiWithSpecialPassword(specialPassword.value)).create({ ...form })
     } else {
       await userDetailsApi.create({ ...form })
     }
+    specialPassword.value = ''
     isFormOpen.value = false
     toastStore.show(
       editingId.value !== null ? 'User updated successfully.' : 'User created successfully.',
@@ -423,17 +445,42 @@ async function handleSubmit() {
   }
 }
 
-const deletingId = ref<number | null>(null)
+// Deleting needs the special password: the dialog asks for it and confirms
+// in one step (it replaces the old confirm popover).
+const deleteTarget = ref<UserDetailListItem | null>(null)
+const deleteError = ref('')
+const isDeleting = ref(false)
 
-async function handleDelete(user: UserDetailListItem) {
-  deletingId.value = user.id
+function askDelete(user: UserDetailListItem) {
+  deleteTarget.value = user
+  deleteError.value = ''
+}
+
+function cancelDelete() {
+  deleteTarget.value = null
+  deleteError.value = ''
+}
+
+async function handleDelete(specialPasswordValue: string) {
+  const user = deleteTarget.value
+  if (!user || isDeleting.value) return
+  isDeleting.value = true
+  deleteError.value = ''
   try {
-    await userDetailsApi.remove(user.id)
+    await createUserDetailsApi(adminApiWithSpecialPassword(specialPasswordValue)).remove(user.id)
+    deleteTarget.value = null
+    toastStore.show(`${user.name} deleted.`, 'success')
     await loadData()
   } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to delete user.'
+    if (err instanceof ApiError && (err.errors?.special_password || err.status === 429)) {
+      // Wrong special password, or locked out: keep the dialog open.
+      deleteError.value = err.errors?.special_password?.[0] ?? err.message
+    } else {
+      deleteTarget.value = null
+      loadError.value = err instanceof ApiError ? err.message : 'Failed to delete user.'
+    }
   } finally {
-    deletingId.value = null
+    isDeleting.value = false
   }
 }
 </script>
@@ -692,7 +739,7 @@ async function handleDelete(user: UserDetailListItem) {
             form, close it and reopen it first.
           </template>
           Heads and cash heads don't save from here yet; to change who this user reports to, use
-          <RouterLink to="/head-employee-mappings" class="font-medium underline">
+          <RouterLink to="/admin/head-employee-mappings" class="font-medium underline">
             Head Employee Mappings</RouterLink
           >.
         </p>
@@ -818,6 +865,23 @@ async function handleDelete(user: UserDetailListItem) {
           </div>
         </section>
 
+        <section v-if="needsSpecialPassword" class="border-t border-slate-200 pt-4">
+          <BaseInput
+            id="user_special_password"
+            v-model="specialPassword"
+            label="Special password"
+            type="password"
+            autocomplete="off"
+            placeholder="Required to assign heads"
+            required
+            :error="fieldErrors.special_password"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            Assigning heads needs your special password. Leave heads empty to create the user
+            without one.
+          </p>
+        </section>
+
         <div class="flex items-center gap-3 border-t border-slate-200 pt-4">
           <BaseButton type="submit" :disabled="isSaving">
             {{ isSaving ? 'Saving…' : editingId !== null ? 'Save changes' : 'Create user' }}
@@ -877,24 +941,29 @@ async function handleDelete(user: UserDetailListItem) {
           >
             <Pencil class="h-4 w-4" />
           </button>
-          <ConfirmPopover
-            :message="`Delete ${(row as UserDetailListItem).name}? This also removes their mappings.`"
-            @confirm="handleDelete(row as UserDetailListItem)"
+          <button
+            type="button"
+            class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+            aria-label="Delete user"
+            :disabled="isDeleting && deleteTarget?.id === (row as UserDetailListItem).id"
+            @click="askDelete(row as UserDetailListItem)"
           >
-            <template #default="{ toggle }">
-              <button
-                type="button"
-                class="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                aria-label="Delete user"
-                :disabled="deletingId === (row as UserDetailListItem).id"
-                @click="toggle"
-              >
-                <Trash2 class="h-4 w-4" />
-              </button>
-            </template>
-          </ConfirmPopover>
+            <Trash2 class="h-4 w-4" />
+          </button>
         </div>
       </template>
     </DataTable>
+
+    <SpecialPasswordDialog
+      v-if="deleteTarget"
+      title="Delete user"
+      :message="`Delete ${deleteTarget.name}? This permanently removes the user and their head mappings. Enter your special password to confirm.`"
+      confirm-label="Delete user"
+      destructive
+      :submitting="isDeleting"
+      :error="deleteError"
+      @confirm="handleDelete"
+      @cancel="cancelDelete"
+    />
   </div>
 </template>
