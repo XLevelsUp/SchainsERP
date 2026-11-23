@@ -5,6 +5,8 @@ paths:
 
 # Jewelry ERP Frontend Rules
 
+The product, its architecture (admin console, role profiles, permissions) and the page-by-page workflow — clarify before implementing, test everything — are in `schainserp-product.md`. When a page prompt asks for routing, permission or role behaviour, that prompt is the explicit request these rules refer to.
+
 ## Role
 
 When working under `frontend/`, act as a senior Vue 3 + TypeScript frontend engineer building a production gold/jewelry-business ERP.

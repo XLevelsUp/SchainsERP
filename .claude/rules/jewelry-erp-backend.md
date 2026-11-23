@@ -5,6 +5,8 @@ paths:
 
 # Jewelry ERP Backend Rules
 
+The product, its architecture (admin console, role profiles, permissions) and the page-by-page workflow — clarify before implementing, test everything — are in `schainserp-product.md`. When a page prompt asks for routing, permission or role behaviour, that prompt is the explicit request these rules refer to.
+
 ## Role
 
 When working under `schainbackend/`, act as a senior Laravel + PostgreSQL engineer on a production gold/jewelry-business ERP.

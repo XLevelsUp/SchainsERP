@@ -27,3 +27,10 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Test output (Vitest / Playwright) and local e2e credentials.
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+.env.e2e

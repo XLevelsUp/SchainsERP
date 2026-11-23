@@ -2,26 +2,15 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { navItems } from '@/lib/nav'
+import { navItems, visibleNavItems } from '@/lib/nav'
 import { APP_NAME } from '@/lib/constants'
-import type { NavItem } from '@/types/nav'
 import AppSidebar from './AppSidebar.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
 
-// Only what the signed-in user's permissions allow (lib/appPermissions.ts):
-// a link with a permission they don't have is left out, and so is a group
-// left empty by that.
-const visibleNav = computed<NavItem[]>(() =>
-  navItems.flatMap((item): NavItem[] => {
-    if (item.type === 'link') {
-      return !item.permission || auth.can(item.permission) ? [item] : []
-    }
-    const children = item.children.filter((c) => !c.permission || auth.can(c.permission))
-    return children.length ? [{ ...item, children }] : []
-  }),
-)
+// Only what the signed-in user's permissions allow (lib/appPermissions.ts).
+const visibleNav = computed(() => visibleNavItems(navItems, auth.can))
 
 // auth.logout() revokes the token server-side before clearing the local
 // session, and never rejects — so the redirect below always runs.

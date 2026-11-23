@@ -23,6 +23,29 @@ fixed, struck through, with what changed — this file is the record.
 **Backend baseline:** `982afd78` (PR #53) plus our own uncommitted backend
 fixes below. Since 2026-11-06 we own the backend too.
 
+### Session checkpoint — 2026-11-21
+
+**Where things stand:**
+- The admin console's Users page is done for the **ADMIN and HEAD** roles: a role-driven form, and the app showing a user only what's switched on.
+- The other roles (EMPLOYEE, CUSTOMER, SALARY, PUR/SALE, CHIT, INVEST, JOB WORK) still get the full form. The user will send their screens next, then the remaining pages, one at a time.
+- The workflow (plan → confirm → build → test → report) and the testing checklist are in `.claude/rules/schainserp-product.md`.
+
+**Test tooling added:**
+- Vitest: `npm test`, in `tests/unit/`.
+- Playwright: `npm run test:e2e`, in `e2e/`; screenshots go to `test-results/screens/`.
+- Last run: backend 101/101, Vitest 11/11, vue-tsc and build clean, Playwright 7 passed / 1 skipped (needed an app account).
+
+**To fix before committing:** `frontend/.env.e2e.example` (committed) now holds `head_admin` / `password` under `E2E_ADMIN_*`.
+- Put the template back to blank values.
+- Put the app account into the git-ignored `.env.e2e` under `E2E_APP_USER` / `E2E_APP_PASSWORD`.
+- In `.env.e2e`, the admin-console password should be `admin` (the stored one), not `password`.
+
+**Open:**
+- HEAD switches with no app feature yet: delivery, polish, WhatsApp share, thermal print, complete history, cash reminder.
+- The report password isn't used by any report yet.
+- `npm audit` flags issues in Vue 3.5.39's own packages; a Vue update fixes them.
+- A `claude_test_567840` user exists on Aiven; it wasn't created in this session.
+
 ### HEAD form + the app shows only what's switched on (2026-11-21)
 
 Following the legacy head user form. **Agreed with the user:** existing

@@ -25,7 +25,23 @@ import {
   MoreHorizontal,
   ClipboardList,
 } from 'lucide-vue-next'
+import type { AppPermission } from '@/types'
 import type { NavItem } from '@/types/nav'
+
+// The sidebar a signed-in user gets (lib/appPermissions.ts): a link behind a
+// permission they don't have is left out, and so is a group left empty.
+export function visibleNavItems(
+  items: NavItem[],
+  can: (permission: AppPermission) => boolean,
+): NavItem[] {
+  return items.flatMap((item): NavItem[] => {
+    if (item.type === 'link') {
+      return !item.permission || can(item.permission) ? [item] : []
+    }
+    const children = item.children.filter((c) => !c.permission || can(c.permission))
+    return children.length ? [{ ...item, children }] : []
+  })
+}
 
 export const navItems: NavItem[] = [
   { type: 'link', label: 'Dashboard', to: '/', icon: LayoutDashboard },
