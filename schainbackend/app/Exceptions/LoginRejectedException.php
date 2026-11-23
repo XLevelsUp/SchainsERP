@@ -31,6 +31,11 @@ class LoginRejectedException extends RuntimeException implements ShouldntReport
         return new self('Your account has been deactivated. Please contact your administrator.', 403);
     }
 
+    public static function roleDeactivated(): self
+    {
+        return new self('Your role has been deactivated. Please contact your administrator.', 403);
+    }
+
     public function status(): int
     {
         return $this->status;

@@ -24,6 +24,7 @@ class LogAdminAction
      */
     private const ACTIONS = [
         'admin.roles.store' => ['ROLE_CREATE', 'roles', 'response:data.id'],
+        'admin.roles.status' => ['ROLE_STATUS_CHANGE', 'roles', 'role'],
         'admin.user-details.store' => ['USER_CREATE', 'user_details', 'response:data.user.user_id'],
         'admin.user-details.update' => ['USER_UPDATE', 'user_details', 'user_detail'],
         'admin.user-details.destroy' => ['USER_DELETE', 'user_details', 'user_detail'],

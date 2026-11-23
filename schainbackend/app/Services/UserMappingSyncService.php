@@ -7,6 +7,7 @@ use App\Models\CustomerTouchUserMapping;
 use App\Models\HeadEmployeeMapping;
 use App\Models\UserDetail;
 use App\Models\UsersItemsMapping;
+use App\Support\HeadUsers;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -53,11 +54,11 @@ class UserMappingSyncService
     }
 
     /**
-     * For a head: the users under them (the HEAD form's "Head Users") —
-     * head_employee_mappings rows where this user is the head. These are the
-     * users the head works with in the app's pickers. $mappings:
+     * For a head: the other heads they work with (the HEAD form's "Head
+     * Users") — head_employee_mappings rows where this user is the head and
+     * the other user is a HEAD too (agreed 2026-11-23). $mappings:
      * [['employee_id' => 7], ...]; null means none. The head may list
-     * themselves, as the legacy form does.
+     * themselves, as the legacy form does. Rows to non-heads are left alone.
      */
     public function syncHeadUsers(UserDetail $head, ?array $mappings): void
     {
@@ -67,7 +68,11 @@ class UserMappingSyncService
             ->unique()
             ->values();
 
+        // Head users are links to other heads only (agreed 2026-11-23): links
+        // from this head to employees and customers belong to those users'
+        // own Head lists and are never removed from here.
         HeadEmployeeMapping::where('head_id', $head->user_id)
+            ->whereIn('employee_id', HeadUsers::ids()->all())
             ->whereNotIn('employee_id', $wanted->all())
             ->delete();
 

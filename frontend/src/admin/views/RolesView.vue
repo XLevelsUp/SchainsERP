@@ -11,9 +11,11 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import { ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/date'
-import { isRoleActive } from '@/lib/rolesApi'
+import { createRolesApi, isRoleActive } from '@/lib/rolesApi'
 import { useToastStore } from '@/stores/toast'
 import type { DataTableColumn, Role } from '@/types'
+import SpecialPasswordDialog from '../components/SpecialPasswordDialog.vue'
+import { adminApiWithSpecialPassword } from '../lib/adminApi'
 import { rolesApi } from '../lib/resources'
 
 /*
@@ -23,9 +25,16 @@ import { rolesApi } from '../lib/resources'
 | The roles users can be given. Admins create and view them: a name and an
 | active status. No edit or delete.
 |
-| Inactive roles drop out of the Role pickers for new assignments; users
-| already on one keep it. Names are saved in capitals and must be unique
-| (RoleController), like the existing HEAD / EMPLOYEE / CUSTOMER.
+| The status can be switched (agreed 2026-11-23): click it, then confirm
+| with the special password; the password prompt is the confirm. While a
+| role is inactive it drops out of the Role pickers, and its users can't
+| sign in to the app: sign-in refuses them and an open session ends on its
+| next request (backend: RoleStatusController, EnsureAppSession). Their
+| own account status is untouched, so switching the role back on lets them
+| in again.
+|
+| Names are saved in capitals and must be unique (RoleController), like
+| the existing HEAD / EMPLOYEE / CUSTOMER.
 |
 | The list is small and comes back whole, so search and the status filter
 | run here. The status filter starts on Active, as the old screen did.
@@ -140,6 +149,56 @@ async function handleCreate() {
   }
 }
 
+// ---- status (special password) ----------------------------------------------
+const statusTarget = ref<Role | null>(null)
+const statusError = ref('')
+const isChangingStatus = ref(false)
+
+function askStatusChange(role: Role) {
+  statusTarget.value = role
+  statusError.value = ''
+}
+
+const statusMessage = computed(() => {
+  const role = statusTarget.value
+  if (!role) return ''
+  return isRoleActive(role)
+    ? `Deactivate ${role.role}? Users with this role can't sign in to the app until it's activated again, and anyone signed in is signed out. It also can't be picked for new users. Enter your special password to confirm.`
+    : `Activate ${role.role}? Users with this role can sign in again, and it can be picked for new users. Enter your special password to confirm.`
+})
+
+async function handleStatusChange(specialPassword: string) {
+  const role = statusTarget.value
+  if (!role || isChangingStatus.value) return
+  isChangingStatus.value = true
+  statusError.value = ''
+  try {
+    const result = await createRolesApi(adminApiWithSpecialPassword(specialPassword)).setStatus(
+      role.id,
+      !isRoleActive(role),
+    )
+    statusTarget.value = null
+    const users = result.users_count === 1 ? '1 user' : `${result.users_count} users`
+    toast.show(
+      result.is_active
+        ? `Role ${result.role} activated.`
+        : `Role ${result.role} deactivated. ${users} on it can't sign in until it's activated again.`,
+      'success',
+    )
+    await loadRoles()
+  } catch (err) {
+    if (err instanceof ApiError && (err.errors?.special_password || err.status === 429)) {
+      // Wrong special password, or locked out: keep the dialog open.
+      statusError.value = err.errors?.special_password?.[0] ?? err.message
+    } else {
+      statusTarget.value = null
+      toast.show(err instanceof ApiError ? err.message : 'Failed to change the status.', 'error')
+    }
+  } finally {
+    isChangingStatus.value = false
+  }
+}
+
 // ---- view -----------------------------------------------------------------
 const viewing = ref<Role | null>(null)
 </script>
@@ -148,7 +207,7 @@ const viewing = ref<Role | null>(null)
   <div>
     <PageHeader
       title="Roles"
-      description="The roles users can be given. Inactive roles can't be picked for new users; users already on one keep it."
+      description="The roles users can be given. Click a status to switch it. While a role is inactive, its users can't sign in and it can't be picked for new users."
     >
       <template #actions>
         <BaseButton variant="secondary" :icon="RefreshCw" :disabled="isLoading" @click="loadRoles">
@@ -245,18 +304,23 @@ const viewing = ref<Role | null>(null)
       </template>
 
       <template #is_active="{ row }">
-        <span
-          v-if="isRoleActive(row)"
-          class="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700"
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium disabled:opacity-50"
+          :class="
+            isRoleActive(row)
+              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          "
+          :disabled="isChangingStatus && statusTarget?.id === row.id"
+          :title="isRoleActive(row) ? 'Click to deactivate' : 'Click to activate'"
+          :aria-label="`${isRoleActive(row) ? 'Deactivate' : 'Activate'} ${row.role}`"
+          @click="askStatusChange(row)"
         >
-          <Check class="h-3.5 w-3.5" aria-hidden="true" /> Active
-        </span>
-        <span
-          v-else
-          class="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"
-        >
-          <X class="h-3.5 w-3.5" aria-hidden="true" /> Inactive
-        </span>
+          <Check v-if="isRoleActive(row)" class="h-3.5 w-3.5" aria-hidden="true" />
+          <X v-else class="h-3.5 w-3.5" aria-hidden="true" />
+          {{ isRoleActive(row) ? 'Active' : 'Inactive' }}
+        </button>
       </template>
 
       <template #id="{ row }">
@@ -288,5 +352,17 @@ const viewing = ref<Role | null>(null)
         <BaseButton variant="secondary" @click="viewing = null">Close</BaseButton>
       </div>
     </BaseModal>
+
+    <SpecialPasswordDialog
+      v-if="statusTarget"
+      :title="isRoleActive(statusTarget) ? 'Deactivate role' : 'Activate role'"
+      :message="statusMessage"
+      :confirm-label="isRoleActive(statusTarget) ? 'Deactivate' : 'Activate'"
+      :destructive="isRoleActive(statusTarget)"
+      :submitting="isChangingStatus"
+      :error="statusError"
+      @confirm="handleStatusChange"
+      @cancel="statusTarget = null"
+    />
   </div>
 </template>

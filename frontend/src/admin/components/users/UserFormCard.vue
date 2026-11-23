@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-vue-next'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -37,6 +37,7 @@ import {
   userToForm,
 } from '../../lib/userForm'
 import { profileForRole } from '../../lib/userFormProfiles'
+import { isValidPhone, PHONE_ERROR, PHONE_LENGTH, phoneDigits } from '@/lib/phone'
 
 /*
 |--------------------------------------------------------------------------
@@ -138,6 +139,25 @@ function has(section: UserFormSection): boolean {
   return profile.value?.sections.includes(section) ?? false
 }
 
+// A role that doesn't sign in (CUSTOMER) has no Name or Password: the backend
+// copies the user name into the name and sets a random password.
+const signsIn = computed(() => profile.value?.signs_in !== false)
+
+// A new user starts with the role's defaults (CUSTOMER: category PURITY and
+// GOLD as the primary item), unless the admin already chose a category or
+// added items. The admin can change both; editing never applies them.
+watch(profile, (next) => {
+  if (isEditing.value || !next) return
+  if (next.default_category && !form.category_name) form.category_name = next.default_category
+  const itemName = next.default_primary_item?.toUpperCase()
+  if (itemName && next.sections.includes('items') && !form.item_mappings.length) {
+    const item = props.items.find((i) => i.item_name.trim().toUpperCase() === itemName)
+    if (item) {
+      form.item_mappings.push({ item_id: item.item_id, item_grams_total: '0', item_purity_total: '0', is_primary: 1 })
+    }
+  }
+})
+
 const roleName = computed(
   () => props.roles.find((r) => String(r.id) === String(form.role_id))?.role ?? '—',
 )
@@ -189,8 +209,14 @@ const headIds = computed<number[]>({
 
 // For a head: the users under them. The legacy form lists every user,
 // the head included.
+// A head's Head users: other HEAD users only, the head itself included
+// (agreed 2026-11-23). The backend refuses anyone else, and saving never
+// touches the head's links to employees and customers, which those users'
+// own Head lists manage.
 const headUserOptions = computed(() =>
-  props.users.map((u) => ({ value: u.id, label: `${u.name} (${u.type ?? '—'})` })),
+  props.users
+    .filter((u) => (u.type ?? '').toUpperCase() === 'HEAD')
+    .map((u) => ({ value: u.id, label: `${u.name} (HEAD)` })),
 )
 const headUserIds = computed<number[]>({
   get: () => employeeIdsOf(form.head_user_mappings ?? []),
@@ -326,14 +352,14 @@ function validate(): boolean {
 
   const text = (value: string) => value.trim()
   if (!form.role_id) fieldErrors.role_id = 'Role is required.'
-  if (!text(form.name)) fieldErrors.name = 'Name is required.'
-  else if (text(form.name).length > 55) fieldErrors.name = 'Name must be 55 characters or fewer.'
+  if (signsIn.value && !text(form.name)) fieldErrors.name = 'Name is required.'
+  else if (signsIn.value && text(form.name).length > 55) fieldErrors.name = 'Name must be 55 characters or fewer.'
   if (!text(form.user_name)) fieldErrors.user_name = 'User name is required.'
   else if (text(form.user_name).length > 55) fieldErrors.user_name = 'User name must be 55 characters or fewer.'
   if (!text(form.phone_no)) fieldErrors.phone_no = 'Phone number is required.'
-  else if (!/^\d{6,15}$/.test(text(form.phone_no))) fieldErrors.phone_no = 'Phone number must be 6–15 digits.'
+  else if (!isValidPhone(form.phone_no)) fieldErrors.phone_no = PHONE_ERROR
   if (!form.category_name) fieldErrors.category_name = 'Category is required.'
-  if (!isEditing.value && form.password.trim().length < 6) {
+  if (signsIn.value && !isEditing.value && form.password.trim().length < 6) {
     fieldErrors.password = 'Password is required (min 6 characters).'
   }
 
@@ -508,7 +534,14 @@ const errorFor = (prefix: string) =>
             </div>
           </template>
         </div>
-        <BaseInput id="user_full_name" v-model="form.name" label="Name" required :error="fieldErrors.name" />
+        <BaseInput
+          v-if="signsIn"
+          id="user_full_name"
+          v-model="form.name"
+          label="Name"
+          required
+          :error="fieldErrors.name"
+        />
         <BaseInput
           id="user_login_name"
           v-model="form.user_name"
@@ -522,9 +555,14 @@ const errorFor = (prefix: string) =>
           v-model="form.phone_no"
           label="Phone no"
           required
+          inputmode="numeric"
+          :maxlength="PHONE_LENGTH"
+          placeholder="10 digits"
+          :sanitize="phoneDigits"
           :error="fieldErrors.phone_no"
         />
         <BaseInput
+          v-if="signsIn"
           id="user_password"
           v-model="form.password"
           :label="isEditing ? 'New password' : 'Password'"
@@ -569,14 +607,14 @@ const errorFor = (prefix: string) =>
             id="user_head_users"
             v-model="headUserIds"
             label="Head users"
-            placeholder="No users — select the users this head works with…"
+            placeholder="No heads — select the heads this head works with…"
             :options="headUserOptions"
             :reload="reloadUsers"
             :error="errorFor('head_user_mappings')"
           />
           <p class="mt-1 text-xs text-slate-500">
-            The users this head sees in their pickers once signed in. Changing the list needs your
-            special password.
+            Only HEAD users are listed. Employees and customers are linked to a head from their own
+            Head lists. Changing this list needs your special password.
           </p>
         </section>
 

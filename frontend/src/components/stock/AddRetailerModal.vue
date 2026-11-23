@@ -11,6 +11,7 @@ import { userCategoryOptions } from '@/lib/userCategory'
 import { ApiError } from '@/lib/api'
 import { useToastStore } from '@/stores/toast'
 import { useAuthStore } from '@/stores/auth'
+import { isValidPhone, PHONE_ERROR, PHONE_LENGTH, phoneDigits } from '@/lib/phone'
 import type { CategoryName, UserDetailFormValues } from '@/types'
 
 /*
@@ -57,7 +58,9 @@ const emit = defineEmits<{ close: []; saved: [userId: number] }>()
 const toast = useToastStore()
 const auth = useAuthStore()
 
-const form = reactive({ name: '', phone_no: '', category_name: null as CategoryName | null })
+// Category starts on PURITY, as new customers do in the admin console
+// (agreed 2026-11-23); the operator can change it.
+const form = reactive({ name: '', phone_no: '', category_name: 'PURITY' as CategoryName | null })
 const formError = ref('')
 const isSaving = ref(false)
 
@@ -80,9 +83,8 @@ function validate(): boolean {
     formError.value = 'Name is required.'
     return false
   }
-  const phone = form.phone_no.trim()
-  if (!/^\d{6,15}$/.test(phone)) {
-    formError.value = 'Phone number must be 6-15 digits.'
+  if (!isValidPhone(form.phone_no)) {
+    formError.value = PHONE_ERROR
     return false
   }
   if (!form.category_name) {
@@ -167,7 +169,15 @@ async function handleSubmit() {
 
     <form class="flex flex-col gap-5" @submit.prevent="handleSubmit">
       <BaseInput v-model="form.name" label="Name" required maxlength="55" />
-      <BaseInput v-model="form.phone_no" label="Phone Number" required maxlength="15" />
+      <BaseInput
+        v-model="form.phone_no"
+        label="Phone Number"
+        required
+        inputmode="numeric"
+        :maxlength="PHONE_LENGTH"
+        placeholder="10 digits"
+        :sanitize="phoneDigits"
+      />
       <BaseSelect
         v-model="form.category_name"
         label="Category"

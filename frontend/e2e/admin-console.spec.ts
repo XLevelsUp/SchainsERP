@@ -48,6 +48,27 @@ test.describe('signed in', () => {
     await expect(page.getByText('Head lists', { exact: true })).toHaveCount(0)
     await shot(page, testInfo, 'admin-user-form-head')
 
+    // Head users lists HEAD users only (2026-11-23).
+    await page.locator('#user_head_users').click()
+    const headUserOptions = page.getByRole('listbox').getByRole('option')
+    await expect(headUserOptions.first()).toBeVisible()
+    const labels = await headUserOptions.allInnerTexts()
+    expect(labels.length).toBeGreaterThan(0)
+    for (const label of labels) expect(label).toContain('(HEAD)')
+    await shot(page, testInfo, 'admin-user-form-head-users')
+    await page.keyboard.press('Escape')
+
+    // Phone: digits only, at most 10, and a short number is stopped before
+    // anything is sent (the rest of the form is empty, so nothing saves).
+    const phone = page.locator('#user_phone')
+    await phone.fill('98a76 54')
+    await expect(phone).toHaveValue('987654')
+    await page.getByRole('button', { name: 'Create user' }).click()
+    await expect(page.getByText('Phone number must be exactly 10 digits.')).toBeVisible()
+    await shot(page, testInfo, 'admin-user-form-phone-error')
+    await phone.fill('012345678999')
+    await expect(phone).toHaveValue('0123456789')
+
     const hasAdminRole = await page.locator('#user_role').click().then(async () => {
       const option = page.getByRole('option', { name: 'ADMIN', exact: true })
       const count = await option.count()
@@ -69,11 +90,54 @@ test.describe('signed in', () => {
     await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible()
   })
 
+  // Read-only: the form is opened and cancelled.
+  test('the CUSTOMER form: no name or password, PURITY by default, its six switches', async ({ page }, testInfo) => {
+    await signInToAdminConsole(page)
+    await page.getByRole('button', { name: 'New user' }).click()
+    await pick(page, 'user_role', 'CUSTOMER')
+
+    await expect(page.getByText('CUSTOMER form', { exact: false })).toBeVisible()
+    await expect(page.locator('#user_full_name')).toHaveCount(0)
+    await expect(page.locator('#user_password')).toHaveCount(0)
+    await expect(page.locator('#user_category')).toContainText('Purity')
+    for (const label of [
+      'Head lists', 'Customer comments', 'Customer touches',
+      'Cash reminder shown', 'WhatsApp share needed in stock', 'Delivery item shown (head)',
+      'Delivery checks shown in stock (employee)', 'Cash amount on thermal print in stock', 'Customer touch shown',
+    ]) {
+      await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+    for (const label of ['Cash heads', 'Report password', 'Create order shown']) {
+      await expect(page.getByText(label, { exact: true })).toHaveCount(0)
+    }
+    await shot(page, testInfo, 'admin-user-form-customer')
+
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible()
+  })
+
   test('the Roles page lists the roles', async ({ page }, testInfo) => {
     await signInToAdminConsole(page)
     await page.getByRole('link', { name: 'Roles' }).click()
     await expect(page.getByRole('heading', { name: 'Roles', exact: true })).toBeVisible()
     await expect(page.getByRole('cell', { name: 'HEAD', exact: true })).toBeVisible()
     await shot(page, testInfo, 'admin-roles')
+  })
+
+  // Read-only: the prompt is opened and cancelled, so no role changes.
+  test('a role status asks for the special password before switching', async ({ page }, testInfo) => {
+    await signInToAdminConsole(page)
+    await page.getByRole('link', { name: 'Roles' }).click()
+    await page.getByRole('button', { name: 'Deactivate HEAD' }).click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText('Deactivate role')).toBeVisible()
+    await expect(dialog.getByText(/Users with this role can't sign in/)).toBeVisible()
+    await expect(dialog.getByLabel(/special password/i)).toBeVisible()
+    await shot(page, testInfo, 'admin-roles-status-confirm')
+
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(dialog).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Deactivate HEAD' })).toBeVisible()
   })
 })

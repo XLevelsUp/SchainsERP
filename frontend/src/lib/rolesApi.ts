@@ -1,5 +1,5 @@
 import { api as appApi, type ApiClient, type ApiResponse } from './api'
-import type { Role, RoleFormValues } from '@/types'
+import type { Role, RoleFormValues, RoleStatusResult } from '@/types'
 
 const RESOURCE = '/roles'
 
@@ -22,6 +22,13 @@ export function createRolesApi(api: ApiClient) {
       api.put<ApiResponse<Role>>(`${RESOURCE}/${id}`, payload).then((r) => r.data),
 
     remove: (id: number) => api.delete<ApiResponse<null>>(`${RESOURCE}/${id}`),
+
+    // Admin console only, and it needs the special password: build this on
+    // adminApiWithSpecialPassword(pw) (admin/lib/resources.ts).
+    setStatus: (id: number, isActive: boolean) =>
+      api
+        .put<ApiResponse<RoleStatusResult>>(`${RESOURCE}/${id}/status`, { is_active: isActive })
+        .then((r) => r.data),
   }
 }
 

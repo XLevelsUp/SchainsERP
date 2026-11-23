@@ -30,7 +30,14 @@ class AuthService
             throw LoginRejectedException::deactivated();
         }
 
-        return $user->load('role');
+        // A role switched off in the admin console locks out everyone on it
+        // until it is switched back on (agreed 2026-11-23).
+        $user->load('role');
+        if ($user->hasInactiveRole()) {
+            throw LoginRejectedException::roleDeactivated();
+        }
+
+        return $user;
     }
 
     /**

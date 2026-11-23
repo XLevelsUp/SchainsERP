@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useId } from 'vue'
 import { X } from 'lucide-vue-next'
 
 withDefaults(
@@ -16,6 +17,9 @@ withDefaults(
 )
 
 const emit = defineEmits<{ close: [] }>()
+
+// Names the dialog by its title for screen readers (and tests).
+const titleId = useId()
 </script>
 
 <template>
@@ -24,10 +28,16 @@ const emit = defineEmits<{ close: [] }>()
       class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 px-4 py-8 print:hidden"
       @click.self="emit('close')"
     >
-      <div class="w-full rounded-lg bg-white shadow-xl" :class="maxWidth">
+      <div
+        class="w-full rounded-lg bg-white shadow-xl"
+        :class="maxWidth"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+      >
         <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div class="flex items-center gap-3">
-            <h2 class="text-base font-semibold text-slate-900">{{ title }}</h2>
+            <h2 :id="titleId" class="text-base font-semibold text-slate-900">{{ title }}</h2>
             <span
               v-if="badge"
               class="rounded-full px-2.5 py-1 text-xs font-semibold text-white"

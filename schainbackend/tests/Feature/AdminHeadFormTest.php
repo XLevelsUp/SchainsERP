@@ -29,6 +29,7 @@ class AdminHeadFormTest extends TestCase
     protected Role $adminRole;
     protected UserDetail $employee;
     protected UserDetail $customer;
+    protected UserDetail $otherHead;
     protected Admin $admin;
 
     protected function setUp(): void
@@ -42,6 +43,7 @@ class AdminHeadFormTest extends TestCase
 
         $this->employee = $this->makeUser('employee_a', $this->employeeRole->id, '9600000001');
         $this->customer = $this->makeUser('customer_a', $customerRole->id, '9600000002');
+        $this->otherHead = $this->makeUser('head_z', $this->headRole->id, '9600000003');
         $this->admin = $this->makeAdmin();
     }
 
@@ -91,7 +93,8 @@ class AdminHeadFormTest extends TestCase
         $this->signInToAdminConsoleAs($this->admin);
 
         $payload = $this->headPayload([
-            'head_user_mappings' => [['employee_id' => $this->employee->user_id], ['employee_id' => $this->customer->user_id]],
+            // Head users are HEAD users only (2026-11-23).
+            'head_user_mappings' => [['employee_id' => $this->otherHead->user_id]],
             'aadhar_number' => '1234 5678 9012',
             'per_day_salary' => '650.50',
             'joining_date' => '2026-05-30',
@@ -110,6 +113,15 @@ class AdminHeadFormTest extends TestCase
         // Head users are a head assignment: the special password.
         $this->post('/api/v1/admin/user-details', $payload, ['Accept' => 'application/json'])->assertStatus(422)
             ->assertJsonValidationErrors(['special_password']);
+        // Employees and customers can't be head users.
+        $notHeads = ['head_user_mappings' => [['employee_id' => $this->employee->user_id], ['employee_id' => $this->customer->user_id]]] + $payload;
+        $this->post('/api/v1/admin/user-details', $notHeads, ['Accept' => 'application/json'] + $this->withSpecialPassword())
+            ->assertStatus(422)
+            ->assertJsonPath('errors', [
+                'head_user_mappings.0.employee_id' => ['Only HEAD users can be listed as head users.'],
+                'head_user_mappings.1.employee_id' => ['Only HEAD users can be listed as head users.'],
+            ]);
+        $this->assertFalse(UserDetail::where('user_name', 'nihaa_ramesh')->exists());
         $this->post('/api/v1/admin/user-details', $payload, ['Accept' => 'application/json'] + $this->withSpecialPassword())
             ->assertStatus(201);
 
@@ -124,8 +136,8 @@ class AdminHeadFormTest extends TestCase
         $this->assertTrue($head->is_phone_book_need_shown);
         $this->assertNull($head->customer_commants);
         $this->assertFalse(HeadEmployeeMapping::where('employee_id', $head->user_id)->exists());
-        $this->assertEqualsCanonicalizing(
-            [$this->employee->user_id, $this->customer->user_id],
+        $this->assertSame(
+            [$this->otherHead->user_id],
             HeadEmployeeMapping::where('head_id', $head->user_id)->pluck('employee_id')->map(fn ($id) => (int) $id)->all(),
         );
         foreach (['image_url', 'aadhar_image', 'aadhar_back_image'] as $field) {
@@ -139,32 +151,64 @@ class AdminHeadFormTest extends TestCase
             ->json('data');
         $this->assertNotNull($shown['image_url']);
         $this->assertNotNull($shown['aadhar_back_image_url']);
-        $this->assertCount(2, $shown['user']['head_user_mappings']);
+        $this->assertCount(1, $shown['user']['head_user_mappings']);
     }
 
     public function test_changing_head_users_needs_the_special_password_and_a_head_may_list_themselves(): void
     {
         $head = $this->makeUser('head_a', $this->headRole->id, '9600000010');
+        // A link to an employee, made from the employee's own Head lists.
         HeadEmployeeMapping::create(['head_id' => $head->user_id, 'employee_id' => $this->employee->user_id, 'added_at' => now()]);
         $this->signInToAdminConsoleAs($this->admin);
         $url = '/api/v1/admin/user-details/' . $head->user_id;
         $base = $this->editBase($head);
+        $linked = fn () => HeadEmployeeMapping::where('head_id', $head->user_id)->pluck('employee_id')->map(fn ($id) => (int) $id)->all();
+
+        // The form shows the head's links to other heads only.
+        $this->getJson($url)->assertOk()->assertJsonCount(0, 'data.user.head_user_mappings');
 
         // Not sent: nothing to confirm, nothing changes.
         $this->putJson($url, $base + ['aadhar_number' => '9999'])->assertOk();
         $this->assertSame('9999', $head->fresh()->aadhar_number);
 
-        $set = $base + ['head_user_mappings' => [['employee_id' => $head->user_id], ['employee_id' => $this->customer->user_id]]];
+        $set = $base + ['head_user_mappings' => [['employee_id' => $head->user_id], ['employee_id' => $this->otherHead->user_id]]];
         $this->putJson($url, $set)->assertStatus(422)->assertJsonValidationErrors(['special_password']);
         $this->putJson($url, $set, $this->withSpecialPassword())->assertOk();
-        $this->assertEqualsCanonicalizing(
-            [$head->user_id, $this->customer->user_id],
-            HeadEmployeeMapping::where('head_id', $head->user_id)->pluck('employee_id')->map(fn ($id) => (int) $id)->all(),
-        );
+        // The employee's link stays: Head users never touch non-heads.
+        $this->assertEqualsCanonicalizing([$head->user_id, $this->otherHead->user_id, $this->employee->user_id], $linked());
+        $this->getJson($url)->assertOk()->assertJsonCount(2, 'data.user.head_user_mappings');
+
+        // A customer is refused, and nothing changes.
+        $errors = $this->putJson($url, $base + ['head_user_mappings' => [['employee_id' => $this->customer->user_id]]], $this->withSpecialPassword())
+            ->assertStatus(422)->json('errors');
+        $this->assertSame(['Only HEAD users can be listed as head users.'], $errors['head_user_mappings.0.employee_id']);
+        $this->assertCount(3, $linked());
 
         $this->putJson($url, $base + ['head_user_mappings' => []])->assertStatus(422);
         $this->putJson($url, $base + ['head_user_mappings' => []], $this->withSpecialPassword())->assertOk();
-        $this->assertFalse(HeadEmployeeMapping::where('head_id', $head->user_id)->exists());
+        $this->assertSame([$this->employee->user_id], $linked());
+    }
+
+    public function test_only_head_users_can_be_chosen_as_heads_or_cash_heads(): void
+    {
+        // An EMPLOYEE (full form) so both lists reach validation.
+        $this->signInToAdminConsoleAs($this->admin);
+        $url = '/api/v1/admin/user-details/' . $this->employee->user_id;
+        $base = $this->editBase($this->employee);
+
+        foreach (['head_mappings', 'cash_head_mappings'] as $list) {
+            $errors = $this->putJson($url, $base + [$list => [['head_id' => $this->customer->user_id]]], $this->withSpecialPassword())
+                ->assertStatus(422)->json('errors');
+            $this->assertSame(['Only HEAD users can be chosen as heads.'], $errors["{$list}.0.head_id"]);
+        }
+        $this->assertFalse(HeadEmployeeMapping::where('employee_id', $this->employee->user_id)->exists());
+
+        $this->putJson($url, $base + ['head_mappings' => [['head_id' => $this->otherHead->user_id]]], $this->withSpecialPassword())
+            ->assertOk();
+        $this->assertSame(
+            [$this->otherHead->user_id],
+            HeadEmployeeMapping::where('employee_id', $this->employee->user_id)->pluck('head_id')->map(fn ($id) => (int) $id)->all(),
+        );
     }
 
     public function test_a_blank_report_password_keeps_the_current_one(): void

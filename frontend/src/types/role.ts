@@ -12,6 +12,15 @@ export interface Role {
   is_active?: boolean
 }
 
+// Admin console: PUT /admin/roles/{id}/status (agreed 2026-11-23). Switching
+// a role off also locks its users out of the app; users_count says how many.
+export interface RoleStatusResult {
+  id: number
+  role: string
+  is_active: boolean
+  users_count: number
+}
+
 export interface RoleFormValues {
   role: string
   touch: number | null

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   employeeIdsOf,
   flagGroupsFor,
+  FULL_USER_FORM_PROFILE,
   headIdsOf,
   makeEmptyUserForm,
   sameIds,
@@ -16,12 +17,38 @@ const profile = (role: string, sections: UserFormProfile['sections'], extra: Par
 const catalog: UserFormProfileCatalog = {
   sections: ['heads', 'items'],
   flags: [],
-  default: { role: null, is_default: true, lock_role_on_edit: false, sections: ['heads', 'items'], flags: [] },
+  default: {
+    role: null,
+    is_default: true,
+    lock_role_on_edit: false,
+    signs_in: true,
+    default_category: null,
+    default_primary_item: null,
+    sections: ['heads', 'items'],
+    flags: [],
+  },
   by_role_id: {
     '3': profile('HEAD', ['head_users', 'salary']),
     '7': profile('ADMIN', ['heads'], { lock_role_on_edit: true }),
+    '1': profile('CUSTOMER', ['heads', 'items'], {
+      signs_in: false,
+      default_category: 'PURITY',
+      default_primary_item: 'GOLD',
+    }),
   },
 }
+
+describe('the CUSTOMER profile', () => {
+  it("carries the customer's defaults and no sign-in; other roles sign in", () => {
+    expect(profileForRole(catalog, '1')).toMatchObject({
+      signs_in: false,
+      default_category: 'PURITY',
+      default_primary_item: 'GOLD',
+    })
+    expect(FULL_USER_FORM_PROFILE.signs_in).toBe(true)
+    expect(FULL_USER_FORM_PROFILE.default_category).toBeNull()
+  })
+})
 
 describe('user form helpers', () => {
   it('compares head sets regardless of order and blanks', () => {

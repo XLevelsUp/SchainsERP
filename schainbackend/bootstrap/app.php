@@ -36,6 +36,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'quick.add.customer' => \App\Http\Middleware\EnsureQuickAddCustomer::class,
             // App: a feature the signed-in user's permissions don't allow.
             'user.permission' => \App\Http\Middleware\EnsureUserPermission::class,
+            // App: ends the session of a user whose role was switched off.
+            'app.session' => \App\Http\Middleware\EnsureAppSession::class,
         ]);
 
         $middleware->redirectGuestsTo(fn (Request $request) => abort(response()->json([

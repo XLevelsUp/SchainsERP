@@ -15,6 +15,8 @@ use App\Models\Role;
  *
  * Always on the form, whatever the role: role, name, user name, phone,
  * password and category. Those are what store() needs to create anyone.
+ * A role that doesn't sign in (signs_in false, CUSTOMER) has no name or
+ * password on the form; ApplyUserFormProfile fills them in.
  *
  * A role with no profile below gets DEFAULT: every section and every flag,
  * i.e. the full form as it was before profiles existed. Roles are added here
@@ -96,8 +98,39 @@ final class UserFormProfiles
      * Profiles by role name (upper case, as roles are stored).
      * lock_role_on_edit: the role can't be changed once the user exists (the
      * legacy ADMIN form shows it greyed out; the HEAD form lets it change).
+     * signs_in (default true): false for records that never sign in
+     * (CUSTOMER): the form has no Name or Password; ApplyUserFormProfile
+     * copies the user name into the name and sets a random password.
+     * default_category / default_primary_item: what a new user of the role
+     * starts with on the form; the admin can change both.
      */
     private const PROFILES = [
+        // The legacy customer form (2026-11-23). Customers are records used to
+        // track gold and cash, not accounts: they don't sign in.
+        'CUSTOMER' => [
+            'lock_role_on_edit' => false,
+            'signs_in' => false,
+            'default_category' => 'PURITY',
+            'default_primary_item' => 'GOLD',
+            'sections' => [
+                'heads',
+                'customer_comments',
+                'items',
+                'balances',
+                'customer_touches',
+                'joining_date',
+                'flags',
+            ],
+            'flags' => [
+                'is_remainder_shown',            // Cash reminder shown
+                'is_wa_delivery_stock_needed',   // WhatsApp share needed in stock
+                'is_delivery_item_shown',        // Delivery item shown (head)
+                'is_delivery_chk_need_shown',    // Delivery checks shown in stock (employee)
+                'is_cashamt_thermal_shown',      // Cash amount on thermal print in stock
+                'is_customer_touch_need_shown',  // Customer touch shown
+            ],
+        ],
+
         // The legacy admin user form.
         'ADMIN' => [
             'lock_role_on_edit' => true,
@@ -169,6 +202,9 @@ final class UserFormProfiles
                 'role' => $key !== '' ? $key : null,
                 'is_default' => true,
                 'lock_role_on_edit' => false,
+                'signs_in' => true,
+                'default_category' => null,
+                'default_primary_item' => null,
                 'sections' => self::SECTIONS,
                 'flags' => self::FLAG_KEYS,
             ];
@@ -178,6 +214,9 @@ final class UserFormProfiles
             'role' => $key,
             'is_default' => false,
             'lock_role_on_edit' => (bool) ($profile['lock_role_on_edit'] ?? false),
+            'signs_in' => (bool) ($profile['signs_in'] ?? true),
+            'default_category' => $profile['default_category'] ?? null,
+            'default_primary_item' => $profile['default_primary_item'] ?? null,
             'sections' => array_values(array_intersect(self::SECTIONS, $profile['sections'])),
             'flags' => array_values(array_intersect(self::FLAG_KEYS, $profile['flags'])),
         ];
@@ -222,6 +261,16 @@ final class UserFormProfiles
             }
         }
 
+        if (!$profile['signs_in']) {
+            array_push($drop, ...self::SIGN_IN_INPUTS);
+        }
+
         return $drop;
     }
+
+    /** Sign-in input, dropped for a role that doesn't sign in. */
+    public const SIGN_IN_INPUTS = [
+        'password', 'new_password', 'confirm_password', 'password_confirmation',
+        'confirm_new_password', 'new_password_confirmation',
+    ];
 }

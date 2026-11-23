@@ -31,8 +31,9 @@ Route::prefix('v1')->group(function () {
 
     // Protected routes. App tokens only: admin-console tokens belong to the
     // `admins` provider and Passport refuses them on this guard
-    // (App\Support\AdminAccess).
-    Route::middleware('auth:api')->group(function () {
+    // (App\Support\AdminAccess). A user whose role was switched off in the
+    // admin console is signed out on their next request (EnsureAppSession).
+    Route::middleware(['auth:api', 'app.session'])->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
 
@@ -170,7 +171,7 @@ Route::prefix('v1')->group(function () {
     });
 });
 
-Route::prefix('v1/stock')->middleware('auth:api')->group(function () {
+Route::prefix('v1/stock')->middleware(['auth:api', 'app.session'])->group(function () {
     // Entering stock values: heads, or users with the "can act as head"
     // permission (EnsureCanActAsHead).
     Route::middleware('act.as.head')->group(function () {

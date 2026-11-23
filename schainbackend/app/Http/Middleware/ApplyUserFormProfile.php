@@ -7,6 +7,7 @@ use App\Support\UserFormProfiles;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -56,6 +57,28 @@ class ApplyUserFormProfile
             foreach ($drop as $key) {
                 $request->files->remove($key);
             }
+        }
+
+        // A role that doesn't sign in (CUSTOMER) has no Name or Password on
+        // the form. Its name follows the user name: set on create, and on an
+        // edit only when the user name changes, so names saved before (e.g.
+        // "Mahalaxmi N") survive other edits. A new one gets a random
+        // password nobody knows; an edit keeps the current one.
+        if (!$profile['signs_in']) {
+            $input = Arr::except($request->input(), ['name']);
+            $userName = trim((string) $request->input('user_name', ''));
+
+            if ($request->route('user_detail')) {
+                $current = UserDetail::where('user_id', $request->route('user_detail'))->value('user_name');
+                if ($userName !== '' && $userName !== $current) {
+                    $input['name'] = $userName;
+                }
+            } else {
+                $input['name'] = $userName;
+                $input['password'] = Str::random(40);
+            }
+
+            $request->replace($input);
         }
 
         $request->attributes->set('user_form_profile', $profile['role']);

@@ -147,6 +147,9 @@ export const FULL_USER_FORM_PROFILE: UserFormProfile = {
   role: null,
   is_default: true,
   lock_role_on_edit: false,
+  signs_in: true,
+  default_category: null,
+  default_primary_item: null,
   sections: ALL_USER_FORM_SECTIONS,
   flags: USER_FEATURE_FLAG_KEYS,
 }

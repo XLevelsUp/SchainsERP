@@ -1,17 +1,18 @@
-import type { UserFeatureFlagKey } from './userDetail'
+import type { CategoryName, UserFeatureFlagKey } from './userDetail'
 
 // GET /api/v1/admin/user-form-profiles (App\Support\UserFormProfiles):
 // which parts of the admin console's user form each role gets. The backend
 // enforces the same profiles on save.
 //
 // Always on the form whatever the role: role, name, user name, phone,
-// password and category.
+// password and category; name and password not for a role that doesn't sign
+// in (signs_in false).
 export type UserFormSection =
   | 'contact' // address, signature, mailing name
   | 'remarks'
   | 'customer_comments'
   | 'heads' // the heads a user reports to (stock)
-  | 'head_users' // for a head: the users under them (stock)
+  | 'head_users' // for a head: the other heads they work with (stock), HEAD users only
   | 'cash_heads' // the heads a user reports to (cash)
   | 'items' // assigned items; totals always read-only
   | 'balances' // grand totals, cash and RTGS balance, read-only
@@ -32,6 +33,14 @@ export interface UserFormProfile {
   is_default: boolean
   // The role can't be changed once the user exists (ADMIN).
   lock_role_on_edit: boolean
+  // false for records that never sign in (CUSTOMER, 2026-11-23): the form
+  // has no Name or Password; the backend copies the user name into the name
+  // and sets a random password.
+  signs_in: boolean
+  // What a new user of this role starts with on the form (CUSTOMER: PURITY
+  // and GOLD as the primary item); the admin can change both.
+  default_category: CategoryName | null
+  default_primary_item: string | null
   sections: UserFormSection[]
   flags: UserFeatureFlagKey[]
 }

@@ -19,9 +19,102 @@ fixed, struck through, with what changed — this file is the record.
 > When a backend item is fixed: strike it through here with the evidence, and
 > delete it from `BACKEND_TODO.md`.
 
-**Last updated:** 2026-11-21
+**Last updated:** 2026-11-23
 **Backend baseline:** `982afd78` (PR #53) plus our own uncommitted backend
 fixes below. Since 2026-11-06 we own the backend too.
+
+### Admin console — CUSTOMER user form (2026-11-23)
+
+Built from the legacy customer form. Customers are records for tracking gold and cash; they don't sign in (user's decision).
+
+- **Profile** (`UserFormProfiles::CUSTOMER`):
+  - Sections: Head lists, customer comments, items, balances (read-only), customer touches, joining date.
+  - The six switches are the same as ADMIN's: cash reminder, WhatsApp share, delivery item (H), delivery checks (E), cash amount on thermal print, customer touch.
+  - Left out: cash heads, image, contact, remarks, account.
+- **New profile settings:** `signs_in`, `default_category` and `default_primary_item`, served by `/admin/user-form-profiles`.
+- **No sign-in** (`ApplyUserFormProfile`):
+  - The form has no Name or Password, and password inputs are dropped.
+  - A new customer's name is its user name, and it gets a random password.
+  - On edit, the name changes only when the user name changes, so existing names survive other edits.
+- **Defaults on a new customer:**
+  - Category PURITY.
+  - GOLD added as the primary item, if an item named GOLD exists. **None does on Aiven yet**; the items there are Metal, GMS Metal, Chain…
+  - The admin can change both.
+- **Add Retailer:** its Category now starts on PURITY.
+- **e2e:** console tests now reuse one sign-in (`e2e/support.ts`). The suite had more console sign-ins than the 5-a-minute admin-login limit.
+- **Tests:**
+  - Backend: new `AdminCustomerFormTest` (3 tests); `AdminHeadFormTest` adjusted.
+  - Vitest: CUSTOMER profile defaults.
+  - Playwright: the CUSTOMER form.
+  - Run: backend 114/114, Vitest 20/20, vue-tsc and build clean, Playwright 10/10.
+  - Postgres: checked with a `zz_customer` user, then removed.
+
+### Heads are HEAD users only (2026-11-23)
+
+The user asked for the user form's Head users dropdown (HEAD form) to list only HEAD users, not everyone.
+
+- **Frontend:** `UserFormCard`'s Head users lists only HEAD users (the head itself included), with new placeholder and help text. Head lists and Cash heads were already HEAD-only (`list('HEAD')`).
+- **Backend:**
+  - The admin console refuses a non-HEAD in `head_mappings`, `cash_head_mappings` and `head_user_mappings`. This is the new `App\Rules\HeadUser` rule and `App\Support\HeadUsers`, added by `UserDetailController::requireHeadUsers`. The messages are "Only HEAD users can be chosen as heads." and "Only HEAD users can be listed as head users."
+  - It doesn't apply to the app's Add Retailer, which maps a retailer to whoever adds it, possibly an "act as head" employee. `EnsureQuickAddCustomer` already limits that to self.
+- **Existing links kept (user's decision):**
+  - `syncHeadUsers` only adds and removes a head's links to other heads.
+  - `show()` returns only those as `head_user_mappings`.
+  - A head's links to employees and customers stay managed from those users' own Head lists, so saving a HEAD form never removes them.
+- **Data:** deleted the one non-HEAD head link on Aiven, Retailer One (PURCHASE) → New User 001. None are left in either mapping table.
+- **Tests:**
+  - Backend: `AdminHeadFormTest` was updated, plus a new test, "only head users can be chosen as heads or cash heads".
+  - Playwright: the HEAD form's Head users options are all HEAD.
+  - Run: backend 111/111, Vitest 19/19, vue-tsc and build clean, Playwright 9/9.
+  - Postgres: checked with `zz_head_*` users, then removed.
+
+### Users' phone numbers: exactly 10 digits, unique (2026-11-23)
+
+The user asked for 10-digit phone numbers that may start with 0, with no two users sharing one. Decisions: the rule applies everywhere (the admin console's Users form and Add Retailer), and an older number of another length must be fixed the next time that user is saved.
+
+- **Backend:** `UserDetailController` store and update check `phone_no` against `^[0-9]{10}$` (it was any text up to 15 characters).
+  - Uniqueness was already enforced by validation and the unique index; its message is now "Another user already has this phone number."
+  - The length message is "Phone number must be exactly 10 digits."
+  - No migration was needed: the column is text, so a leading 0 is kept.
+- **Frontend:**
+  - `lib/phone.ts` holds `isValidPhone`, `phoneDigits` and `PHONE_ERROR`.
+  - `UserFormCard` and `AddRetailerModal` use it. The phone field keeps digits only, at most 10, with `inputmode="numeric"`. They used to accept 6–15 digits.
+  - `BaseInput` gets an opt-in `sanitize` prop, so characters the filter drops never show. Fields without it are unchanged.
+- **Existing data:** on Aiven, `customer-1` (#5) and `claude_test_567840` (#7) have 11-digit numbers. Saving either is refused until the number is corrected.
+- **Tests:**
+  - Backend: `tests/Feature/PhoneNumberTest.php` (4 tests).
+  - Vitest: `tests/unit/phone.spec.ts` (4 tests).
+  - Playwright: the console user form's phone field.
+  - Run: backend 110/110, Vitest 19/19, vue-tsc and build clean, Playwright 9/9.
+  - Postgres: checked on port 8010 with `zz_phone_*` users, then removed.
+
+### Admin console — role status switch (2026-11-23)
+
+The user asked for each role's status to be changeable on the admin Roles
+page. Decisions: the Status column, with a confirm; the special password;
+and switching a role off also stops its users signing in.
+
+**Backend:**
+- `PUT|PATCH /api/v1/admin/roles/{role}/status` (`AdminRoleStatusController`,
+  route `admin.roles.status`) takes `{ is_active }`. Only the status changes; names stay create-only.
+  - It needs the special password.
+  - It returns `{ id, role, is_active, users_count }`.
+  - It is audited as `ROLE_STATUS_CHANGE`.
+- App sign-in refuses a user whose role is inactive: a 403 with "Your role has been deactivated. Please contact your administrator." (`LoginRejectedException::roleDeactivated`, `AuthUser::hasInactiveRole`).
+- New `app.session` middleware (`EnsureAppSession`) on both `auth:api` groups (`/api/v1` and `/api/v1/stock`). For a user whose role is inactive, it revokes the token and returns a 401, so the app signs them out on its next request.
+- A role with no saved status, or a user with no role, counts as active, as `isRoleActive()` does on the frontend.
+
+**Frontend:**
+- `RolesView`: the Status badge is a button. It opens `SpecialPasswordDialog`, which doubles as the confirm and explains the lock-out. A toast shows how many users are affected. A wrong password keeps the dialog open.
+- `rolesApi.setStatus()` and the `RoleStatusResult` type were added.
+- `BaseModal` now carries `role="dialog"`, `aria-modal` and `aria-labelledby` (an accessibility fix, so tests can find dialogs).
+
+**Tests:**
+- Backend: `tests/Feature/RoleStatusTest.php` (5 tests).
+- Vitest: `tests/unit/roleStatus.spec.ts` (4 tests).
+- Playwright: "a role status asks for the special password before switching" (opens the prompt and cancels).
+- Run: backend 106/106, Vitest 15/15, vue-tsc and build clean, Playwright 9/9.
+- Postgres (Aiven, port 8010): the whole flow was run with a `zz_` role and user, then both were removed.
 
 ### Session checkpoint — 2026-11-21
 

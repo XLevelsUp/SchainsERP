@@ -23,7 +23,9 @@ Agreed with the user on 2026-11-21. Applies to all work in this repository, fron
 ## What the admin console holds
 
 * **Users:** create users, assign a role, heads, and the role's fields and permissions.
-* **Roles:** create and view only. Edit and delete were offered and declined (2026-11-21).
+* **Roles:** create, view, and switch the status (2026-11-23). Name edits and delete were offered and declined (2026-11-21).
+  * The status is switched from the Status column and needs the special password.
+  * Switching a role off locks its users out of the app: sign-in refuses them (403), and an open session ends on its next request (401, `EnsureAppSession` on every `auth:api` route). Switching it back on lets them in again; their own account status is untouched.
 * **Head Employee Mappings** and **My account** (login password and special password).
 * Other setup screens (items, fitem boxes, customer touch, banks, cash categories, system settings, system logs) stay with heads in the app. **Each page prompt decides** whether a screen belongs in the console or the app; move it then.
 
@@ -33,7 +35,9 @@ Agreed with the user on 2026-11-21. Applies to all work in this repository, fron
 * The console draws the form from `GET /api/v1/admin/user-form-profiles`.
 * `ApplyUserFormProfile` enforces the profile on save.
 * A role without a profile gets the full form.
-* **Profiles so far: ADMIN and HEAD.** Add one entry per role as the user specifies it.
+* **Profiles so far: ADMIN, HEAD and CUSTOMER.** Add one entry per role as the user specifies it.
+* A profile can also set `signs_in: false` (no Name or Password on the form; the name follows the user name and a random password is set), `default_category` and `default_primary_item` (what a new user starts with). CUSTOMER uses all three (PURITY, GOLD): customers are records for tracking, not accounts.
+* Only HEAD users can be chosen as heads (Head lists, Cash heads) or listed as a head's Head users. A head's Head users are its links to other heads only.
 
 ## Permissions drive what each user sees
 
@@ -47,7 +51,8 @@ Agreed with the user on 2026-11-21. Applies to all work in this repository, fron
 The admin's second password is required for:
 
 * assigning or changing heads (head lists, cash heads, head users);
-* deleting a user.
+* deleting a user;
+* switching a role on or off.
 
 ---
 

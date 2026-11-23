@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Api\Admin\AdminAccountController;
 use App\Http\Controllers\Api\Admin\AdminAuthController;
+use App\Http\Controllers\Api\Admin\RoleStatusController;
 use App\Http\Controllers\Api\Admin\UserFormProfileController;
 use App\Http\Controllers\Api\Admin\UserStatusController;
 use App\Http\Controllers\Api\CashHeadEmployeeMappingController;
@@ -22,12 +23,13 @@ use App\Http\Controllers\Api\UserDetailController;
 |
 | Admins are their own accounts (table `admins`), not heads. Their job
 | (agreed 2026-11-20): create users, assign them to heads, and create
-| roles. Heads keep everything else in the app (routes/api.php).
+| roles and switch them on or off. Heads keep everything else in the app
+| (routes/api.php).
 |
 | Past login, every route needs an admin-console token (`auth:admin` +
 | EnsureAdminSession) and successful changes are audited (LogAdminAction).
-| Assigning heads and deleting a user also need the admin's special
-| password on the request (RequireSpecialPassword).
+| Assigning heads, deleting a user and switching a role on or off also need
+| the admin's special password on the request (RequireSpecialPassword).
 |--------------------------------------------------------------------------
 */
 
@@ -92,9 +94,17 @@ Route::middleware(['auth:admin', 'admin.session', 'admin.audit'])->group(functio
     // Roles (agreed 2026-11-20): admins create and view them — a name and an
     // active status. No edit or delete. The list also feeds the Users form's
     // role picker.
+    //
+    // The status can be switched (agreed 2026-11-23), with the special
+    // password. Switching a role off also locks its users out of the app
+    // (RoleStatusController).
     Route::get('roles', [RoleController::class, 'index'])->name('roles.index');
     Route::post('roles', [RoleController::class, 'store'])->name('roles.store');
     Route::get('roles/{role}', [RoleController::class, 'show'])->name('roles.show');
+    Route::match(['put', 'patch'], 'roles/{role}/status', [RoleStatusController::class, 'update'])
+        ->whereNumber('role')
+        ->middleware('special.password')
+        ->name('roles.status');
 
     // Read-only lookups for the Users form's item and customer touch pickers;
     // heads manage both lists in the app.

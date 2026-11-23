@@ -31,6 +31,9 @@ const props = withDefaults(
     // problem, not a filter reset. Renders the same glyph/hover styling
     // as BaseSelect's clear button so a filter row reads consistently.
     clearable?: boolean
+    // Opt-in filter for what the field keeps as the user types or pastes,
+    // e.g. phoneDigits (lib/phone.ts). Characters it drops never show.
+    sanitize?: (value: string) => string
   }>(),
   {
     modelValue: '',
@@ -45,12 +48,25 @@ const props = withDefaults(
     size: 'md',
     step: undefined,
     clearable: false,
+    sanitize: undefined,
   },
 )
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const attrs = useAttrs()
+
+// With `sanitize`, the field is put back to the filtered text straight away:
+// when the filter drops a character the bound value doesn't change, so Vue
+// wouldn't re-render and the dropped character would stay on screen.
+function handleInput(event: Event) {
+  const el = event.target as HTMLInputElement
+  if (props.sanitize) {
+    const kept = props.sanitize(el.value)
+    if (kept !== el.value) el.value = kept
+  }
+  emit('update:modelValue', el.value)
+}
 
 const effectiveStep = computed(() => props.step ?? (props.type === 'number' ? '0.001' : undefined))
 
@@ -100,7 +116,7 @@ const showClear = computed(
         ]"
         :aria-invalid="Boolean(error)"
         :aria-describedby="error && id ? `${id}-error` : undefined"
-        @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+        @input="handleInput"
       />
       <button
         v-if="showClear"

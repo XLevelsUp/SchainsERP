@@ -10,7 +10,9 @@ import type { CategoryName } from '@/types'
 | Display only — never apply it to entry fields, payloads or the OB/CB maths.
 */
 
-// No default anywhere: the head picks one when creating a user.
+// Customers start on PURITY (agreed 2026-11-23): the admin console's
+// CUSTOMER profile (default_category) and Add Retailer. Other roles have no
+// default; the admin picks one.
 export const userCategoryOptions: { value: CategoryName; label: string }[] = [
   { value: 'GRAMS', label: 'Grams' },
   { value: 'PURITY', label: 'Purity' },

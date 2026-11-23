@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 
 use App\Http\Requests\UpdateCcRequest;
 use App\Models\UserDetail;
+use App\Rules\HeadUser;
+use App\Support\AdminAccess;
+use App\Support\HeadUsers;
 use App\Models\UsersItemsMapping;
 use App\Models\HeadEmployeeMapping;
 use App\Models\CashHeadEmployeeMapping;
@@ -46,6 +49,41 @@ class UserDetailController extends Controller
             'is_item_conversion_need_shown' => 'sometimes|boolean',
             'is_phone_book_need_shown' => 'sometimes|boolean',
         ];
+    }
+
+    /*
+    | Phone numbers (agreed 2026-11-23): exactly 10 digits, a leading 0
+    | allowed (the column is text, so it is kept), and no two users may share
+    | one (also a unique index). Applies to every create and edit: the admin
+    | console's Users form and the app's Add Retailer. An older number of
+    | another length has to be corrected the next time that user is saved.
+    */
+    private const PHONE_PATTERN = 'regex:/^[0-9]{10}$/';
+
+    private const PHONE_MESSAGES = [
+        'phone_no.regex' => 'Phone number must be exactly 10 digits.',
+        'phone_no.unique' => 'Another user already has this phone number.',
+    ];
+
+    /*
+    | Only HEAD users may be chosen as a user's heads (Head lists, Cash
+    | heads) or listed as a head's Head users (agreed 2026-11-23). Checked
+    | for the admin console only: the app's Add Retailer maps the retailer to
+    | whoever adds it, which may be an "act as head" employee, and
+    | EnsureQuickAddCustomer already limits it to that.
+    */
+    private static function requireHeadUsers(\Illuminate\Validation\Validator $validator, Request $request): void
+    {
+        if (!AdminAccess::isAdmin($request->user())) {
+            return;
+        }
+
+        $rule = new HeadUser();
+        $validator->addRules([
+            'head_mappings.*.head_id' => [$rule],
+            'cash_head_mappings.*.head_id' => [$rule],
+            'head_user_mappings.*.employee_id' => [$rule],
+        ]);
     }
 
     /** Fields of the HEAD form stored straight from the request, on create and edit. */
@@ -280,7 +318,7 @@ class UserDetailController extends Controller
                 'required|string|max:255',
 
             'phone_no' =>
-                'required|string|max:15|unique:user_details,phone_no',
+                'required|string|' . self::PHONE_PATTERN . '|unique:user_details,phone_no',
 
             'remarks' =>
                 'nullable|string|max:255',
@@ -552,7 +590,9 @@ class UserDetailController extends Controller
                 'required|integer|distinct|exists:user_details,user_id',
 
             ...self::formSectionRules(),
-        ]);
+        ], self::PHONE_MESSAGES);
+
+        self::requireHeadUsers($validator, $request);
 
         $validator->after(function ($validator) use ($request) {
             $pwd = $request->input('password') ?? $request->input('new_password');
@@ -1032,7 +1072,10 @@ class UserDetailController extends Controller
                 'headEmployeeMappings',
                 'cashHeadEmployeeMappings',
                 'customerTouchMappings',
-                'headUserMappings',
+                // A head's "Head users" are its links to other heads only;
+                // links to employees and customers are managed from their
+                // own Head lists (agreed 2026-11-23).
+                'headUserMappings' => fn ($query) => $query->whereIn('employee_id', HeadUsers::ids()->all()),
                 'role'
             ])
                 ->where('user_id', $id)
@@ -1207,7 +1250,7 @@ class UserDetailController extends Controller
                         'sometimes|string|max:255',
 
                     'phone_no' =>
-                        'sometimes|string|max:15|unique:user_details,phone_no,' .
+                        'sometimes|string|' . self::PHONE_PATTERN . '|unique:user_details,phone_no,' .
                         $id .
                         ',user_id',
 
@@ -1378,8 +1421,11 @@ class UserDetailController extends Controller
                 'sometimes|boolean',
             'is_metal_stock_shown' =>
                 'sometimes|boolean',
-                ]
+                ],
+                self::PHONE_MESSAGES
             );
+
+            self::requireHeadUsers($validator, $request);
 
             $validator->after(function ($validator) use ($request) {
                 $pwd = $request->input('password') ?? $request->input('new_password');

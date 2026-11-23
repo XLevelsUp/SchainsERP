@@ -42,4 +42,15 @@ class AuthUser extends Authenticatable
     {
         return $this->belongsTo(Role::class, 'role_id', 'id');
     }
+
+    /**
+     * True when the user's role has been switched off in the admin console.
+     * Such users can't sign in, and a session they already hold ends on its
+     * next request (EnsureAppSession). A role with no status saved counts as
+     * active, as the frontend's isRoleActive() does; so does having no role.
+     */
+    public function hasInactiveRole(): bool
+    {
+        return $this->role?->is_active === false;
+    }
 }
