@@ -1,7 +1,13 @@
 import { api as appApi, type ApiClient, type ApiResponse } from './api'
 import { buildMultipartForm } from './multipartForm'
 import { USER_FEATURE_FLAG_KEYS } from './userFeatureFlags'
-import type { UserDetail, UserDetailFormValues, UserDetailListItem } from '@/types'
+import type {
+  OpeningBalanceInput,
+  OpeningBalanceResult,
+  UserDetail,
+  UserDetailFormValues,
+  UserDetailListItem,
+} from '@/types'
 
 const RESOURCE = '/user-details'
 
@@ -9,7 +15,7 @@ const RESOURCE = '/user-details'
 // required (and all five columns are NOT NULL), but the Users forms no
 // longer ask for code/system_id/proof-as-text and leave signature and
 // mailing name optional. Blanks get the same placeholders
-// PhoneBookController::store() and AddRetailerModal already use — '-' for
+// AddRetailerModal uses — '-' for
 // free text, the user's own name for mailing name, and a stamped value for
 // system_id because it is unique:user_details. On edit the record's stored
 // values are loaded into the form, so these only apply to fields left blank.
@@ -84,6 +90,18 @@ function toPayload(form: UserDetailFormValues, includePassword = true) {
   // HEAD form (2026-11-21).
   if (form.aadhar_number !== undefined) payload.aadhar_number = form.aadhar_number.trim() || null
   if (form.per_day_salary !== undefined) payload.per_day_salary = form.per_day_salary === '' ? null : form.per_day_salary
+  // SALARY form (2026-11-23).
+  if (form.additional_phone_no !== undefined) payload.additional_phone_no = form.additional_phone_no.trim() || null
+  // A new user's opening balances (2026-11-24); only when there are some,
+  // since sending the key at all asks for the special password.
+  if (form.opening_balances?.length) {
+    payload.opening_balances = form.opening_balances.map((e) => ({
+      field: e.field,
+      item_id: e.item_id,
+      value: e.value,
+      remarks: e.remarks.trim() || null,
+    }))
+  }
   if (form.report_password) payload.report_password = form.report_password
   if (form.head_user_mappings?.length) {
     const headUsers = employeePayload(form.head_user_mappings)
@@ -212,6 +230,8 @@ export function createUserDetailsApi(api: ApiClient) {
       options: { includeItemMappings?: boolean; includeHeadMappings?: boolean } = {},
     ) => {
       const payload = toPayload(form, form.password.length > 0)
+      // An existing user's opening balances go one at a time (openingBalance).
+      delete payload.opening_balances
       const files = filesOf(form)
       const multipart = Object.keys(files).length > 0
 
@@ -246,6 +266,18 @@ export function createUserDetailsApi(api: ApiClient) {
     },
 
     remove: (id: number) => api.delete<ApiResponse<null>>(`${RESOURCE}/${id}`),
+
+    // POST /user-details/{id}/opening-balance (admin console, 2026-11-24).
+    // Needs the special password: build this on adminApiWithSpecialPassword.
+    openingBalance: (id: number, entry: OpeningBalanceInput) =>
+      api
+        .post<ApiResponse<OpeningBalanceResult>>(`${RESOURCE}/${id}/opening-balance`, {
+          field: entry.field,
+          item_id: entry.item_id,
+          value: entry.value,
+          remarks: entry.remarks.trim() || null,
+        })
+        .then((r) => r.data),
 
     // PATCH /user-details/{id}/status (admin console): the Users list's
     // active toggle, without sending the whole form.

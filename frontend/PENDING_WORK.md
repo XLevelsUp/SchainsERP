@@ -23,6 +23,103 @@ fixed, struck through, with what changed — this file is the record.
 **Backend baseline:** `982afd78` (PR #53) plus our own uncommitted backend
 fixes below. Since 2026-11-06 we own the backend too.
 
+### Admin console — opening balance updates on the user form (2026-11-24)
+
+Built from the legacy "Create new Opening Balance Update" modal: Remarks, Previous balance, Value update, Closing balance.
+
+- **Buttons:** Grams / Purity under each item row's totals; GRAMS / PURITY / CASH / RTGS on the balances block, which now also shows on a new user.
+- **Rules (user's decisions):**
+  - Closing = previous + value; a negative value reduces it.
+  - An item's grams or purity also moves the grams or purity grand total. The grand-total buttons change only the grand total.
+  - Always the special password.
+- **New user:** entries wait on the form. The figures shown include them, they're listed with a remove button, and they're sent with the create request as `opening_balances`. The save then asks for the special password.
+  - Entries drop out when their item is removed or the role changes to one without that section.
+- **Existing user:** the modal saves at once (special password in the modal) and refreshes the figures from the response.
+  - Items added in the same edit must be saved first (their buttons are disabled with a hint).
+- **Backend:**
+  - New table `opening_balance_updates` (migration `2026_11_24_000100`, **applied on Aiven**, empty).
+  - `App\Services\OpeningBalanceService`: bcmath scale 4, user row locked, item row locked. Two history rows for an item update: the item and the grand total it moved.
+  - `Admin\OpeningBalanceController` (`admin.user-details.opening-balance`, audit OPENING_BALANCE_UPDATE).
+  - `UserDetailController::store` applies `opening_balances` for admins only, validated against the role's sections and the items being added. The `special.password` field list now includes `opening_balances`.
+- **Frontend:**
+  - `types/openingBalance.ts`, `lib/openingBalance.ts` (exact decimal sums with BigInt, pending totals), `admin/components/users/OpeningBalanceModal.vue`.
+  - `userDetailsApi.openingBalance()`, and `opening_balances` in the create payload.
+  - The Items help text was updated.
+- **Not built yet:** a page listing the history (legacy "Opening Balance Updates"). The data is recorded; build the page when its screenshots come.
+- **Tests:**
+  - Backend: new `OpeningBalanceTest` (4 tests).
+  - Vitest: `openingBalance.spec.ts`.
+  - Playwright: new-user opening balances (and the HEAD test's selector).
+  - Run: backend 128/128, Vitest 32/32, vue-tsc and build clean, Playwright 13/13.
+  - Postgres: create with entries; edits including -0.25 and 0.1 + 0.2 = 0.3; wrong password and missing item refused. The `zz_ob_head` user, its history (cascade), its phone book contact and 5 log rows were removed.
+
+### Admin console — HEAD starts with GOLD as its primary item (2026-11-24)
+
+- `UserFormProfiles::HEAD` now has `default_primary_item` GOLD. A new head starts with one row: GOLD, Primary ticked, grams 0 and purity 0. The admin can change the item, untick Primary, remove the row or add more. Grams and purity stay read-only (user's decision).
+- **Created the GOLD item on Aiven** (item #9, table defaults: default touch 92, item touch 0) with the user's OK. The GOLD default now works for HEAD, CUSTOMER and SALARY. **Check its touch values on the Items screen.**
+- **Fixed:** when the items list loaded after the role was picked, the primary item was never added. It's now added when the list arrives (first load only, so a removed row stays removed). New helper: `addDefaultPrimaryItem`.
+- Tests: `AdminCustomerFormTest` updated; Vitest for the HEAD GOLD row and the late items list; the HEAD e2e checks the GOLD row. Run: backend 124/124, Vitest 29/29, vue-tsc and build clean, Playwright 12/12. Postgres: a `zz_head_gold` head saved GOLD 0/0 primary, then it, its phone book contact and 2 log rows were removed.
+
+### Admin console — HEAD starts on category Both (2026-11-24)
+
+- `UserFormProfiles::HEAD` now has `default_category` BOTH. A new head user starts on Both and the admin can change it; editing an existing head never changes it.
+- Switching a new user's role to HEAD replaces another role's default (e.g. PURITY from CUSTOMER) but keeps a category the admin picked (`applyRoleDefaults`).
+- Tests: `AdminCustomerFormTest` updated; Vitest case for HEAD; the HEAD e2e checks Both. Run: backend 124/124, Vitest 27/27, vue-tsc and build clean, Playwright 12/12. No data change on Aiven.
+
+### Admin console — Phone Book (2026-11-24)
+
+Built from the legacy Phone Books list and its create/edit modal.
+
+- **Storage (user's decision):** a new `phone_book` table (migration `2026_11_24_000000`, **applied on Aiven**), replacing the old read-only view over `user_details`.
+  - Every non-deleted user was copied in once: 8 contacts on Aiven, 2 with numbers that aren't 10 digits (flagged "check" on the page).
+  - Users created in the admin console are added automatically (`App\Support\PhoneBookSync`, behind a savepoint). A number already in the phone book is linked to the user, not added again.
+  - Users added with the app's Add Retailer are **not** added; that wasn't part of the agreed scope.
+  - Contacts are independent: editing or deleting one never touches a user. Deleting a user clears the contact's `user_id`.
+- **Backend:**
+  - `PhoneBookController` rewritten for the new table. The old store/update/destroy, which created users with a shared hardcoded password, are gone (#27).
+  - Console: `GET/POST /admin/phone-book`, `PUT/DELETE /admin/phone-book/{id}`, logged as PHONE_BOOK_CREATE/UPDATE/DELETE.
+  - App: `GET /phone-book`, `/phone-book/{id}`, read-only, behind `is_phone_book_need_shown`.
+  - Rules: name (max 55), phone exactly 10 digits and unique in the phone book, role must exist.
+- **Contract change:** a contact's key is now `id`, with `user_id` (nullable) and `profile_image_url`. `address`, `remarks` and the raw `profile_image` are gone. Updated `types/phoneBook.ts` and `lib/phoneBookApi.ts`.
+- **Console page** (`admin/views/PhoneBookView.vue`, nav "Phone Book"):
+  - Columns: tick box, #, Name, Phone no, Image (the user's picture, or initials), Role, Is active (click to switch, with a confirm).
+  - Row actions: WhatsApp chat (wa.me, 91 prefix), View, Edit, Delete (with a confirm).
+  - Filters on name, phone, role and status; 20 a page or Show all.
+  - Toolbar: WhatsApp copies the ticked numbers for a broadcast list; Export saves the filtered list as CSV; Refresh; New contact.
+  - The modal has Name, Phone no, Role and Active. **Active starts on Yes**; the legacy modal started on No.
+- **App page:** reads the new list; the old "read-only, contacts are users" warning banner was removed.
+- **Shared:** `DataTable` gained an opt-in `header-<key>` slot (used for select-all).
+- **Local setup note:** `public/storage` isn't linked locally (`php artisan storage:link`), so uploaded pictures 404 in local dev on every page.
+- **Tests:**
+  - Backend: new `PhoneBookTest` (5 tests).
+  - Vitest: `phoneBook.spec.ts` (WhatsApp link, copied numbers, CSV).
+  - Playwright: the Phone Book page and modal.
+  - Run: backend 124/124, Vitest 26/26, vue-tsc and build clean, Playwright 12/12.
+  - Postgres: checked with `zz_contact` and `zz_pb_user`; all rows and 7 log rows were removed.
+
+### Admin console — SALARY user form (2026-11-23)
+
+Built from the legacy salary form. Salary people don't sign in (user's decision).
+
+- **Profile** (`UserFormProfiles::SALARY`):
+  - Sections: Additional phone no, Head lists, items, balances (read-only), image, profile picture, Aadhar number and front/back images, salary person with per-day salary, joining date.
+  - Only permission: `is_salary_person`.
+  - Left out: cash heads, customer comments and touches, contact, remarks, report password, the permission switches.
+- **Additional Phone No** (new column `user_details.additional_phone_no`, migration `2026_11_23_000000`, **applied on Aiven**):
+  - Optional; exactly 10 digits; must differ from the user's own phone.
+  - Unique across both phone columns, in both directions: an additional number can't be anyone's main or additional number, and a main number can't be anyone's additional number.
+  - Shown on the SALARY form only for now (user's decision). Roles without a profile get the full form, so they show it too.
+- **Defaults on a new salary user:** GRAMS, GOLD as the primary item (none exists on Aiven yet), salary person YES, joining date today.
+- **New profile settings:** `default_flags` and `joining_date_defaults_to_today`.
+- **Role change on create:** the category and default permissions now follow the new role (`applyRoleDefaults`). Before, a category from the previous role stuck.
+- **Fixed:** the "… created." notice was blank for roles without a Name; it now uses the user name.
+- **Tests:**
+  - Backend: new `AdminSalaryFormTest` (5 tests).
+  - Vitest: `applyRoleDefaults`.
+  - Playwright: the SALARY form.
+  - Run: backend 119/119, Vitest 23/23, vue-tsc and build clean, Playwright 11/11.
+  - Postgres: checked with a `zz_salary` user; it and its 4 log rows were removed.
+
 ### Admin console — CUSTOMER user form (2026-11-23)
 
 Built from the legacy customer form. Customers are records for tracking gold and cash; they don't sign in (user's decision).
@@ -120,7 +217,7 @@ and switching a role off also stops its users signing in.
 
 **Where things stand:**
 - The admin console's Users page is done for the **ADMIN and HEAD** roles: a role-driven form, and the app showing a user only what's switched on.
-- The other roles (EMPLOYEE, CUSTOMER, SALARY, PUR/SALE, CHIT, INVEST, JOB WORK) still get the full form. The user will send their screens next, then the remaining pages, one at a time.
+- The other roles (EMPLOYEE, PUR/SALE, CHIT, INVEST, JOB WORK) still get the full form; CUSTOMER and SALARY were done 2026-11-23. The user will send their screens next, then the remaining pages, one at a time.
 - The workflow (plan → confirm → build → test → report) and the testing checklist are in `.claude/rules/schainserp-product.md`.
 
 **Test tooling added:**

@@ -79,11 +79,11 @@ class AdminCustomerFormTest extends TestCase
         );
         $this->assertEqualsCanonicalizing(self::FLAGS, $customer['flags']);
 
-        // Other roles still sign in and have no defaults.
+        // HEAD still signs in; its own defaults are BOTH and GOLD (2026-11-24).
         $head = $this->getJson('/api/v1/admin/user-form-profiles')->json('data.by_role_id.' . $this->headRole->id);
         $this->assertTrue($head['signs_in']);
-        $this->assertNull($head['default_category']);
-        $this->assertNull($head['default_primary_item']);
+        $this->assertSame('BOTH', $head['default_category']);
+        $this->assertSame('GOLD', $head['default_primary_item']);
     }
 
     public function test_a_customer_is_created_without_a_name_or_password(): void

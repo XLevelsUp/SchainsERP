@@ -16,6 +16,8 @@ import { createUserDetailsApi } from '@/lib/userDetailsApi'
 import type {
   CustomerTouch,
   Item,
+  OpeningBalanceField,
+  OpeningBalanceInput,
   Role,
   UserDetailFormValues,
   UserDetailListItem,
@@ -27,6 +29,8 @@ import type {
 import { adminApi, adminApiWithSpecialPassword } from '../../lib/adminApi'
 import { userDetailsApi } from '../../lib/resources'
 import {
+  addDefaultPrimaryItem,
+  applyRoleDefaults,
   FULL_USER_FORM_PROFILE,
   employeeIdsOf,
   flagGroupsFor,
@@ -38,6 +42,9 @@ import {
 } from '../../lib/userForm'
 import { profileForRole } from '../../lib/userFormProfiles'
 import { isValidPhone, PHONE_ERROR, PHONE_LENGTH, phoneDigits } from '@/lib/phone'
+import { addDecimal, OPENING_FIELD_LABELS, pendingFor, unitOf } from '@/lib/openingBalance'
+import { useToastStore } from '@/stores/toast'
+import OpeningBalanceModal from './OpeningBalanceModal.vue'
 
 /*
 |--------------------------------------------------------------------------
@@ -49,8 +56,11 @@ import { isValidPhone, PHONE_ERROR, PHONE_LENGTH, phoneDigits } from '@/lib/phon
 | with no profile of its own gets the full form.
 |
 | - Role is picked on create and read-only on edit (the sections follow it).
-| - Item totals and balances are read-only: they're kept by transactions. An
-|   item that still holds a balance can't be changed or removed.
+| - Item totals and balances can't be typed in: transactions keep them. The
+|   only manual change is the opening balance modal (Grams / Purity on each
+|   item, GRAMS / PURITY / CASH / RTGS on the balances), which is recorded
+|   and needs the special password (2026-11-24). An item that still holds a
+|   balance can't be changed or removed.
 | - Assigning heads needs the special password: on create when heads are
 |   chosen, on edit only when the heads changed (then the whole set is sent).
 |--------------------------------------------------------------------------
@@ -74,6 +84,7 @@ const props = defineProps<{
 const emit = defineEmits<{ saved: [message: string]; close: [] }>()
 
 const isEditing = computed(() => props.editingId !== null)
+const toast = useToastStore()
 
 const form = reactive<UserDetailFormValues>(makeEmptyUserForm())
 const isLoadingUser = ref(false)
@@ -104,6 +115,7 @@ onMounted(async () => {
     const { user, profile_image_url, aadhar_image_url, image_url, aadhar_back_image_url } =
       await userDetailsApi.get(props.editingId)
     Object.assign(form, userToForm(user))
+    savedItemIds.value = form.item_mappings.map((row) => row.item_id).filter((id): id is number => id !== null)
     initialRoleId.value = form.role_id
     initialHeadIds.value = headIdsOf(form.head_mappings)
     initialCashHeadIds.value = headIdsOf(form.cash_head_mappings)
@@ -143,20 +155,29 @@ function has(section: UserFormSection): boolean {
 // copies the user name into the name and sets a random password.
 const signsIn = computed(() => profile.value?.signs_in !== false)
 
-// A new user starts with the role's defaults (CUSTOMER: category PURITY and
-// GOLD as the primary item), unless the admin already chose a category or
-// added items. The admin can change both; editing never applies them.
-watch(profile, (next) => {
+// A new user starts with the role's defaults (CUSTOMER: PURITY and GOLD;
+// SALARY: GRAMS, GOLD, salary person YES, joining today). The admin can
+// change them; editing never applies them. See applyRoleDefaults.
+watch(profile, (next, previous) => {
   if (isEditing.value || !next) return
-  if (next.default_category && !form.category_name) form.category_name = next.default_category
-  const itemName = next.default_primary_item?.toUpperCase()
-  if (itemName && next.sections.includes('items') && !form.item_mappings.length) {
-    const item = props.items.find((i) => i.item_name.trim().toUpperCase() === itemName)
-    if (item) {
-      form.item_mappings.push({ item_id: item.item_id, item_grams_total: '0', item_purity_total: '0', is_primary: 1 })
-    }
+  applyRoleDefaults(form, next, previous ?? null, props.items)
+  // Waiting opening balances the new role's form has no place for go.
+  if (form.opening_balances?.length) {
+    form.opening_balances = form.opening_balances.filter((e) =>
+      next.sections.includes(e.item_id !== null ? 'items' : 'balances'),
+    )
   }
 })
+
+// The items list can arrive after the role was picked: add the primary item
+// then, on its first load only, so a row the admin removed stays removed.
+watch(
+  () => props.items,
+  (next, previous) => {
+    if (isEditing.value || !profile.value || previous?.length || !next.length) return
+    addDefaultPrimaryItem(form, profile.value, next)
+  },
+)
 
 const roleName = computed(
   () => props.roles.find((r) => String(r.id) === String(form.role_id))?.role ?? '—',
@@ -239,6 +260,11 @@ const sendsHeads = computed(
     (has('cash_heads') && cashHeadsChanged.value) ||
     (has('head_users') && headUsersChanged.value),
 )
+// A new user's opening balances need it too (an existing user's are saved
+// from the modal, which asks for it there).
+const needsSpecialPassword = computed(
+  () => sendsHeads.value || (!isEditing.value && (form.opening_balances?.length ?? 0) > 0),
+)
 
 const salaryOptions = [
   { value: true, label: 'Yes' },
@@ -266,12 +292,150 @@ function removeItem(index: number) {
   form.item_mappings.splice(index, 1)
 }
 
+// Including a new user's waiting opening balances.
 const itemsGramsTotal = computed(() =>
-  form.item_mappings.reduce((sum, row) => sum + Number(row.item_grams_total || 0), 0),
+  form.item_mappings.reduce((sum, row) => addDecimal(sum, rowFigure(row, 'ITEM_GRAMS')), '0'),
 )
 const itemsPurityTotal = computed(() =>
-  form.item_mappings.reduce((sum, row) => sum + Number(row.item_purity_total || 0), 0),
+  form.item_mappings.reduce((sum, row) => addDecimal(sum, rowFigure(row, 'ITEM_PURITY')), '0'),
 )
+
+// ---- opening balance updates (2026-11-24) ------------------------------------
+//
+// Each item's Grams / Purity and the GRAMS / PURITY / CASH / RTGS balances
+// open the opening balance modal (closing = previous + value).
+//  - New user: the entry waits in form.opening_balances and is saved with
+//    the user (the save then needs the special password). Figures on the
+//    form include what's waiting; an item update moves its grand total too.
+//  - Existing user: saved straight away (special password in the modal),
+//    then the figures are refreshed from the response. Only for items the
+//    user already had when the form opened: a newly added row has to be
+//    saved first.
+
+const pendingOpenings = computed(() => form.opening_balances ?? [])
+// Item ids the edited user had when the form opened.
+const savedItemIds = ref<number[]>([])
+
+type RowFigure = 'ITEM_GRAMS' | 'ITEM_PURITY'
+type MappingRow = UserDetailFormValues['item_mappings'][number]
+
+function rowFigure(row: MappingRow, field: RowFigure): string {
+  const base = field === 'ITEM_GRAMS' ? row.item_grams_total : row.item_purity_total
+  return addDecimal(base, pendingFor(pendingOpenings.value, field, row.item_id))
+}
+
+const shownBalances = computed(() => {
+  const base = balances.value ?? { grams: 0, purity: 0, cash: 0, rtgs: 0 }
+  const pending = pendingOpenings.value
+  return {
+    grams: addDecimal(base.grams, pendingFor(pending, 'GRAMS')),
+    purity: addDecimal(base.purity, pendingFor(pending, 'PURITY')),
+    cash: addDecimal(base.cash, pendingFor(pending, 'CASH')),
+    rtgs: addDecimal(base.rtgs, pendingFor(pending, 'RTGS')),
+  }
+})
+
+// A waiting entry goes when its item leaves the list.
+watch(
+  () => form.item_mappings.map((row) => row.item_id),
+  (ids) => {
+    if (!form.opening_balances?.length) return
+    form.opening_balances = form.opening_balances.filter((e) => e.item_id === null || ids.includes(e.item_id))
+  },
+)
+
+function itemName(itemId: number | null): string {
+  return props.items.find((i) => i.item_id === itemId)?.item_name ?? 'Item'
+}
+
+function canUpdateRow(row: MappingRow): boolean {
+  if (row.item_id === null) return false
+  return !isEditing.value || savedItemIds.value.includes(row.item_id)
+}
+
+const openingTarget = ref<{ field: OpeningBalanceField; itemId: number | null; title: string; previous: string } | null>(
+  null,
+)
+const openingSubmitting = ref(false)
+const openingError = ref('')
+
+function openRowOpening(row: MappingRow, field: RowFigure) {
+  if (!canUpdateRow(row)) return
+  openingError.value = ''
+  openingTarget.value = {
+    field,
+    itemId: row.item_id,
+    title: `Opening balance — ${itemName(row.item_id)} ${field === 'ITEM_GRAMS' ? 'grams' : 'purity'}`,
+    previous: rowFigure(row, field),
+  }
+}
+
+const BALANCE_KEYS = { GRAMS: 'grams', PURITY: 'purity', CASH: 'cash', RTGS: 'rtgs' } as const
+
+function openBalanceOpening(field: keyof typeof BALANCE_KEYS) {
+  openingError.value = ''
+  openingTarget.value = {
+    field,
+    itemId: null,
+    title: `Opening balance — ${OPENING_FIELD_LABELS[field]}`,
+    previous: shownBalances.value[BALANCE_KEYS[field]],
+  }
+}
+
+function removePendingOpening(index: number) {
+  form.opening_balances = pendingOpenings.value.filter((_, i) => i !== index)
+}
+
+function pendingLabel(entry: OpeningBalanceInput): string {
+  const what = entry.item_id !== null ? `${itemName(entry.item_id)} ${OPENING_FIELD_LABELS[entry.field].toLowerCase()}` : OPENING_FIELD_LABELS[entry.field]
+  const sign = entry.value.startsWith('-') ? '' : '+'
+  return `${what}: ${sign}${entry.value} ${unitOf(entry.field)}`
+}
+
+async function saveOpening(input: { value: string; remarks: string; specialPassword: string }) {
+  const target = openingTarget.value
+  if (!target || openingSubmitting.value) return
+  const entry: OpeningBalanceInput = { field: target.field, item_id: target.itemId, value: input.value, remarks: input.remarks }
+
+  if (props.editingId === null) {
+    form.opening_balances = [...pendingOpenings.value, entry]
+    openingTarget.value = null
+    return
+  }
+
+  openingSubmitting.value = true
+  openingError.value = ''
+  try {
+    const result = await createUserDetailsApi(adminApiWithSpecialPassword(input.specialPassword)).openingBalance(
+      props.editingId,
+      entry,
+    )
+    const b = result.balances
+    balances.value = {
+      grams: Number(b.grams_grand_total),
+      purity: Number(b.purity_grand_total),
+      cash: Number(b.rak_cash_balance),
+      rtgs: Number(b.rak_rtgs_balance),
+    }
+    if (b.item) {
+      const row = form.item_mappings.find((r) => r.item_id === b.item?.item_id)
+      if (row) {
+        row.item_grams_total = b.item.item_grams_total
+        row.item_purity_total = b.item.item_purity_total
+      }
+    }
+    openingTarget.value = null
+    toast.show(`Balance updated: closing ${result.update.closing_balance} ${unitOf(target.field)}.`, 'success')
+  } catch (err) {
+    if (err instanceof ApiError) {
+      openingError.value = err.errors ? Object.values(err.errors)[0]?.[0] ?? err.message : err.message
+    } else {
+      openingError.value = 'Failed to update the balance.'
+    }
+  } finally {
+    openingSubmitting.value = false
+  }
+}
 
 // ---- customer touches ------------------------------------------------------
 
@@ -358,6 +522,13 @@ function validate(): boolean {
   else if (text(form.user_name).length > 55) fieldErrors.user_name = 'User name must be 55 characters or fewer.'
   if (!text(form.phone_no)) fieldErrors.phone_no = 'Phone number is required.'
   else if (!isValidPhone(form.phone_no)) fieldErrors.phone_no = PHONE_ERROR
+  if (has('additional_phone') && text(form.additional_phone_no ?? '')) {
+    const additional = text(form.additional_phone_no ?? '')
+    if (!isValidPhone(additional)) fieldErrors.additional_phone_no = 'Additional phone number must be exactly 10 digits.'
+    else if (additional === text(form.phone_no)) {
+      fieldErrors.additional_phone_no = 'Additional phone number must differ from the phone number.'
+    }
+  }
   if (!form.category_name) fieldErrors.category_name = 'Category is required.'
   if (signsIn.value && !isEditing.value && form.password.trim().length < 6) {
     fieldErrors.password = 'Password is required (min 6 characters).'
@@ -423,8 +594,10 @@ function validate(): boolean {
     fieldErrors.report_password = 'Report password must be at least 4 characters.'
   }
 
-  if (sendsHeads.value && !specialPassword.value) {
-    fieldErrors.special_password = 'Enter your special password to assign heads.'
+  if (needsSpecialPassword.value && !specialPassword.value) {
+    fieldErrors.special_password = sendsHeads.value
+      ? 'Enter your special password to assign heads.'
+      : 'Enter your special password to save the opening balances.'
   }
 
   const first = Object.values(fieldErrors)[0]
@@ -435,14 +608,20 @@ function validate(): boolean {
   return true
 }
 
+// A role that doesn't sign in has no Name on the form; its name is the user name.
+function savedName(): string {
+  return (signsIn.value ? form.name : form.user_name).trim()
+}
+
 async function handleSubmit() {
   if (isSaving.value || !validate()) return
 
   isSaving.value = true
   try {
-    // A one-off client carrying the special password, only when heads go out.
+    // A one-off client carrying the special password, only when heads or
+    // opening balances go out.
     const api = createUserDetailsApi(
-      sendsHeads.value ? adminApiWithSpecialPassword(specialPassword.value) : adminApi,
+      needsSpecialPassword.value ? adminApiWithSpecialPassword(specialPassword.value) : adminApi,
     )
     // Sections the role doesn't have are left as they are: the backend drops
     // them anyway, and an image picked before switching roles isn't sent.
@@ -459,10 +638,10 @@ async function handleSubmit() {
         includeItemMappings: has('items'),
         includeHeadMappings: sendsHeads.value,
       })
-      emit('saved', `${form.name} updated.`)
+      emit('saved', `${savedName()} updated.`)
     } else {
       await api.create(values)
-      emit('saved', `${form.name} created.`)
+      emit('saved', `${savedName()} created.`)
     }
   } catch (err) {
     if (err instanceof ApiError) {
@@ -560,6 +739,17 @@ const errorFor = (prefix: string) =>
           placeholder="10 digits"
           :sanitize="phoneDigits"
           :error="fieldErrors.phone_no"
+        />
+        <BaseInput
+          v-if="has('additional_phone')"
+          id="user_additional_phone"
+          v-model="form.additional_phone_no"
+          label="Additional phone no"
+          inputmode="numeric"
+          :maxlength="PHONE_LENGTH"
+          placeholder="10 digits (optional)"
+          :sanitize="phoneDigits"
+          :error="fieldErrors.additional_phone_no"
         />
         <BaseInput
           v-if="signsIn"
@@ -664,8 +854,8 @@ const errorFor = (prefix: string) =>
             <div>
               <h3 class="text-sm font-semibold text-slate-900">Items</h3>
               <p class="text-xs text-slate-500">
-                Totals are kept by transactions and can't be edited here. An item that holds a
-                balance can't be changed or removed.
+                Totals change through transactions, or the Grams / Purity opening balance buttons
+                (recorded). An item that holds a balance can't be changed or removed.
               </p>
             </div>
             <BaseButton variant="secondary" type="button" :icon="Plus" @click="addItem">Add item</BaseButton>
@@ -696,14 +886,34 @@ const errorFor = (prefix: string) =>
             <div>
               <span class="mb-1 block text-xs font-medium text-slate-600">Grams total (g)</span>
               <div class="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-right text-sm text-slate-700 tabular-nums">
-                {{ grams(row.item_grams_total) }}
+                {{ grams(rowFigure(row, 'ITEM_GRAMS')) }}
               </div>
+              <button
+                type="button"
+                class="mt-1 rounded border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="!canUpdateRow(row)"
+                :title="canUpdateRow(row) ? 'Opening balance update' : row.item_id === null ? 'Pick the item first' : 'Save the user first, then update this item'"
+                :aria-label="`Update ${itemName(row.item_id)} grams`"
+                @click="openRowOpening(row, 'ITEM_GRAMS')"
+              >
+                Grams
+              </button>
             </div>
             <div>
               <span class="mb-1 block text-xs font-medium text-slate-600">Purity total (g)</span>
               <div class="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-right text-sm text-slate-700 tabular-nums">
-                {{ grams(row.item_purity_total) }}
+                {{ grams(rowFigure(row, 'ITEM_PURITY')) }}
               </div>
+              <button
+                type="button"
+                class="mt-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="!canUpdateRow(row)"
+                :title="canUpdateRow(row) ? 'Opening balance update' : row.item_id === null ? 'Pick the item first' : 'Save the user first, then update this item'"
+                :aria-label="`Update ${itemName(row.item_id)} purity`"
+                @click="openRowOpening(row, 'ITEM_PURITY')"
+              >
+                Purity
+              </button>
             </div>
             <button
               type="button"
@@ -719,27 +929,55 @@ const errorFor = (prefix: string) =>
           <p v-if="fieldErrors.item_mappings" class="text-sm text-red-600">{{ fieldErrors.item_mappings }}</p>
         </section>
 
-        <!-- Balances (read-only) -->
-        <section v-if="has('balances') && isEditing && balances" class="border-t border-slate-200 pt-5">
+        <!-- Balances: changed only through the opening balance modal -->
+        <section v-if="has('balances') && (!isEditing || balances)" class="border-t border-slate-200 pt-5">
           <h3 class="mb-3 text-sm font-semibold text-slate-900">Balances</h3>
           <dl class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <dt class="text-xs text-slate-500">Grams grand total (g)</dt>
-              <dd class="text-right text-sm font-semibold text-slate-900 tabular-nums">{{ grams(balances.grams) }}</dd>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <dt class="text-xs text-slate-500">Purity grand total (g)</dt>
-              <dd class="text-right text-sm font-semibold text-slate-900 tabular-nums">{{ grams(balances.purity) }}</dd>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <dt class="text-xs text-slate-500">Cash balance (₹)</dt>
-              <dd class="text-right text-sm font-semibold text-slate-900 tabular-nums">{{ money(balances.cash) }}</dd>
-            </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <dt class="text-xs text-slate-500">RTGS balance (₹)</dt>
-              <dd class="text-right text-sm font-semibold text-slate-900 tabular-nums">{{ money(balances.rtgs) }}</dd>
+            <div
+              v-for="card in [
+                { field: 'GRAMS', label: 'Grams grand total (g)', value: grams(shownBalances.grams) },
+                { field: 'PURITY', label: 'Purity grand total (g)', value: grams(shownBalances.purity) },
+                { field: 'CASH', label: 'Cash balance (₹)', value: money(Number(shownBalances.cash)) },
+                { field: 'RTGS', label: 'RTGS balance (₹)', value: money(Number(shownBalances.rtgs)) },
+              ] as const"
+              :key="card.field"
+              class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <dt class="text-xs text-slate-500">{{ card.label }}</dt>
+                <button
+                  type="button"
+                  class="rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-red-700 hover:bg-red-100"
+                  :aria-label="`Update ${card.label}`"
+                  title="Opening balance update"
+                  @click="openBalanceOpening(card.field)"
+                >
+                  {{ card.field }}
+                </button>
+              </div>
+              <dd class="mt-1 text-right text-sm font-semibold text-slate-900 tabular-nums">{{ card.value }}</dd>
             </div>
           </dl>
+          <div v-if="pendingOpenings.length" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <p class="mb-1 text-xs font-medium text-amber-800">Opening balances saved with the user:</p>
+            <ul class="flex flex-col gap-1">
+              <li
+                v-for="(entry, index) in pendingOpenings"
+                :key="index"
+                class="flex items-center justify-between gap-2 text-xs text-amber-900 tabular-nums"
+              >
+                <span>{{ pendingLabel(entry) }}<template v-if="entry.remarks.trim()"> · {{ entry.remarks.trim() }}</template></span>
+                <button
+                  type="button"
+                  class="rounded p-0.5 text-amber-700 hover:bg-amber-100"
+                  :aria-label="`Remove ${pendingLabel(entry)}`"
+                  @click="removePendingOpening(index)"
+                >
+                  <Trash2 class="h-3.5 w-3.5" />
+                </button>
+              </li>
+            </ul>
+          </div>
           <p
             v-if="has('items') && form.item_mappings.length"
             class="mt-2 text-xs text-slate-500 tabular-nums"
@@ -981,8 +1219,8 @@ const errorFor = (prefix: string) =>
           </div>
         </section>
 
-        <!-- Special password, when heads go out -->
-        <section v-if="sendsHeads" class="border-t border-slate-200 pt-5">
+        <!-- Special password, when heads or opening balances go out -->
+        <section v-if="needsSpecialPassword" class="border-t border-slate-200 pt-5">
           <div class="max-w-sm">
             <BaseInput
               id="user_special_password"
@@ -990,12 +1228,15 @@ const errorFor = (prefix: string) =>
               label="Special password"
               type="password"
               autocomplete="off"
-              placeholder="Required to assign heads"
+              :placeholder="sendsHeads ? 'Required to assign heads' : 'Required for the opening balances'"
               required
               :error="fieldErrors.special_password"
             />
             <p class="mt-1 text-xs text-slate-500">
-              {{ isEditing ? 'You changed this user’s head assignments.' : 'You assigned heads.' }}
+              <template v-if="sendsHeads">
+                {{ isEditing ? 'You changed this user’s head assignments.' : 'You assigned heads.' }}
+              </template>
+              <template v-if="!isEditing && pendingOpenings.length">You entered opening balances.</template>
               That needs your special password.
             </p>
           </div>
@@ -1015,5 +1256,17 @@ const errorFor = (prefix: string) =>
         </BaseButton>
       </div>
     </form>
+
+    <OpeningBalanceModal
+      v-if="openingTarget"
+      :title="openingTarget.title"
+      :field="openingTarget.field"
+      :previous="openingTarget.previous"
+      :requires-password="isEditing"
+      :submitting="openingSubmitting"
+      :error="openingError"
+      @save="saveOpening"
+      @close="openingTarget = null"
+    />
   </BaseCard>
 </template>

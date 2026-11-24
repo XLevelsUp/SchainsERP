@@ -1,3 +1,5 @@
+import type { OpeningBalanceInput } from './openingBalance'
+
 export type CategoryName = 'GRAMS' | 'PURITY' | 'BOTH'
 
 // GET /user-details (index) — PR #15 changed this to a flattened, formatted
@@ -71,6 +73,8 @@ export interface UserDetail extends Partial<UserFeatureFlags> {
   per_day_salary?: string | number | null
   // HEAD form (2026-11-21).
   aadhar_number?: string | null
+  // SALARY form (2026-11-23): optional, 10 digits, unique across both phones.
+  additional_phone_no?: string | null
   // The report password itself is never sent back.
   has_report_password?: boolean
   added_at?: string
@@ -248,6 +252,11 @@ export interface UserDetailFormValues extends UserFeatureFlags {
   image_file?: File | null
   // '' = 0. Only sent when the role has the salary section.
   per_day_salary?: string
+  // SALARY form (2026-11-23). '' = none.
+  additional_phone_no?: string
+  // A new user's opening balances, filled in the console's modals and sent
+  // with the create request (2026-11-24). Never sent on update.
+  opening_balances?: OpeningBalanceInput[]
   // Blank keeps the current one.
   report_password?: string
 }

@@ -105,6 +105,8 @@ class UserDetail extends Model
         'is_item_change_need_shown',
         'is_item_conversion_need_shown',
         'is_phone_book_need_shown',
+        // SALARY user form (2026-11-23).
+        'additional_phone_no',
         'grams_grand_total',
         'purity_grand_total',
         'rak_cash_balance',

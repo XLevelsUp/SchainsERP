@@ -34,6 +34,10 @@ class LogAdminAction
         'admin.cash-head-employee-mappings.store' => ['CASH_HEAD_ASSIGN', 'cash_head_employee_mappings', null],
         'admin.cash-head-employee-mappings.update' => ['CASH_HEAD_ASSIGN', 'cash_head_employee_mappings', 'cash_head_employee_mapping'],
         'admin.cash-head-employee-mappings.destroy' => ['CASH_HEAD_UNASSIGN', 'cash_head_employee_mappings', 'cash_head_employee_mapping'],
+        'admin.user-details.opening-balance' => ['OPENING_BALANCE_UPDATE', 'user_details', 'user_detail'],
+        'admin.phone-book.store' => ['PHONE_BOOK_CREATE', 'phone_book', 'response:data.id'],
+        'admin.phone-book.update' => ['PHONE_BOOK_UPDATE', 'phone_book', 'phone_book'],
+        'admin.phone-book.destroy' => ['PHONE_BOOK_DELETE', 'phone_book', 'phone_book'],
         'admin.account.password' => ['ADMIN_PASSWORD_CHANGE', 'admins', null],
         'admin.account.special-password' => ['ADMIN_SPECIAL_PASSWORD_CHANGE', 'admins', null],
     ];

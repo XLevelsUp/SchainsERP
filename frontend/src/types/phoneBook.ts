@@ -1,39 +1,43 @@
-// GET /phone-book — PR #37, testing doc sections 48-52.
+// The phone book (2026-11-24, App\Http\Controllers\Api\PhoneBookController).
 //
-// A paginated, searchable projection of `user_details`. It is the same
-// table the Users and Clients screens read and the stock/cash pickers
-// select from — not a separate contacts entity — so a row here can be a
-// head, an employee, a customer or a retailer.
+// Its own list of contacts, not the users table: every user was copied in
+// once, and each user the admin console creates is added. Editing or
+// deleting a contact never changes a user.
 //
-// Only the read half is modelled. `PhoneBookController::store()` mints a
-// real ERP login for every contact it creates (`user_name` = "pb_" plus a
-// timestamp, password a hardcoded constant), `update()` writes to the same
-// shared row the Users screen edits, and `destroy()` sets is_delete /
-// is_active on it. Those are deliberately not wrapped here — see
-// PENDING_WORK.md #27.
+//  - Admin console: GET/POST /admin/phone-book, PUT/DELETE /admin/phone-book/{id}.
+//  - App: GET /phone-book and /phone-book/{id}, read-only (the "Phone book
+//    shown" permission).
 
 export interface PhoneBookRole {
   id: number | null
-  // Was always null — the resource read `role_name`, but the roles table
-  // column is `role`. Fixed server-side in PR #48 (PENDING_WORK.md #26);
-  // this JSON key name is unchanged, only its value now actually populates.
   role_name: string | null
 }
 
 export interface PhoneBookContact {
-  user_id: number
+  id: number
   name: string
-  // `phone_no` here, not the `phone_number` the flattened user-details list
-  // returns for the same column.
+  // Exactly 10 digits for new and edited contacts; numbers copied from
+  // users are kept as they were until their next save.
   phone_no: string
-  // A raw storage path such as "profile_images/abc.jpg", not a URL —
-  // unlike GET /user-details/{id}, which returns a resolved
-  // profile_image_url alongside the record.
-  profile_image: string | null
+  role_id: number | null
   is_active: boolean
-  // Only present when the controller eager-loaded the relation, which the
-  // index does and the show does not.
+  // The user this contact was copied from, if any (null once that user is
+  // deleted).
+  user_id: number | null
+  // That user's profile picture; null for other contacts.
+  profile_image_url: string | null
+  // Loaded on every list and show.
   role?: PhoneBookRole
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+// The modal's fields (POST / PUT body).
+export interface PhoneBookFormValues {
+  name: string
+  phone_no: string
+  role_id: number | null
+  is_active: boolean
 }
 
 export type PhoneBookSort = 'name' | '-name' | 'phone_no' | '-phone_no' | 'is_active' | '-is_active'
@@ -41,12 +45,16 @@ export type PhoneBookSort = 'name' | '-name' | 'phone_no' | '-phone_no' | 'is_ac
 export interface PhoneBookQuery {
   page?: number
   per_page?: number
-  // Matched against name and phone_no with ILIKE, so it is
-  // case-insensitive and matches anywhere in the value.
+  // Name or phone, case-insensitive, anywhere in the value.
   search?: string
+  // The console's column filters.
+  name?: string
+  phone_no?: string
   is_active?: boolean
   role_id?: number
   sort?: PhoneBookSort
+  // Every contact on one page (the console loads the whole list).
+  all?: boolean
 }
 
 // Laravel's paginator, unwrapped one level by the controller: the outer

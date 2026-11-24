@@ -36,14 +36,10 @@ import type { CategoryName, UserDetailFormValues } from '@/types'
 | validation rules, not the doc). None of the synthesized values are ever
 | shown anywhere; the retailer is addressed by name/phone from here on.
 |
-| Same pattern PhoneBookController::store() already uses server-side for
-| its own "just needs a name and phone" contacts (auto user_name, hardcoded
-| signature/code/proff) — but PhoneBook hardcodes system_id to a literal
-| '-' for every contact, which would violate store()'s
-| `unique:user_details,system_id` on the second retailer ever created
-| (PhoneBook bypasses that validator with its own weaker one; this modal
-| goes through the real one, since userDetailsApi.create() is
-| POST /user-details, so it has to satisfy it for real).
+| system_id is stamped rather than a literal '-', because store() validates
+| it as `unique:user_details,system_id`. (The old phone book's create route
+| used '-' for every contact; since 2026-11-24 the phone book is its own
+| table and no longer creates users.)
 |
 | role_id: resolved by name ("CUSTOMER") from GET /roles rather than
 | hardcoding RoleSeeder's numeric id — this codebase has a running history

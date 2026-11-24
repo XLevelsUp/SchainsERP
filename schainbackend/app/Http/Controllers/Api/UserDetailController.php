@@ -9,6 +9,7 @@ use App\Models\UserDetail;
 use App\Rules\HeadUser;
 use App\Support\AdminAccess;
 use App\Support\HeadUsers;
+use App\Support\UserFormProfiles;
 use App\Models\UsersItemsMapping;
 use App\Models\HeadEmployeeMapping;
 use App\Models\CashHeadEmployeeMapping;
@@ -63,7 +64,88 @@ class UserDetailController extends Controller
     private const PHONE_MESSAGES = [
         'phone_no.regex' => 'Phone number must be exactly 10 digits.',
         'phone_no.unique' => 'Another user already has this phone number.',
+        'additional_phone_no.regex' => 'Additional phone number must be exactly 10 digits.',
+        'additional_phone_no.unique' => 'Another user already has this phone number.',
     ];
+
+    /*
+    | The SALARY form's additional phone (agreed 2026-11-23): optional, and
+    | when set the same 10-digit rule. No number may belong to two users,
+    | whichever column holds it, so each phone is also checked against the
+    | other column. $ignoreId is the user being edited.
+    */
+    private static function phoneRules(?int $ignoreId = null): array
+    {
+        $ignore = $ignoreId !== null ? ",{$ignoreId},user_id" : '';
+
+        return [
+            'phone_no' => [
+                $ignoreId !== null ? 'sometimes' : 'required',
+                'string',
+                self::PHONE_PATTERN,
+                "unique:user_details,phone_no{$ignore}",
+                "unique:user_details,additional_phone_no{$ignore}",
+            ],
+            'additional_phone_no' => [
+                'nullable',
+                'string',
+                self::PHONE_PATTERN,
+                "unique:user_details,additional_phone_no{$ignore}",
+                "unique:user_details,phone_no{$ignore}",
+            ],
+        ];
+    }
+
+    /*
+    | A new user's opening balances (agreed 2026-11-24): filled in the
+    | console's opening balance modals before the user is saved, applied in
+    | the same save (OpeningBalanceService). Admin console only; the route
+    | asks for the special password when they're sent. Each entry must be on
+    | the role's form, and an item entry must name an item being added.
+    */
+    private static function openingBalanceRules(\Illuminate\Validation\Validator $validator, Request $request): void
+    {
+        if (!AdminAccess::isAdmin($request->user()) || !$request->exists('opening_balances')) {
+            return;
+        }
+
+        $validator->addRules(['opening_balances' => 'array|max:100'] + \App\Services\OpeningBalanceService::rules('opening_balances.*.'));
+        $validator->setCustomMessages(\App\Services\OpeningBalanceService::messages('opening_balances.*.'));
+
+        $validator->after(function ($validator) use ($request) {
+            $profile = UserFormProfiles::forRoleId($request->input('role_id'));
+            $itemIds = collect((array) $request->input('item_mappings', []))->pluck('item_id')->map(fn ($id) => (int) $id);
+
+            foreach ((array) $request->input('opening_balances', []) as $i => $entry) {
+                $field = (string) data_get($entry, 'field');
+                if (!in_array($field, \App\Services\OpeningBalanceService::FIELDS, true)) {
+                    continue; // reported by the rules
+                }
+                if (\App\Services\OpeningBalanceService::sectionFor($field) === 'items') {
+                    if (!in_array('items', $profile['sections'], true)) {
+                        $validator->errors()->add("opening_balances.{$i}.field", 'This role has no items on its form.');
+                    } elseif (!$itemIds->contains((int) data_get($entry, 'item_id'))) {
+                        $validator->errors()->add("opening_balances.{$i}.item_id", "Add this item to the user's items first.");
+                    }
+                } elseif (!in_array('balances', $profile['sections'], true)) {
+                    $validator->errors()->add("opening_balances.{$i}.field", 'This role has no balances on its form.');
+                }
+            }
+        });
+    }
+
+    /** The additional phone can't repeat the user's own main phone. */
+    private static function requireDistinctPhones(\Illuminate\Validation\Validator $validator, Request $request, ?UserDetail $user = null): void
+    {
+        $validator->after(function ($validator) use ($request, $user) {
+            $additional = $request->input('additional_phone_no');
+            $main = $request->exists('phone_no') ? $request->input('phone_no') : $user?->phone_no;
+
+            if (filled($additional) && (string) $additional === (string) $main) {
+                $validator->errors()->add('additional_phone_no', 'Additional phone number must differ from the phone number.');
+            }
+        });
+    }
 
     /*
     | Only HEAD users may be chosen as a user's heads (Head lists, Cash
@@ -86,8 +168,11 @@ class UserDetailController extends Controller
         ]);
     }
 
-    /** Fields of the HEAD form stored straight from the request, on create and edit. */
-    private const HEAD_FORM_FIELDS = ['aadhar_number', 'per_day_salary'];
+    /**
+     * Fields of the HEAD and SALARY forms stored straight from the request,
+     * on create and edit.
+     */
+    private const HEAD_FORM_FIELDS = ['aadhar_number', 'per_day_salary', 'additional_phone_no'];
 
     /** The 2026-11-21 permissions (default off). */
     private const NEW_PERMISSION_FLAGS = [
@@ -317,8 +402,7 @@ class UserDetailController extends Controller
             'code' =>
                 'required|string|max:255',
 
-            'phone_no' =>
-                'required|string|' . self::PHONE_PATTERN . '|unique:user_details,phone_no',
+            ...self::phoneRules(),
 
             'remarks' =>
                 'nullable|string|max:255',
@@ -593,6 +677,8 @@ class UserDetailController extends Controller
         ], self::PHONE_MESSAGES);
 
         self::requireHeadUsers($validator, $request);
+        self::requireDistinctPhones($validator, $request);
+        self::openingBalanceRules($validator, $request);
 
         $validator->after(function ($validator) use ($request) {
             $pwd = $request->input('password') ?? $request->input('new_password');
@@ -1003,6 +1089,23 @@ class UserDetailController extends Controller
                         ->syncHeadUsers($user, $request->input('head_user_mappings'));
                 }
 
+                // Opening balances from the console's modals (2026-11-24), in
+                // this same transaction, after the items exist.
+                if (AdminAccess::isAdmin($request->user()) && $request->filled('opening_balances')) {
+                    $locked = UserDetail::whereKey($user->user_id)->lockForUpdate()->firstOrFail();
+                    $openings = app(\App\Services\OpeningBalanceService::class);
+                    foreach ((array) $request->input('opening_balances') as $i => $entry) {
+                        $openings->apply($locked, $entry, $request->user()->getKey(), "opening_balances.{$i}.value");
+                    }
+                    $user->refresh();
+                }
+
+                // A user the admin console creates goes into the phone book
+                // too (agreed 2026-11-24). Behind a savepoint: it never
+                // undoes the user.
+                if (AdminAccess::isAdmin($request->user())) {
+                    \App\Support\PhoneBookSync::addUser($user);
+                }
 
                 return $user;
             });
@@ -1249,10 +1352,7 @@ class UserDetailController extends Controller
                     'code' =>
                         'sometimes|string|max:255',
 
-                    'phone_no' =>
-                        'sometimes|string|' . self::PHONE_PATTERN . '|unique:user_details,phone_no,' .
-                        $id .
-                        ',user_id',
+                    ...self::phoneRules((int) $user->user_id),
 
                     'remarks' =>
                         'nullable|string|max:255',
@@ -1426,6 +1526,7 @@ class UserDetailController extends Controller
             );
 
             self::requireHeadUsers($validator, $request);
+            self::requireDistinctPhones($validator, $request, $user);
 
             $validator->after(function ($validator) use ($request) {
                 $pwd = $request->input('password') ?? $request->input('new_password');

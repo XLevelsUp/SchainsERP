@@ -104,6 +104,10 @@ const money = (value: number | string | null | undefined) =>
           <dt class="text-xs text-slate-500">Phone no</dt>
           <dd class="text-slate-900 tabular-nums">{{ user.phone_no }}</dd>
         </div>
+        <div v-if="has('additional_phone')">
+          <dt class="text-xs text-slate-500">Additional phone no</dt>
+          <dd class="text-slate-900 tabular-nums">{{ user.additional_phone_no || '—' }}</dd>
+        </div>
         <div>
           <dt class="text-xs text-slate-500">Status</dt>
           <dd :class="user.is_active ? 'text-emerald-700' : 'text-slate-500'">

@@ -27,6 +27,7 @@ final class UserFormProfiles
     /** Optional sections of the user form. */
     public const SECTIONS = [
         'contact',           // address, signature, mailing name
+        'additional_phone',  // "Additional Phone No" (SALARY)
         'remarks',
         'customer_comments',
         'heads',             // the heads a user reports to (stock)
@@ -51,6 +52,7 @@ final class UserFormProfiles
      * address / signature / mailing name, so the form sends placeholders.
      */
     public const SECTION_INPUTS = [
+        'additional_phone' => ['additional_phone_no'],
         'remarks' => ['remarks'],
         'customer_comments' => ['customer_commants'],
         'heads' => ['head_mappings'],
@@ -103,8 +105,36 @@ final class UserFormProfiles
      * copies the user name into the name and sets a random password.
      * default_category / default_primary_item: what a new user of the role
      * starts with on the form; the admin can change both.
+     * default_flags: permissions a new user of the role starts with switched
+     * on (SALARY: is_salary_person). joining_date_defaults_to_today: a new
+     * user's joining date starts as today. Both are form defaults only.
      */
     private const PROFILES = [
+        // The legacy salary user form (2026-11-23). Salary people are records
+        // for wages and tracking: they don't sign in.
+        'SALARY' => [
+            'lock_role_on_edit' => false,
+            'signs_in' => false,
+            'default_category' => 'GRAMS',
+            'default_primary_item' => 'GOLD',
+            'default_flags' => ['is_salary_person'],
+            'joining_date_defaults_to_today' => true,
+            'sections' => [
+                'additional_phone',
+                'heads',
+                'items',
+                'balances',
+                'image',
+                'proof',
+                'profile_image',
+                'salary',
+                'joining_date',
+            ],
+            'flags' => [
+                'is_salary_person',               // Is salary person (with the salary section)
+            ],
+        ],
+
         // The legacy customer form (2026-11-23). Customers are records used to
         // track gold and cash, not accounts: they don't sign in.
         'CUSTOMER' => [
@@ -159,6 +189,10 @@ final class UserFormProfiles
         // app's screens).
         'HEAD' => [
             'lock_role_on_edit' => false,
+            // Agreed 2026-11-24: a new head starts on BOTH, with GOLD as its
+            // primary item (grams and purity 0).
+            'default_category' => 'BOTH',
+            'default_primary_item' => 'GOLD',
             'sections' => [
                 'head_users',
                 'items',
@@ -205,6 +239,8 @@ final class UserFormProfiles
                 'signs_in' => true,
                 'default_category' => null,
                 'default_primary_item' => null,
+                'default_flags' => [],
+                'joining_date_defaults_to_today' => false,
                 'sections' => self::SECTIONS,
                 'flags' => self::FLAG_KEYS,
             ];
@@ -217,6 +253,8 @@ final class UserFormProfiles
             'signs_in' => (bool) ($profile['signs_in'] ?? true),
             'default_category' => $profile['default_category'] ?? null,
             'default_primary_item' => $profile['default_primary_item'] ?? null,
+            'default_flags' => array_values(array_intersect($profile['flags'], $profile['default_flags'] ?? [])),
+            'joining_date_defaults_to_today' => (bool) ($profile['joining_date_defaults_to_today'] ?? false),
             'sections' => array_values(array_intersect(self::SECTIONS, $profile['sections'])),
             'flags' => array_values(array_intersect(self::FLAG_KEYS, $profile['flags'])),
         ];

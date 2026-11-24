@@ -9,6 +9,7 @@ import type { CategoryName, UserFeatureFlagKey } from './userDetail'
 // in (signs_in false).
 export type UserFormSection =
   | 'contact' // address, signature, mailing name
+  | 'additional_phone' // "Additional Phone No" (SALARY, 2026-11-23)
   | 'remarks'
   | 'customer_comments'
   | 'heads' // the heads a user reports to (stock)
@@ -41,6 +42,10 @@ export interface UserFormProfile {
   // and GOLD as the primary item); the admin can change both.
   default_category: CategoryName | null
   default_primary_item: string | null
+  // Permissions a new user of this role starts with on (SALARY:
+  // is_salary_person), and whether the joining date starts as today.
+  default_flags: UserFeatureFlagKey[]
+  joining_date_defaults_to_today: boolean
   sections: UserFormSection[]
   flags: UserFeatureFlagKey[]
 }

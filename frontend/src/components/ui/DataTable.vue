@@ -50,7 +50,8 @@ withDefaults(
               maxHeight ? 'sticky top-0 z-10 shadow-[inset_0_-1px_0_#e2e8f0]' : '',
             ]"
           >
-            {{ column.label }}
+            <!-- Opt-in, e.g. a select-all checkbox; the label otherwise. -->
+            <slot :name="`header-${String(column.key)}`" :column="column">{{ column.label }}</slot>
           </th>
         </tr>
       </thead>

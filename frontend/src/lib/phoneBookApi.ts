@@ -1,45 +1,59 @@
-import { api, type ApiResponse } from './api'
-import type { PhoneBookContact, PhoneBookPage, PhoneBookQuery } from '@/types'
+import { api as appApi, type ApiClient, type ApiResponse } from './api'
+import type { PhoneBookContact, PhoneBookFormValues, PhoneBookPage, PhoneBookQuery } from '@/types'
 
 const RESOURCE = '/phone-book'
 
-// Read-only on purpose. `apiResource('phone-book')` also registers store,
-// update and destroy, and they are not wrapped here because all three write
-// to `user_details` — the same rows the Users screen owns:
-//
-//   store()    injects `user_name` = "pb_<unixtime><rand>" and
-//              `password_hash` = bcrypt('phonebook123'), so every contact
-//              created this way is a working ERP login with a shared,
-//              hardcoded password. AuthController::login does not check
-//              is_active, so switching the contact off would not close it.
-//   update()   writes name/phone/role/address straight onto the shared row,
-//              with no guard for which kind of record it is.
-//   destroy()  sets is_delete = true and is_active = false on that row, so
-//              "deleting a contact" can deactivate a head or a customer
-//              that has live transactions.
-//
-// Flagged as PENDING_WORK.md #27. Contacts are created and edited on the
-// Users screen, which goes through UserDetailController and sets real
-// credentials.
+// The phone book (2026-11-24): its own list of contacts (types/phoneBook.ts).
+// Written against ApiClient so the admin console reuses it with its own
+// client (admin/lib/resources.ts). The app's instance below only reads: the
+// app has no write routes, so create/update/remove exist for the console.
 
 function buildQuery(params: PhoneBookQuery): string {
   const qs = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== '') qs.set(key, String(value))
+    if (value === undefined || value === null || value === '') continue
+    qs.set(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value))
   }
   const s = qs.toString()
   return s ? `?${s}` : ''
 }
 
-export const phoneBookApi = {
-  // GET /phone-book — paginated directory. The envelope's `data` is the
-  // paginator object; the rows sit in `data.data`.
-  list: (params: PhoneBookQuery = {}) =>
-    api.get<ApiResponse<PhoneBookPage>>(`${RESOURCE}${buildQuery(params)}`).then((r) => r.data),
+export function createPhoneBookApi(api: ApiClient) {
+  return {
+    // Paginated; the envelope's `data` is the paginator, rows in `data.data`.
+    list: (params: PhoneBookQuery = {}) =>
+      api.get<ApiResponse<PhoneBookPage>>(`${RESOURCE}${buildQuery(params)}`).then((r) => r.data),
 
-  // GET /phone-book/{id} — returns the full UserDetail row, not the
-  // trimmed PhoneBookResource shape the index uses, and without the role
-  // relation loaded.
-  get: (id: number) =>
-    api.get<ApiResponse<PhoneBookContact>>(`${RESOURCE}/${id}`).then((r) => r.data),
+    // Every contact matching the filters, in one request.
+    listAll: (params: Omit<PhoneBookQuery, 'all' | 'page' | 'per_page'> = {}) =>
+      api
+        .get<ApiResponse<PhoneBookPage>>(`${RESOURCE}${buildQuery({ ...params, all: true })}`)
+        .then((r) => r.data.data),
+
+    get: (id: number) => api.get<ApiResponse<PhoneBookContact>>(`${RESOURCE}/${id}`).then((r) => r.data),
+
+    create: (values: PhoneBookFormValues) =>
+      api.post<ApiResponse<PhoneBookContact>>(RESOURCE, toPayload(values)).then((r) => r.data),
+
+    update: (id: number, values: PhoneBookFormValues) =>
+      api.put<ApiResponse<PhoneBookContact>>(`${RESOURCE}/${id}`, toPayload(values)).then((r) => r.data),
+
+    // Only the status, so a contact whose copied number isn't 10 digits yet
+    // can still be switched on or off.
+    setActive: (id: number, isActive: boolean) =>
+      api.put<ApiResponse<PhoneBookContact>>(`${RESOURCE}/${id}`, { is_active: isActive }).then((r) => r.data),
+
+    remove: (id: number) => api.delete<ApiResponse<{ id: number }>>(`${RESOURCE}/${id}`),
+  }
 }
+
+function toPayload(values: PhoneBookFormValues) {
+  return {
+    name: values.name.trim(),
+    phone_no: values.phone_no.trim(),
+    role_id: values.role_id,
+    is_active: values.is_active,
+  }
+}
+
+export const phoneBookApi = createPhoneBookApi(appApi)

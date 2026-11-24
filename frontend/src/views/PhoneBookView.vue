@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ChevronLeft, ChevronRight, Phone, RefreshCw, Search, TriangleAlert } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Phone, RefreshCw, Search } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
@@ -15,27 +15,17 @@ import type { DataTableColumn } from '@/types/table'
 
 /*
 |--------------------------------------------------------------------------
-| Phone Book — GET /phone-book (PR #37, doc sections 48-52)
+| Phone Book — GET /phone-book (read-only)
 |--------------------------------------------------------------------------
-| A directory over `user_details`: server-side search on name and phone,
-| role and active filters, sorting and pagination. Read-only by design —
-| lib/phoneBookApi.ts explains why the three write routes are not wrapped
-| (they mint logins with a shared password and soft-delete shared rows).
-| Contacts are created and edited on the Users screen.
+| The phone book is its own list of contacts (2026-11-24), kept by admins in
+| the admin console's Phone Book: every user was copied in once, and each
+| user the console creates is added. Here it is read-only, for users with
+| the "Phone book shown" permission (the app has no write routes).
 |
-| This is a fourth view over the same table (Users, Clients and the stock
-| user picker are the others), so it earns its place by being the one that
-| is actually a phone book: the number is the primary column and a tel:
-| link, and search hits the server rather than filtering a page.
-|
-| Search is debounced rather than tied to a button. Every keystroke would
-| otherwise be a request, and the endpoint pages server-side so there is no
-| local list to filter instead.
-|
-| The Role column used to read "—" for every row: the resource asked for
-| `role_name` and the roles table column is `role` (PENDING_WORK.md #26).
-| Fixed server-side in PR #48 — real role names now, no frontend change
-| needed since the JSON key itself never changed.
+| Server-side search on name and phone, role and active filters, sorting
+| and pagination. Search is debounced rather than tied to a button: every
+| keystroke would otherwise be a request, and the endpoint pages
+| server-side, so there is no local list to filter instead.
 |--------------------------------------------------------------------------
 */
 
@@ -155,27 +145,13 @@ onMounted(() => {
 
 <template>
   <div>
-    <PageHeader title="Phone Book" description="Contact directory for heads, staff and customers.">
+    <PageHeader title="Phone Book" description="Everyone's phone numbers. Admins keep this list in the admin console.">
       <template #actions>
         <BaseButton variant="secondary" :icon="RefreshCw" :disabled="isLoading" @click="load()">
           Refresh
         </BaseButton>
       </template>
     </PageHeader>
-
-    <div
-      class="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
-    >
-      <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
-      <p>
-        <strong>Read-only (PENDING_WORK.md #26-27).</strong> Contacts are users: an admin adds
-        and edits them in the admin console (customers can also be quick-added with Add
-        Retailer on the Stock screen). The
-        phone book's own create route issues a working ERP login with a shared hardcoded password,
-        and its delete route deactivates the shared user record, so neither is wired up here. The
-        Role column stays empty until the backend reads the right column.
-      </p>
-    </div>
 
     <BaseCard class="mb-4">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

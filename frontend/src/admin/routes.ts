@@ -28,6 +28,7 @@ export const adminRoutes: RouteRecordRaw[] = [
         component: () => import('./views/HeadEmployeeMappingsView.vue'),
       },
       { path: 'roles', name: 'admin-roles', component: () => import('./views/RolesView.vue') },
+      { path: 'phone-book', name: 'admin-phone-book', component: () => import('./views/PhoneBookView.vue') },
       {
         path: 'account',
         name: 'admin-account',

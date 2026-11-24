@@ -26,6 +26,11 @@ Agreed with the user on 2026-11-21. Applies to all work in this repository, fron
 * **Roles:** create, view, and switch the status (2026-11-23). Name edits and delete were offered and declined (2026-11-21).
   * The status is switched from the Status column and needs the special password.
   * Switching a role off locks its users out of the app: sign-in refuses them (403), and an open session ends on its next request (401, `EnsureAppSession` on every `auth:api` route). Switching it back on lets them in again; their own account status is untouched.
+* **Phone Book** (2026-11-24): its own `phone_book` table (name, phone, role, active), not the users table.
+  * Every user was copied in once (the migration), and each user the console creates is added (`PhoneBookSync`; a number already there is linked, not duplicated).
+  * Editing or deleting a contact never changes a user. `user_id` only links a contact to its user, for the picture.
+  * Phones: exactly 10 digits, unique in the phone book.
+  * The app's Phone Book page reads the same list, read-only (`is_phone_book_need_shown`).
 * **Head Employee Mappings** and **My account** (login password and special password).
 * Other setup screens (items, fitem boxes, customer touch, banks, cash categories, system settings, system logs) stay with heads in the app. **Each page prompt decides** whether a screen belongs in the console or the app; move it then.
 
@@ -35,8 +40,19 @@ Agreed with the user on 2026-11-21. Applies to all work in this repository, fron
 * The console draws the form from `GET /api/v1/admin/user-form-profiles`.
 * `ApplyUserFormProfile` enforces the profile on save.
 * A role without a profile gets the full form.
-* **Profiles so far: ADMIN, HEAD and CUSTOMER.** Add one entry per role as the user specifies it.
-* A profile can also set `signs_in: false` (no Name or Password on the form; the name follows the user name and a random password is set), `default_category` and `default_primary_item` (what a new user starts with). CUSTOMER uses all three (PURITY, GOLD): customers are records for tracking, not accounts.
+* **Profiles so far: ADMIN, HEAD, CUSTOMER and SALARY.** Add one entry per role as the user specifies it.
+* A profile can also set `signs_in: false` (no Name or Password on the form; the name follows the user name and a random password is set), `default_category` and `default_primary_item` (what a new user starts with), `default_flags` (permissions a new user starts with on) and `joining_date_defaults_to_today`. On create, the defaults follow a role change (`applyRoleDefaults` in `admin/lib/userForm.ts`).
+  * CUSTOMER: no sign-in, PURITY, GOLD. Customers are records for tracking, not accounts.
+  * SALARY: no sign-in, GRAMS, GOLD, salary person YES, joining date today, plus an Additional phone no.
+  * HEAD: category BOTH and GOLD as the primary item (2026-11-24).
+  * The GOLD item exists on Aiven since 2026-11-24 (item #9, created with the table defaults: default touch 92, item touch 0). Item rows on the form: the item and Primary can be changed; grams and purity stay read-only, because transactions keep them.
+* **Opening balance updates** (2026-11-24): the only manual way to change a user's balances.
+  * The buttons: Grams / Purity on each item row, and GRAMS / PURITY / CASH / RTGS on the balances. The modal has Remarks, Previous, Value and Closing, where closing = previous + value (negative reduces).
+  * An item's grams or purity also moves the grams or purity grand total by the same value. The grand-total buttons change only the grand total.
+  * Existing user: `POST /admin/user-details/{id}/opening-balance`, saved at once.
+  * New user: the entries wait on the form and go with the create request as `opening_balances`, in the same transaction.
+  * Always the special password. Every change is recorded in `opening_balance_updates` (`OpeningBalanceService`, bcmath, row locks) and the admin audit log.
+* Phones: `phone_no` is required and `additional_phone_no` optional (SALARY only so far). Both are exactly 10 digits, and no number may belong to two users in either column.
 * Only HEAD users can be chosen as heads (Head lists, Cash heads) or listed as a head's Head users. A head's Head users are its links to other heads only.
 
 ## Permissions drive what each user sees
@@ -51,6 +67,7 @@ Agreed with the user on 2026-11-21. Applies to all work in this repository, fron
 The admin's second password is required for:
 
 * assigning or changing heads (head lists, cash heads, head users);
+* opening balance updates (below);
 * deleting a user;
 * switching a role on or off.
 

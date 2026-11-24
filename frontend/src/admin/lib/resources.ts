@@ -1,5 +1,6 @@
 import { createCustomerTouchApi } from '@/lib/customerTouchApi'
 import { createItemsApi } from '@/lib/itemsApi'
+import { createPhoneBookApi } from '@/lib/phoneBookApi'
 import { createRolesApi } from '@/lib/rolesApi'
 import { createUserDetailsApi } from '@/lib/userDetailsApi'
 import { adminApi } from './adminApi'
@@ -16,3 +17,5 @@ export const userDetailsApi = createUserDetailsApi(adminApi)
 export const itemsApi = createItemsApi(adminApi)
 export const rolesApi = createRolesApi(adminApi)
 export const customerTouchApi = createCustomerTouchApi(adminApi)
+// The phone book (2026-11-24): admins create, edit and delete contacts.
+export const phoneBookApi = createPhoneBookApi(adminApi)

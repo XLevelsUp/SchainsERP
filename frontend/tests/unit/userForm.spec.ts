@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addDefaultPrimaryItem,
+  applyRoleDefaults,
   employeeIdsOf,
   flagGroupsFor,
   FULL_USER_FORM_PROFILE,
@@ -12,7 +14,19 @@ import { profileForRole, profileHas } from '@/admin/lib/userFormProfiles'
 import type { UserDetail, UserFormProfile, UserFormProfileCatalog } from '@/types'
 
 const profile = (role: string, sections: UserFormProfile['sections'], extra: Partial<UserFormProfile> = {}) =>
-  ({ role, is_default: false, lock_role_on_edit: false, sections, flags: [], ...extra }) as UserFormProfile
+  ({
+    role,
+    is_default: false,
+    lock_role_on_edit: false,
+    signs_in: true,
+    default_category: null,
+    default_primary_item: null,
+    default_flags: [],
+    joining_date_defaults_to_today: false,
+    sections,
+    flags: [],
+    ...extra,
+  }) as UserFormProfile
 
 const catalog: UserFormProfileCatalog = {
   sections: ['heads', 'items'],
@@ -24,6 +38,8 @@ const catalog: UserFormProfileCatalog = {
     signs_in: true,
     default_category: null,
     default_primary_item: null,
+    default_flags: [],
+    joining_date_defaults_to_today: false,
     sections: ['heads', 'items'],
     flags: [],
   },
@@ -127,5 +143,99 @@ describe('role profiles', () => {
     expect(profileHas(profileForRole(catalog, 3), 'salary')).toBe(true)
     expect(profileHas(profileForRole(catalog, 3), 'heads')).toBe(false)
     expect(profileHas(null, 'heads')).toBe(false)
+  })
+})
+
+describe('role defaults on a new user', () => {
+  const salary = profile('SALARY', ['additional_phone', 'items', 'salary', 'joining_date'], {
+    signs_in: false,
+    default_category: 'GRAMS',
+    default_primary_item: 'GOLD',
+    default_flags: ['is_salary_person'],
+    joining_date_defaults_to_today: true,
+    flags: ['is_salary_person'],
+  })
+  const customer = profile('CUSTOMER', ['items'], { signs_in: false, default_category: 'PURITY', default_primary_item: 'GOLD' })
+  const head = profile('HEAD', ['salary'], { flags: ['is_salary_person'] })
+  const items = [
+    { item_id: 1, item_name: 'Metal' },
+    { item_id: 2, item_name: ' gold ' },
+  ]
+
+  it('starts a SALARY user on GRAMS, GOLD, salary person YES and today', () => {
+    const form = makeEmptyUserForm()
+    applyRoleDefaults(form, salary, null, items, '2026-11-23')
+    expect(form.category_name).toBe('GRAMS')
+    expect(form.is_salary_person).toBe(true)
+    expect(form.joining_date).toBe('2026-11-23')
+    expect(form.item_mappings).toEqual([{ item_id: 2, item_grams_total: '0', item_purity_total: '0', is_primary: 1 }])
+  })
+
+  it('lets the category and permissions follow a role change, but keeps what the admin chose', () => {
+    const form = makeEmptyUserForm()
+    applyRoleDefaults(form, customer, null, [], '2026-11-23')
+    expect(form.category_name).toBe('PURITY')
+
+    applyRoleDefaults(form, salary, customer, [], '2026-11-23')
+    expect(form.category_name).toBe('GRAMS')
+    expect(form.is_salary_person).toBe(true)
+
+    // Away from SALARY: its default permission goes off again.
+    applyRoleDefaults(form, head, salary, [], '2026-11-23')
+    expect(form.is_salary_person).toBe(false)
+    expect(form.category_name).toBe('GRAMS') // HEAD has no default category
+
+    // A category the admin picked stays.
+    const picked = makeEmptyUserForm()
+    picked.category_name = 'BOTH'
+    applyRoleDefaults(picked, salary, customer, [], '2026-11-23')
+    expect(picked.category_name).toBe('BOTH')
+  })
+
+  it('keeps a joining date already set and skips a missing item', () => {
+    const form = makeEmptyUserForm()
+    form.joining_date = '2026-01-01'
+    applyRoleDefaults(form, salary, null, [{ item_id: 1, item_name: 'Metal' }], '2026-11-23')
+    expect(form.joining_date).toBe('2026-01-01')
+    expect(form.item_mappings).toEqual([])
+  })
+})
+
+describe('the HEAD defaults', () => {
+  it('starts a new head with GOLD as the primary item, grams and purity 0', () => {
+    const head = profile('HEAD', ['items'], { default_category: 'BOTH', default_primary_item: 'GOLD' })
+    const form = makeEmptyUserForm()
+    applyRoleDefaults(form, head, null, [{ item_id: 1, item_name: 'Metal' }, { item_id: 9, item_name: 'GOLD' }], '2026-11-24')
+    expect(form.item_mappings).toEqual([{ item_id: 9, item_grams_total: '0', item_purity_total: '0', is_primary: 1 }])
+
+    // Switching roles doesn't add a second row.
+    applyRoleDefaults(form, head, head, [{ item_id: 9, item_name: 'GOLD' }], '2026-11-24')
+    expect(form.item_mappings).toHaveLength(1)
+  })
+
+  it('starts a new head on BOTH, and replaces another role’s default when switched to', () => {
+    const head = profile('HEAD', ['salary'], { default_category: 'BOTH' })
+    const customer = profile('CUSTOMER', ['items'], { signs_in: false, default_category: 'PURITY' })
+
+    const form = makeEmptyUserForm()
+    applyRoleDefaults(form, head, null, [], '2026-11-24')
+    expect(form.category_name).toBe('BOTH')
+
+    applyRoleDefaults(form, customer, head, [], '2026-11-24')
+    expect(form.category_name).toBe('PURITY')
+    applyRoleDefaults(form, head, customer, [], '2026-11-24')
+    expect(form.category_name).toBe('BOTH')
+  })
+})
+
+describe('the primary item when the items list arrives late', () => {
+  it('adds GOLD once, only when no items are listed', () => {
+    const head = profile('HEAD', ['items'], { default_primary_item: 'GOLD' })
+    const form = makeEmptyUserForm()
+    addDefaultPrimaryItem(form, head, [])
+    expect(form.item_mappings).toEqual([])
+    addDefaultPrimaryItem(form, head, [{ item_id: 9, item_name: 'GOLD' }])
+    addDefaultPrimaryItem(form, head, [{ item_id: 9, item_name: 'GOLD' }])
+    expect(form.item_mappings).toEqual([{ item_id: 9, item_grams_total: '0', item_purity_total: '0', is_primary: 1 }])
   })
 })

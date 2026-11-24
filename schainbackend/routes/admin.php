@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Api\Admin\AdminAccountController;
 use App\Http\Controllers\Api\Admin\AdminAuthController;
+use App\Http\Controllers\Api\Admin\OpeningBalanceController;
 use App\Http\Controllers\Api\Admin\RoleStatusController;
 use App\Http\Controllers\Api\Admin\UserFormProfileController;
 use App\Http\Controllers\Api\Admin\UserStatusController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\Api\CashHeadEmployeeMappingController;
 use App\Http\Controllers\Api\CustomerTouchController;
 use App\Http\Controllers\Api\HeadEmployeeMappingController;
 use App\Http\Controllers\Api\ItemController;
+use App\Http\Controllers\Api\PhoneBookController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\UserDetailController;
 
@@ -58,7 +60,7 @@ Route::middleware(['auth:admin', 'admin.session', 'admin.audit'])->group(functio
     Route::get('user-details', [UserDetailController::class, 'index'])->name('user-details.index');
     Route::get('user-details/{user_detail}', [UserDetailController::class, 'show'])->name('user-details.show');
     Route::post('user-details', [UserDetailController::class, 'store'])
-        ->middleware(['user.profile', 'special.password:head_mappings,cash_head_mappings,head_user_mappings'])
+        ->middleware(['user.profile', 'special.password:head_mappings,cash_head_mappings,head_user_mappings,opening_balances'])
         ->name('user-details.store');
     Route::match(['put', 'patch'], 'user-details/{user_detail}', [UserDetailController::class, 'update'])
         ->middleware(['user.profile', 'special.password:head_mappings,cash_head_mappings,head_user_mappings'])
@@ -66,6 +68,12 @@ Route::middleware(['auth:admin', 'admin.session', 'admin.audit'])->group(functio
     Route::match(['put', 'patch'], 'user-details/{user_detail}/status', [UserStatusController::class, 'update'])
         ->whereNumber('user_detail')
         ->name('user-details.status');
+    // Opening balance updates (agreed 2026-11-24): always the special
+    // password. A new user's go with its create request (opening_balances).
+    Route::post('user-details/{user_detail}/opening-balance', [OpeningBalanceController::class, 'store'])
+        ->whereNumber('user_detail')
+        ->middleware('special.password')
+        ->name('user-details.opening-balance');
     Route::delete('user-details/{user_detail}', [UserDetailController::class, 'destroy'])
         ->middleware('special.password')
         ->name('user-details.destroy');
@@ -105,6 +113,18 @@ Route::middleware(['auth:admin', 'admin.session', 'admin.audit'])->group(functio
         ->whereNumber('role')
         ->middleware('special.password')
         ->name('roles.status');
+
+    // The phone book (agreed 2026-11-24): its own list of contacts, not the
+    // users table. Users the console creates are added to it
+    // (App\Support\PhoneBookSync); the app reads it on GET /phone-book.
+    Route::get('phone-book', [PhoneBookController::class, 'index'])->name('phone-book.index');
+    Route::post('phone-book', [PhoneBookController::class, 'store'])->name('phone-book.store');
+    Route::match(['put', 'patch'], 'phone-book/{phone_book}', [PhoneBookController::class, 'update'])
+        ->whereNumber('phone_book')
+        ->name('phone-book.update');
+    Route::delete('phone-book/{phone_book}', [PhoneBookController::class, 'destroy'])
+        ->whereNumber('phone_book')
+        ->name('phone-book.destroy');
 
     // Read-only lookups for the Users form's item and customer touch pickers;
     // heads manage both lists in the app.

@@ -1,6 +1,7 @@
 import { emptyUserFeatureFlags, USER_FEATURE_FLAG_GROUPS, USER_FEATURE_FLAG_KEYS } from '@/lib/userFeatureFlags'
 import type {
   HeadMappingInput,
+  Item,
   UserDetail,
   UserDetailFormValues,
   UserFeatureFlagKey,
@@ -45,6 +46,7 @@ export function makeEmptyUserForm(): UserDetailFormValues {
     image_file: null,
     per_day_salary: '',
     report_password: '',
+    additional_phone_no: '',
   }
 }
 
@@ -97,6 +99,7 @@ export function userToForm(user: UserDetail): UserDetailFormValues {
     aadhar_number: user.aadhar_number ?? '',
     per_day_salary:
       user.per_day_salary === null || user.per_day_salary === undefined ? '' : String(user.per_day_salary),
+    additional_phone_no: user.additional_phone_no ?? '',
   }
 }
 
@@ -120,11 +123,71 @@ export function sameIds(a: number[], b: number[]): boolean {
   return a.length === b.length && a.every((id, i) => id === b[i])
 }
 
+// Today as YYYY-MM-DD in local time (the joining-date input's format).
+export function todayIso(now = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+/**
+ * Applies a role's defaults to a new user's form when the role is picked or
+ * changed (create only; editing never applies them). `previous` is the
+ * profile of the role picked before, so a value that was only that role's
+ * default follows the new role instead of sticking:
+ *  - category: set when empty or still the previous role's default;
+ *  - default permissions: the previous role's are switched off, the new
+ *    role's on (SALARY: salary person = YES);
+ *  - joining date: today, when the role asks for it and none is set;
+ *  - primary item: added when the role names one, it exists, and no items
+ *    are listed yet.
+ */
+export function applyRoleDefaults(
+  form: UserDetailFormValues,
+  next: UserFormProfile,
+  previous: UserFormProfile | null,
+  items: Pick<Item, 'item_id' | 'item_name'>[],
+  today: string = todayIso(),
+): void {
+  if (next.default_category && (!form.category_name || form.category_name === previous?.default_category)) {
+    form.category_name = next.default_category
+  }
+
+  for (const flag of previous?.default_flags ?? []) {
+    if (!next.default_flags.includes(flag)) form[flag] = false
+  }
+  for (const flag of next.default_flags) form[flag] = true
+
+  if (next.joining_date_defaults_to_today && next.sections.includes('joining_date') && !form.joining_date) {
+    form.joining_date = today
+  }
+
+  addDefaultPrimaryItem(form, next, items)
+}
+
+/**
+ * Adds the role's primary item (GOLD), grams and purity 0, when the role
+ * names one, it exists, and no items are listed yet. Also used when the
+ * items list arrives after the role was picked.
+ */
+export function addDefaultPrimaryItem(
+  form: UserDetailFormValues,
+  profile: UserFormProfile,
+  items: Pick<Item, 'item_id' | 'item_name'>[],
+): void {
+  const itemName = profile.default_primary_item?.trim().toUpperCase()
+  if (!itemName || !profile.sections.includes('items') || form.item_mappings.length) return
+  const item = items.find((i) => i.item_name.trim().toUpperCase() === itemName)
+  if (item) {
+    form.item_mappings.push({ item_id: item.item_id, item_grams_total: '0', item_purity_total: '0', is_primary: 1 })
+  }
+}
+
 // Every section, for when the profiles couldn't be loaded: the full form,
 // which is what a role without its own profile gets anyway. The backend
 // still enforces the real profile on save.
 export const ALL_USER_FORM_SECTIONS: UserFormSection[] = [
   'contact',
+  'additional_phone',
   'remarks',
   'customer_comments',
   'heads',
@@ -150,6 +213,8 @@ export const FULL_USER_FORM_PROFILE: UserFormProfile = {
   signs_in: true,
   default_category: null,
   default_primary_item: null,
+  default_flags: [],
+  joining_date_defaults_to_today: false,
   sections: ALL_USER_FORM_SECTIONS,
   flags: USER_FEATURE_FLAG_KEYS,
 }
