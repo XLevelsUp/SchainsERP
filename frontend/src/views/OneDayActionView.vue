@@ -14,7 +14,8 @@ import { userOptionLabel } from '@/lib/userLabel'
 import { todayDateInputValue, formatDateTime } from '@/lib/date'
 import { ApiError } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
-import type { Item, OneDayActionRow, UserDetailListItem } from '@/types'
+import type { OneDayActionSource, ReportHead } from '@/lib/reportSources'
+import type { Item, OneDayActionQuery, OneDayActionRow, UserDetailListItem } from '@/types'
 import type { DataTableColumn } from '@/types/table'
 
 /*
@@ -42,10 +43,31 @@ import type { DataTableColumn } from '@/types/table'
 | (reportApi.ts) — `employee_id` still filters `added_by` (who keyed the
 | entry, not who the gold or cash moved between), hence its "Entered by"
 | label.
+|
+| Admin console (2026-11-24): its own source (GET /admin/reports/one-day-action)
+| and `heads`: every head's entries in one feed (the Given By / Given To
+| column shows whose), narrowed by the Head filter.
 |--------------------------------------------------------------------------
 */
 
+const props = defineProps<{
+  source?: OneDayActionSource
+  heads?: ReportHead[]
+}>()
+
 const auth = useAuthStore()
+
+const source = computed<OneDayActionSource>(
+  () =>
+    props.source ?? {
+      fetch: (query: OneDayActionQuery) => reportApi.getOneDayAction(query, auth.user?.user_id ?? 1),
+      loadUsers: () => userDetailsApi.list(undefined, 'stock'),
+      loadItems: () => itemsApi.list(),
+    },
+)
+const DESCRIPTION = "A day's stock movements and cash transactions in one feed."
+const ALL_HEADS_DESCRIPTION = "A day's stock movements and cash transactions for every head, in one feed."
+const headOptions = computed(() => (props.heads ?? []).map((h) => ({ value: h.id, label: h.name })))
 
 // The backend's own default, now applied once to the combined dataset
 // rather than once per source.
@@ -69,6 +91,7 @@ const entryTypeOptions = [
 ]
 
 const filters = reactive({
+  head_id: null as number | null,
   from_date: todayDateInputValue(),
   to_date: '',
   employee_id: null as number | null,
@@ -164,8 +187,9 @@ function flowClass(type: string): string {
   return 'bg-slate-100 text-slate-600'
 }
 
-function currentQuery(page: number) {
+function currentQuery(page: number): OneDayActionQuery {
   return {
+    head_id: props.heads ? (filters.head_id ?? undefined) : undefined,
     from_date: filters.from_date || undefined,
     // The service defaults to_date to from_date, which is the single-day
     // case this report is named for — only send it when widening a range.
@@ -182,10 +206,7 @@ function currentQuery(page: number) {
 
 async function loadLookups() {
   try {
-    const [usersData, itemsData] = await Promise.all([
-      userDetailsApi.list(undefined, 'stock'),
-      itemsApi.list(),
-    ])
+    const [usersData, itemsData] = await Promise.all([source.value.loadUsers(), source.value.loadItems()])
     users.value = usersData
     items.value = itemsData
   } catch {
@@ -196,10 +217,10 @@ async function loadLookups() {
 // Dropdown reload buttons: each re-fetches one lookup with the same call
 // loadLookups() makes; the report itself is not re-run.
 async function reloadUsers() {
-  users.value = await userDetailsApi.list(undefined, 'stock')
+  users.value = await source.value.loadUsers()
 }
 async function reloadItems() {
-  items.value = await itemsApi.list()
+  items.value = await source.value.loadItems()
 }
 
 async function runSearch() {
@@ -208,8 +229,7 @@ async function runSearch() {
   loadError.value = ''
   pageNo.value = 1
   try {
-    const actingUserId = auth.user?.user_id ?? 1
-    const result = await reportApi.getOneDayAction(currentQuery(1), actingUserId)
+    const result = await source.value.fetch(currentQuery(1))
     rows.value = result.records
     stockCount.value = result.total_stock_count
     cashCount.value = result.total_cash_count
@@ -228,8 +248,7 @@ async function loadMore() {
   loadError.value = ''
   try {
     const next = pageNo.value + 1
-    const actingUserId = auth.user?.user_id ?? 1
-    const result = await reportApi.getOneDayAction(currentQuery(next), actingUserId)
+    const result = await source.value.fetch(currentQuery(next))
     // The backend sorts the combined dataset before paginating, so pages
     // arrive in final order and append directly — no client-side re-sort.
     rows.value = [...rows.value, ...result.records]
@@ -245,6 +264,7 @@ async function loadMore() {
 }
 
 function clearFilters() {
+  filters.head_id = null
   filters.from_date = todayDateInputValue()
   filters.to_date = ''
   filters.employee_id = null
@@ -317,7 +337,7 @@ onMounted(() => {
   <div>
     <PageHeader
       title="One Day Action"
-      description="A day's stock movements and cash transactions in one feed."
+      :description="heads ? ALL_HEADS_DESCRIPTION : DESCRIPTION"
     >
       <template #actions>
         <BaseButton variant="secondary" :icon="RefreshCw" :disabled="isLoading" @click="runSearch">
@@ -328,6 +348,15 @@ onMounted(() => {
 
     <BaseCard class="mb-4">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <BaseSelect
+          v-if="heads"
+          id="report_head"
+          v-model="filters.head_id"
+          label="Head"
+          size="sm"
+          placeholder="All heads…"
+          :options="headOptions"
+        />
         <BaseInput v-model="filters.from_date" label="From date" type="date" size="sm" clearable />
         <BaseInput v-model="filters.to_date" label="To date" type="date" size="sm" clearable />
         <BaseSelect

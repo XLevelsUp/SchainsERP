@@ -23,6 +23,30 @@ fixed, struck through, with what changed — this file is the record.
 **Backend baseline:** `982afd78` (PR #53) plus our own uncommitted backend
 fixes below. Since 2026-11-06 we own the backend too.
 
+### Side menus rearranged; reports, Customer Touch and placeholders in the console (2026-11-24)
+
+- **App menu:** Stocks, Cash Management, Consolidated Report, Items OB CB, One Day Action Report, NIHAA JEWELS (group), ID Wise, Phone Book (permission). Everything else is under **More** (user's decision), so nothing is unreachable.
+  - The landing page is still the Dashboard, so More opens itself after sign-in.
+- **Console menu:** Roles, Phone Book, Users, ID Wise, One Day Action Report, Consolidated Report, Items OB CB, NIHAA JEWELS, Customer Touch, Salary, Head Employee Mappings, My account.
+- **Company group** (both logins): Roles History, Customers, Employees, Retailers, Customer FITEM.
+  - The name comes from a new system setting `company_name` (migration `2026_11_24_000200`, **applied on Aiven**, JSON string "NIHAA JEWELS"), read via `GET /settings/company_name` and `GET /admin/settings/company_name`.
+  - The pages, and the console's Salary, are placeholders (`ComingSoonView`).
+- **Console reports, all heads** (user's decisions):
+  - Backend: `Admin\AdminReportController`, `GET /admin/reports/{items-obcb,consolidated}(/export)` with head_id required (a HEAD user), `one-day-action` with head_id optional, and `id-wise`.
+  - `ReportService::getOneDayActionReport` takes a nullable head. Null skips the head filter (admin only); the app path is unchanged.
+  - Frontend: the app's report views take an optional `source` and `heads`. Items OB CB and Consolidated render one section per head; their results moved into `components/reports/ItemsObcbResults.vue` and `ConsolidatedResults.vue`, with unchanged logic.
+  - `createStockReportsApi`, and `downloadFile` takes a realm (app or admin session).
+  - ID Wise hides the row receipt print in the console, because it needs the signed-in head's ledger.
+- **Customer Touch in the console:** `POST/PUT/DELETE /admin/customer-touch`, audit CUSTOMER_TOUCH_*. `CustomerTouchView` takes an `api` prop.
+- **Fixed (pre-existing):** the Items OB & CB CSV export was always empty, in the app too. It read `details.records`, but the service returns `records`. CSV building moved to `App\Support\ReportCsv`, shared by app and console.
+- **Shared:** `DataTable` header slot (earlier today).
+- **Tests:**
+  - Backend: new `AdminReportTest` (5 tests).
+  - Vitest: `nav.spec.ts` (menu orders, company group, name fallback).
+  - Playwright: console menu and placeholders, console reports; the app menu test was updated.
+  - Run: backend 133/133, Vitest 36/36, vue-tsc and build clean, Playwright 15/15.
+  - Postgres: on 2026-11-13 the all-heads One Day Action (10) equals the sum per head (10 + 0 + 0). Items OB CB for Head Admin gives 50 in both the console and the app. Exports have 51 lines. The `zz touch` customer touch and its 3 log rows were removed.
+
 ### Admin console — opening balance updates on the user form (2026-11-24)
 
 Built from the legacy "Create new Opening Balance Update" modal: Remarks, Previous balance, Value update, Closing balance.

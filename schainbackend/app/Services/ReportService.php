@@ -1044,7 +1044,7 @@ class ReportService
     /**
      * Get One Day Action Report combining Stock and Cash details
      */
-    public function getOneDayActionReport(array $filters, int $headId): array
+    public function getOneDayActionReport(array $filters, ?int $headId): array
     {
         $employeeId = $filters['employee_id'] ?? null;
         $fromDate = $filters['from_date'] ?? date('Y-m-d');
@@ -1112,11 +1112,14 @@ class ReportService
             });
         }
 
-        // Apply strict Head Scoping (Issue #22)
-        $stockQuery->where(function ($q) use ($headId) {
-            $q->where('given_by', $headId)
-              ->orWhere('given_to', $headId);
-        });
+        // Apply strict Head Scoping (Issue #22). Null only for the admin
+        // console's all-heads view (2026-11-24): every head's entries.
+        if ($headId !== null) {
+            $stockQuery->where(function ($q) use ($headId) {
+                $q->where('given_by', $headId)
+                  ->orWhere('given_to', $headId);
+            });
+        }
 
         // Date Filter (Specific Day or Range)
         $toDate = $filters['to_date'] ?? $fromDate;
@@ -1195,11 +1198,13 @@ class ReportService
             $cashQuery->where('recipient_id', $givenTo);
         }
 
-        // Apply strict Head Scoping (Issue #22)
-        $cashQuery->where(function ($q) use ($headId) {
-            $q->where('sender_id', $headId)
-              ->orWhere('recipient_id', $headId);
-        });
+        // Apply strict Head Scoping (Issue #22); null = all heads (admin).
+        if ($headId !== null) {
+            $cashQuery->where(function ($q) use ($headId) {
+                $q->where('sender_id', $headId)
+                  ->orWhere('recipient_id', $headId);
+            });
+        }
 
         $cashTotalCount = $cashQuery->count();
         // Issue #23: Fetch all and paginate later

@@ -27,6 +27,9 @@
 export type OneDayActionRecordType = 'STOCK' | 'CASH'
 
 export interface OneDayActionQuery {
+  // Admin console only (2026-11-24): the head the report is for. The app
+  // takes the head from the signed-in user and never sends it.
+  head_id?: number
   // Defaults to today server-side when omitted. `to_date` defaults to
   // whatever `from_date` is, making the single-day case the default.
   from_date?: string

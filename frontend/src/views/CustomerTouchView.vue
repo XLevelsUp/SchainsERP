@@ -8,10 +8,14 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import ConfirmPopover from '@/components/ui/ConfirmPopover.vue'
-import { customerTouchApi } from '@/lib/customerTouchApi'
+import { customerTouchApi as appCustomerTouchApi, type createCustomerTouchApi } from '@/lib/customerTouchApi'
 import { ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/date'
 import type { CustomerTouch, CustomerTouchFormValues, DataTableColumn } from '@/types'
+
+// The admin console passes its own client (2026-11-24); the app uses its own.
+const props = defineProps<{ api?: ReturnType<typeof createCustomerTouchApi> }>()
+const customerTouchApi = props.api ?? appCustomerTouchApi
 
 const touches = ref<CustomerTouch[]>([])
 const isLoading = ref(false)

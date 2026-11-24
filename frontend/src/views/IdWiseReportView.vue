@@ -11,6 +11,7 @@ import { formatDateTime } from '@/lib/date'
 import { ApiError } from '@/lib/api'
 import { useStockReceiptPrint } from '@/lib/stockReceiptPrint'
 import { useAuthStore } from '@/stores/auth'
+import type { IdWiseSource } from '@/lib/reportSources'
 import type { IdWiseReportResult, IdWiseTransaction } from '@/types'
 
 /*
@@ -36,13 +37,20 @@ import type { IdWiseReportResult, IdWiseTransaction } from '@/types'
 |--------------------------------------------------------------------------
 */
 
+// Admin console (2026-11-24): its own source (GET /admin/reports/id-wise,
+// any stock ID). A row's receipt is printed from the signed-in head's own
+// ledger, so the console has no row print buttons (the page print stays).
+const props = defineProps<{ source?: IdWiseSource }>()
+const fetchReport = (stockId: number) => (props.source ? props.source.fetch(stockId) : stockReportsApi.getIdWise(stockId))
+const canPrintReceipts = computed(() => !props.source)
+
 const stockIdInput = ref('')
 const report = ref<IdWiseReportResult | null>(null)
 const hasSearched = ref(false)
 const isLoading = ref(false)
 const loadError = ref('')
 
-const columns = [
+const ALL_COLUMNS = [
   { key: 'id', label: 'ID' },
   { key: 'item_name', label: 'Item' },
   { key: 'type', label: 'Type' },
@@ -58,6 +66,7 @@ const columns = [
   { key: 'added_at', label: 'Added At' },
   { key: 'print', label: 'Print' },
 ] as const
+const columns = computed(() => (canPrintReceipts.value ? ALL_COLUMNS : ALL_COLUMNS.filter((c) => c.key !== 'print')))
 
 function formatNumber(value: number) {
   return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : '0'
@@ -94,7 +103,7 @@ async function runSearch(stockId: number) {
   isLoading.value = true
   loadError.value = ''
   try {
-    report.value = await stockReportsApi.getIdWise(stockId)
+    report.value = await fetchReport(stockId)
     hasSearched.value = true
   } catch (err) {
     report.value = null
@@ -295,7 +304,7 @@ function printRow(row: IdWiseTransaction) {
               <td class="px-3 py-2 text-slate-700">{{ row.given_to || '—' }}</td>
               <td class="px-3 py-2 text-slate-500">{{ row.remarks || '—' }}</td>
               <td class="px-3 py-2 whitespace-nowrap text-slate-500">{{ formatDateTime(row.added_at) }}</td>
-              <td class="px-3 py-2 text-center">
+              <td v-if="canPrintReceipts" class="px-3 py-2 text-center">
                 <button
                   type="button"
                   class="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"

@@ -1,12 +1,18 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
+import { useCompanyName } from '@/lib/companyName'
 import { APP_NAME } from '@/lib/constants'
-import { adminNavItems } from '../lib/nav'
+import { adminApi } from '../lib/adminApi'
+import { buildAdminNavItems } from '../lib/nav'
 import { useAdminAuthStore } from '../stores/adminAuth'
 
 const router = useRouter()
 const adminAuth = useAdminAuthStore()
+// Heads the company group in the menu (the `company_name` setting).
+const companyName = useCompanyName(adminApi)
+const adminNavItems = computed(() => buildAdminNavItems(companyName.value))
 
 // Ends the admin session only (revoked server-side).
 async function handleSignOut() {

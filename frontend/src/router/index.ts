@@ -3,6 +3,7 @@ import AppShell from '@/components/layout/AppShell.vue'
 import AuthLayout from '@/components/layout/AuthLayout.vue'
 import { adminRoutes } from '@/admin/routes'
 import { authGuard } from './guards'
+import { COMPANY_PAGES } from '@/lib/nav'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -140,6 +141,13 @@ const router = createRouter({
           component: () => import('@/views/MetalPickerTestView.vue'),
         },
         { path: 'pages', name: 'pages', component: () => import('@/views/PagesView.vue') },
+        // The company group's pages (2026-11-24): not built yet.
+        ...COMPANY_PAGES.map((p) => ({
+          path: `company/${p.slug}`,
+          name: `company-${p.slug}`,
+          meta: { title: p.label },
+          component: () => import('@/views/ComingSoonView.vue'),
+        })),
       ],
     },
     // The admin console (admin accounts create users and assign them to

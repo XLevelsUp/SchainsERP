@@ -5,51 +5,48 @@ import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import DataTable from '@/components/ui/DataTable.vue'
+import ConsolidatedResults from '@/components/reports/ConsolidatedResults.vue'
 import { stockReportsApi } from '@/lib/stockReportsApi'
 import { userDetailsApi } from '@/lib/userDetailsApi'
 import { itemsApi } from '@/lib/itemsApi'
 import { userOptionLabel } from '@/lib/userLabel'
-import { formatDateTime } from '@/lib/date'
-import { ApiError } from '@/lib/api'
-import type {
-  ConsolidatedQuery,
-  ConsolidatedRow,
-  ConsolidatedTotals,
-  Item,
-  UserDetailListItem,
-} from '@/types'
-import type { DataTableColumn } from '@/types/table'
+import type { ConsolidatedSource, ReportHead } from '@/lib/reportSources'
+import type { ConsolidatedQuery, Item, UserDetailListItem } from '@/types'
 
 /*
 |--------------------------------------------------------------------------
 | Consolidated Report — GET /stock/reports/consolidated (PR #31)
 |--------------------------------------------------------------------------
 | Outward and inward history for one employee or retailer, side by side,
-| with totals aggregated in PostgreSQL over the whole filtered set (not
-| just the loaded page) — so the summary figures stay correct no matter how
-| little of the detail has been paged in.
+| with totals aggregated in PostgreSQL over the whole filtered set.
 |
-| The head is the signed-in user; there is no head_id param to override it.
+|  - App: the head is the signed-in user.
+|  - Admin console (2026-11-24): `heads` is passed and the report runs once
+|    per head into its own section ("grouped by head"), each with its own
+|    paging and export; the Head filter narrows it to one head.
 |
 | Party role picks WHICH KEY is sent (user_id vs retailer_id) rather than
-| prefixing a value the way items-obcb does — this endpoint reads a bare
-| number and decides from the key that carried it. Same users list for
-| both, since retailers are ordinary user_details rows here.
+| prefixing a value the way items-obcb does.
 |
-| Paging quirk worth knowing: one response carries both sections, but
-| page_no_out and page_no_in are separate params. So "load more" on one
-| side still re-runs the other side's query server-side. We deliberately
-| consume only the section being paged and leave the other untouched —
-| otherwise the already-loaded rows on the other side would be replaced by
-| whatever page happened to ride along.
-|
-| page_size defaults to 1000 server-side. We send a much smaller page so
-| the first paint stays fast on employees with tens of thousands of rows.
+| The panes, paging and export live in ConsolidatedResults.
 |--------------------------------------------------------------------------
 */
 
-const PAGE_SIZE = 50
+const props = defineProps<{
+  source?: ConsolidatedSource
+  heads?: ReportHead[]
+}>()
+
+const source = computed<ConsolidatedSource>(
+  () =>
+    props.source ?? {
+      fetch: stockReportsApi.getConsolidated,
+      exportCsv: stockReportsApi.exportConsolidated,
+      loadUsers: () => userDetailsApi.list(undefined, 'stock'),
+      loadItems: () => itemsApi.list(),
+    },
+)
+const grouped = computed(() => props.heads !== undefined)
 
 type PartyRole = 'user' | 'retailer'
 
@@ -59,6 +56,7 @@ const roleOptions: { value: PartyRole; label: string }[] = [
 ]
 
 const filters = reactive({
+  head_id: null as number | null,
   party_role: 'user' as PartyRole,
   party_id: null as number | null,
   item_id: null as number | null,
@@ -71,71 +69,17 @@ const filters = reactive({
 const users = ref<UserDetailListItem[]>([])
 const items = ref<Item[]>([])
 
-const userOptions = computed(() =>
-  users.value.map((u) => ({ value: u.id, label: userOptionLabel(u) })),
-)
-const itemOptions = computed(() =>
-  items.value.map((i) => ({ value: i.item_id, label: i.item_name })),
-)
-
-const EMPTY_TOTALS: ConsolidatedTotals = { grams: 0, purity: 0, wastage: 0 }
-
-const summaryOut = ref<ConsolidatedTotals>({ ...EMPTY_TOTALS })
-const summaryIn = ref<ConsolidatedTotals>({ ...EMPTY_TOTALS })
-
-const outRows = ref<ConsolidatedRow[]>([])
-const inRows = ref<ConsolidatedRow[]>([])
-const outTotalCount = ref(0)
-const inTotalCount = ref(0)
-const outPage = ref(1)
-const inPage = ref(1)
-
-const hasSearched = ref(false)
-const isLoading = ref(false)
-const isLoadingMoreOut = ref(false)
-const isLoadingMoreIn = ref(false)
-const loadError = ref('')
-
-const hasMoreOut = computed(() => outRows.value.length < outTotalCount.value)
-const hasMoreIn = computed(() => inRows.value.length < inTotalCount.value)
-
-const columns: DataTableColumn<ConsolidatedRow>[] = [
-  { key: 'stock_id', label: 'ID' },
-  { key: 'added_at', label: 'Date' },
-  { key: 'item_name', label: 'Item' },
-  { key: 'entry_type', label: 'Entry' },
-  { key: 'given_by_name', label: 'Given By / Given To' },
-  { key: 'grams', label: 'Grams' },
-  { key: 'touch', label: 'Touch' },
-  { key: 'purity', label: 'Purity' },
-  { key: 'waste_value', label: 'Wastage' },
-  { key: 'remarks', label: 'Remarks' },
-]
-
-// Detail rows arrive as decimal:4 strings; summary totals arrive as
-// numbers; waste_value can be null. One formatter covers all three rather
-// than three near-identical ones.
-function formatNumber(value: number | string | null) {
-  if (value === null) return '—'
-  const n = Number(value)
-  return Number.isFinite(n)
-    ? n.toLocaleString(undefined, { maximumFractionDigits: 4 })
-    : String(value)
-}
+const userOptions = computed(() => users.value.map((u) => ({ value: u.id, label: userOptionLabel(u) })))
+const itemOptions = computed(() => items.value.map((i) => ({ value: i.item_id, label: i.item_name })))
+const headOptions = computed(() => (props.heads ?? []).map((h) => ({ value: h.id, label: h.name })))
 
 // Sends exactly one of user_id / retailer_id — the key is what tells the
-// backend which party a bare id refers to.
-// Filters only, no paging — shared by the paged search and the CSV export.
-// The export endpoint sets `is_export` itself, which makes ReportService
-// return every matching row, so the three paging keys are meaningless there.
+// backend which party a bare id refers to. Filters only, no paging.
 function filterQuery(): Omit<ConsolidatedQuery, 'page_size' | 'page_no_out' | 'page_no_in'> {
   const query: ConsolidatedQuery = {
     item_id: filters.item_id ?? undefined,
     from_date: filters.from_date || undefined,
-    // A time is only applied server-side when its own date is present, so
-    // a lone time would silently do nothing. The inputs are disabled
-    // without a date, but a disabled input keeps its value — so clearing
-    // the date after typing a time would otherwise still send it.
+    // A time is only applied server-side when its own date is present.
     from_time: filters.from_date ? filters.from_time || undefined : undefined,
     to_date: filters.to_date || undefined,
     to_time: filters.to_date ? filters.to_time || undefined : undefined,
@@ -147,38 +91,39 @@ function filterQuery(): Omit<ConsolidatedQuery, 'page_size' | 'page_no_out' | 'p
   return query
 }
 
-function currentQuery(pageOut: number, pageIn: number): ConsolidatedQuery {
-  return {
-    ...filterQuery(),
-    page_size: PAGE_SIZE,
-    page_no_out: pageOut,
-    page_no_in: pageIn,
-  }
+const appliedQuery = ref(filterQuery())
+const appliedHeadId = ref<number | null>(null)
+const runKey = ref(0)
+const loadingCount = ref(0)
+const isLoading = computed(() => loadingCount.value > 0)
+
+function onSectionLoading(loading: boolean) {
+  loadingCount.value = Math.max(0, loadingCount.value + (loading ? 1 : -1))
 }
 
-// One CSV containing both sections — the controller writes the OUT rows and
-// then the IN rows into the same file, rather than producing two downloads.
-const isExporting = ref(false)
+const sections = computed(() => {
+  if (!grouped.value) return [{ key: 'self', title: undefined, headId: undefined as number | undefined }]
+  return (props.heads ?? [])
+    .filter((h) => appliedHeadId.value === null || h.id === appliedHeadId.value)
+    .map((h) => ({ key: `head-${h.id}`, title: h.name, headId: h.id as number | undefined }))
+})
 
-async function exportCsv() {
-  if (isExporting.value) return
-  isExporting.value = true
-  loadError.value = ''
-  try {
-    await stockReportsApi.exportConsolidated(filterQuery())
-  } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to export the report.'
-  } finally {
-    isExporting.value = false
-  }
+function runSearch() {
+  if (isLoading.value) return
+  appliedQuery.value = filterQuery()
+  appliedHeadId.value = filters.head_id
+  runKey.value++
+}
+
+const results = ref<InstanceType<typeof ConsolidatedResults>[]>([])
+const isExporting = computed(() => results.value.some((r) => r?.isExporting))
+function exportCsv() {
+  void results.value[0]?.exportCsv()
 }
 
 async function loadLookups() {
   try {
-    const [usersData, itemsData] = await Promise.all([
-      userDetailsApi.list(undefined, 'stock'),
-      itemsApi.list(),
-    ])
+    const [usersData, itemsData] = await Promise.all([source.value.loadUsers(), source.value.loadItems()])
     users.value = usersData
     items.value = itemsData
   } catch {
@@ -186,75 +131,15 @@ async function loadLookups() {
   }
 }
 
-// Dropdown reload buttons: each re-fetches one lookup with the same call
-// loadLookups() makes; the report itself is not re-run.
 async function reloadUsers() {
-  users.value = await userDetailsApi.list(undefined, 'stock')
+  users.value = await source.value.loadUsers()
 }
 async function reloadItems() {
-  items.value = await itemsApi.list()
-}
-
-async function runSearch() {
-  if (isLoading.value) return
-  isLoading.value = true
-  loadError.value = ''
-  outPage.value = 1
-  inPage.value = 1
-  try {
-    const result = await stockReportsApi.getConsolidated(currentQuery(1, 1))
-    summaryOut.value = result.summary.out
-    summaryIn.value = result.summary.in
-    outRows.value = result.out_details.records
-    inRows.value = result.in_details.records
-    outTotalCount.value = result.out_details.total_count
-    inTotalCount.value = result.in_details.total_count
-    hasSearched.value = true
-  } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to load the report.'
-  } finally {
-    isLoading.value = false
-  }
-}
-
-async function loadMoreOut() {
-  if (!hasMoreOut.value || isLoadingMoreOut.value) return
-  isLoadingMoreOut.value = true
-  loadError.value = ''
-  try {
-    const next = outPage.value + 1
-    // in_details rides along on this response; ignored on purpose so the
-    // inward rows already loaded aren't replaced by page 1 again.
-    const result = await stockReportsApi.getConsolidated(currentQuery(next, 1))
-    outRows.value = [...outRows.value, ...result.out_details.records]
-    outTotalCount.value = result.out_details.total_count
-    outPage.value = next
-  } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to load more outward rows.'
-  } finally {
-    isLoadingMoreOut.value = false
-  }
-}
-
-async function loadMoreIn() {
-  if (!hasMoreIn.value || isLoadingMoreIn.value) return
-  isLoadingMoreIn.value = true
-  loadError.value = ''
-  try {
-    const next = inPage.value + 1
-    // Mirror of loadMoreOut — only in_details is consumed here.
-    const result = await stockReportsApi.getConsolidated(currentQuery(1, next))
-    inRows.value = [...inRows.value, ...result.in_details.records]
-    inTotalCount.value = result.in_details.total_count
-    inPage.value = next
-  } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Failed to load more inward rows.'
-  } finally {
-    isLoadingMoreIn.value = false
-  }
+  items.value = await source.value.loadItems()
 }
 
 function clearFilters() {
+  filters.head_id = null
   filters.party_role = 'user'
   filters.party_id = null
   filters.item_id = null
@@ -265,27 +150,32 @@ function clearFilters() {
   runSearch()
 }
 
-onMounted(() => {
-  loadLookups()
-  runSearch()
-})
+onMounted(loadLookups)
 </script>
 
 <template>
   <div>
     <PageHeader
       title="Consolidated Report"
-      description="Outward and inward stock history for one party, with totals across the full filtered range."
+      :description="
+        grouped
+          ? 'Outward and inward stock history for each head, with totals across the full filtered range.'
+          : 'Outward and inward stock history for one party, with totals across the full filtered range.'
+      "
     />
 
     <BaseCard :padded="false" class="mb-3 p-3">
       <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
         <BaseSelect
-          v-model="filters.party_role"
-          label="Party role"
+          v-if="grouped"
+          id="report_head"
+          v-model="filters.head_id"
+          label="Head"
           size="sm"
-          :options="roleOptions"
+          placeholder="All heads…"
+          :options="headOptions"
         />
+        <BaseSelect v-model="filters.party_role" label="Party role" size="sm" :options="roleOptions" />
         <BaseSelect
           v-model="filters.party_id"
           label="Party"
@@ -302,7 +192,7 @@ onMounted(() => {
           :options="itemOptions"
           :reload="reloadItems"
         />
-        <div class="hidden lg:block"></div>
+        <div v-if="!grouped" class="hidden lg:block"></div>
         <BaseInput v-model="filters.from_date" label="From date" type="date" size="sm" clearable />
         <BaseInput
           v-model="filters.from_time"
@@ -327,14 +217,12 @@ onMounted(() => {
 
       <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p class="text-xs text-slate-500">
-          Times narrow their own date — set a date first. Without a time, the range runs from
-          00:00:00 to 23:59:59.
+          Times narrow their own date — set a date first. Without a time, the range runs from 00:00:00 to 23:59:59.
         </p>
         <div class="flex items-center gap-2">
-          <BaseButton variant="secondary" type="button" :disabled="isLoading" @click="clearFilters">
-            Clear
-          </BaseButton>
+          <BaseButton variant="secondary" type="button" :disabled="isLoading" @click="clearFilters">Clear</BaseButton>
           <BaseButton
+            v-if="!grouped"
             variant="secondary"
             type="button"
             :disabled="isExporting || isLoading"
@@ -349,199 +237,22 @@ onMounted(() => {
       </div>
     </BaseCard>
 
-    <p
-      v-if="loadError"
-      class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-    >
-      {{ loadError }}
+    <p v-if="grouped && !sections.length" class="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+      No heads to report on.
     </p>
 
-    <!--
-      Outward left, inward right — the two directions get read against each
-      other, so they stay on one screen instead of one scrolling past the
-      other. Each pane owns its own totals, scroll area and "load more",
-      matching the two independent page cursors behind them.
-    -->
-    <div class="grid items-start gap-3 xl:grid-cols-2">
-      <section
-        class="flex min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white"
-      >
-        <header class="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
-          <span
-            class="inline-flex rounded bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700"
-          >
-            OUT
-          </span>
-          <h2 class="text-sm font-semibold text-slate-900">Outward movements</h2>
-          <span v-if="hasSearched" class="ml-auto text-xs text-slate-500">
-            Showing <span class="font-medium text-slate-700">{{ outRows.length }}</span> of
-            <span class="font-medium text-slate-700">{{ outTotalCount }}</span>
-          </span>
-        </header>
-
-        <dl class="grid grid-cols-3 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50">
-          <div class="px-3 py-1.5">
-            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Grams</dt>
-            <dd class="text-sm font-semibold tabular-nums text-slate-900">
-              {{ hasSearched ? formatNumber(summaryOut.grams) : '—' }}
-            </dd>
-          </div>
-          <div class="px-3 py-1.5">
-            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Purity</dt>
-            <dd class="text-sm font-semibold tabular-nums text-slate-900">
-              {{ hasSearched ? formatNumber(summaryOut.purity) : '—' }}
-            </dd>
-          </div>
-          <div class="px-3 py-1.5">
-            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Wastage</dt>
-            <dd class="text-sm font-semibold tabular-nums text-slate-900">
-              {{ hasSearched ? formatNumber(summaryOut.wastage) : '—' }}
-            </dd>
-          </div>
-        </dl>
-
-        <DataTable
-          :columns="columns"
-          :rows="outRows"
-          size="sm"
-          flush
-          max-height="30rem"
-          :empty-message="isLoading ? 'Loading…' : 'No outward movements match these filters.'"
-        >
-          <template #added_at="{ row }">
-            <span class="whitespace-nowrap">{{ formatDateTime(row.added_at) }}</span>
-          </template>
-          <template #item_name="{ row }">
-            <span class="whitespace-nowrap">{{ row.item_name ?? '—' }}</span>
-          </template>
-          <template #entry_type="{ row }">
-            <span class="text-xs whitespace-nowrap text-slate-500">{{ row.entry_type }}</span>
-          </template>
-          <template #given_by_name="{ row }">
-            <span class="whitespace-nowrap">
-              {{ row.given_by_name ?? '—' }} → {{ row.given_to_name ?? '—' }}
-            </span>
-          </template>
-          <template #grams="{ row }">
-            <span class="block text-right tabular-nums">{{ formatNumber(row.grams) }}</span>
-          </template>
-          <template #touch="{ row }">
-            <span class="block text-right tabular-nums">{{ formatNumber(row.touch) }}</span>
-          </template>
-          <template #purity="{ row }">
-            <span class="block text-right tabular-nums">{{ formatNumber(row.purity) }}</span>
-          </template>
-          <template #waste_value="{ row }">
-            <span class="block text-right tabular-nums text-slate-500">{{
-              formatNumber(row.waste_value)
-            }}</span>
-          </template>
-          <template #remarks="{ row }">
-            <span class="text-slate-500">{{ row.remarks || '—' }}</span>
-          </template>
-        </DataTable>
-
-        <div v-if="hasMoreOut" class="flex justify-center border-t border-slate-200 px-3 py-2">
-          <BaseButton
-            variant="secondary"
-            type="button"
-            :disabled="isLoadingMoreOut"
-            @click="loadMoreOut"
-          >
-            {{ isLoadingMoreOut ? 'Loading…' : 'Load more outward' }}
-          </BaseButton>
-        </div>
-      </section>
-
-      <section
-        class="flex min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white"
-      >
-        <header class="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
-          <span
-            class="inline-flex rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold text-emerald-700"
-          >
-            IN
-          </span>
-          <h2 class="text-sm font-semibold text-slate-900">Inward movements</h2>
-          <span v-if="hasSearched" class="ml-auto text-xs text-slate-500">
-            Showing <span class="font-medium text-slate-700">{{ inRows.length }}</span> of
-            <span class="font-medium text-slate-700">{{ inTotalCount }}</span>
-          </span>
-        </header>
-
-        <dl class="grid grid-cols-3 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50">
-          <div class="px-3 py-1.5">
-            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Grams</dt>
-            <dd class="text-sm font-semibold tabular-nums text-slate-900">
-              {{ hasSearched ? formatNumber(summaryIn.grams) : '—' }}
-            </dd>
-          </div>
-          <div class="px-3 py-1.5">
-            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Purity</dt>
-            <dd class="text-sm font-semibold tabular-nums text-slate-900">
-              {{ hasSearched ? formatNumber(summaryIn.purity) : '—' }}
-            </dd>
-          </div>
-          <div class="px-3 py-1.5">
-            <dt class="text-[11px] tracking-wide text-slate-500 uppercase">Wastage</dt>
-            <dd class="text-sm font-semibold tabular-nums text-slate-900">
-              {{ hasSearched ? formatNumber(summaryIn.wastage) : '—' }}
-            </dd>
-          </div>
-        </dl>
-
-        <DataTable
-          :columns="columns"
-          :rows="inRows"
-          size="sm"
-          flush
-          max-height="30rem"
-          :empty-message="isLoading ? 'Loading…' : 'No inward movements match these filters.'"
-        >
-          <template #added_at="{ row }">
-            <span class="whitespace-nowrap">{{ formatDateTime(row.added_at) }}</span>
-          </template>
-          <template #item_name="{ row }">
-            <span class="whitespace-nowrap">{{ row.item_name ?? '—' }}</span>
-          </template>
-          <template #entry_type="{ row }">
-            <span class="text-xs whitespace-nowrap text-slate-500">{{ row.entry_type }}</span>
-          </template>
-          <template #given_by_name="{ row }">
-            <span class="whitespace-nowrap">
-              {{ row.given_by_name ?? '—' }} → {{ row.given_to_name ?? '—' }}
-            </span>
-          </template>
-          <template #grams="{ row }">
-            <span class="block text-right tabular-nums">{{ formatNumber(row.grams) }}</span>
-          </template>
-          <template #touch="{ row }">
-            <span class="block text-right tabular-nums">{{ formatNumber(row.touch) }}</span>
-          </template>
-          <template #purity="{ row }">
-            <span class="block text-right tabular-nums">{{ formatNumber(row.purity) }}</span>
-          </template>
-          <template #waste_value="{ row }">
-            <span class="block text-right tabular-nums text-slate-500">{{
-              formatNumber(row.waste_value)
-            }}</span>
-          </template>
-          <template #remarks="{ row }">
-            <span class="text-slate-500">{{ row.remarks || '—' }}</span>
-          </template>
-        </DataTable>
-
-        <div v-if="hasMoreIn" class="flex justify-center border-t border-slate-200 px-3 py-2">
-          <BaseButton
-            variant="secondary"
-            type="button"
-            :disabled="isLoadingMoreIn"
-            @click="loadMoreIn"
-          >
-            {{ isLoadingMoreIn ? 'Loading…' : 'Load more inward' }}
-          </BaseButton>
-        </div>
-      </section>
+    <div class="flex flex-col gap-4">
+      <ConsolidatedResults
+        v-for="section in sections"
+        :key="section.key"
+        ref="results"
+        :title="section.title"
+        :fetch="source.fetch"
+        :export-csv="source.exportCsv"
+        :query="{ ...appliedQuery, head_id: section.headId }"
+        :run-key="runKey"
+        @loading="onSectionLoading"
+      />
     </div>
   </div>
 </template>

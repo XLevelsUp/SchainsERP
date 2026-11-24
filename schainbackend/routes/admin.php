@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Api\Admin\AdminAccountController;
 use App\Http\Controllers\Api\Admin\AdminAuthController;
+use App\Http\Controllers\Api\Admin\AdminReportController;
+use App\Http\Controllers\Api\SystemSettingController;
 use App\Http\Controllers\Api\Admin\OpeningBalanceController;
 use App\Http\Controllers\Api\Admin\RoleStatusController;
 use App\Http\Controllers\Api\Admin\UserFormProfileController;
@@ -126,8 +128,33 @@ Route::middleware(['auth:admin', 'admin.session', 'admin.audit'])->group(functio
         ->whereNumber('phone_book')
         ->name('phone-book.destroy');
 
+    // Stock reports for every head (agreed 2026-11-24), read-only. Items OB &
+    // CB and Consolidated are per head (head_id required); One Day Action
+    // covers all heads unless head_id is given; ID Wise takes any stock ID.
+    Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('items-obcb/export', [AdminReportController::class, 'exportItemsObcb'])->name('items-obcb.export');
+        Route::get('items-obcb', [AdminReportController::class, 'itemsObcb'])->name('items-obcb');
+        Route::get('consolidated/export', [AdminReportController::class, 'exportConsolidated'])->name('consolidated.export');
+        Route::get('consolidated', [AdminReportController::class, 'consolidated'])->name('consolidated');
+        Route::get('one-day-action', [AdminReportController::class, 'oneDayAction'])->name('one-day-action');
+        Route::get('id-wise', [AdminReportController::class, 'idWise'])->name('id-wise');
+    });
+
+    // System settings, read-only here (e.g. company_name for the menu); heads
+    // change them in the app's System Settings.
+    Route::get('settings/{key}', [SystemSettingController::class, 'show'])->name('settings.show');
+
     // Read-only lookups for the Users form's item and customer touch pickers;
     // heads manage both lists in the app.
     Route::get('items', [ItemController::class, 'index'])->name('items.index');
     Route::get('customer-touch', [CustomerTouchController::class, 'index'])->name('customer-touch.index');
+    // Customer Touch is also managed from the console (2026-11-24); heads keep
+    // theirs in the app.
+    Route::post('customer-touch', [CustomerTouchController::class, 'store'])->name('customer-touch.store');
+    Route::match(['put', 'patch'], 'customer-touch/{customer_touch}', [CustomerTouchController::class, 'update'])
+        ->whereNumber('customer_touch')
+        ->name('customer-touch.update');
+    Route::delete('customer-touch/{customer_touch}', [CustomerTouchController::class, 'destroy'])
+        ->whereNumber('customer_touch')
+        ->name('customer-touch.destroy');
 });

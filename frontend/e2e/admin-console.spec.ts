@@ -239,6 +239,62 @@ test.describe('signed in', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).last().click()
   })
 
+  test('the console menu follows the agreed order, with the company group and Salary', async ({ page }, testInfo) => {
+    await signInToAdminConsole(page)
+    const sidebar = page.getByRole('navigation').first()
+    await expect(sidebar.getByRole('button', { name: 'NIHAA JEWELS' })).toBeVisible()
+    const top = (await sidebar.locator(':scope > a, :scope > div > button').allInnerTexts()).map((t) => t.trim())
+    expect(top).toEqual([
+      'Roles', 'Phone Book', 'Users', 'ID Wise', 'One Day Action Report', 'Consolidated Report', 'Items OB CB',
+      'NIHAA JEWELS', 'Customer Touch', 'Salary', 'Head Employee Mappings', 'My account',
+    ])
+
+    await sidebar.getByRole('button', { name: 'NIHAA JEWELS' }).click()
+    for (const name of ['Roles History', 'Customers', 'Employees', 'Retailers', 'Customer FITEM']) {
+      await expect(sidebar.getByRole('link', { name, exact: true })).toBeVisible()
+    }
+    await sidebar.getByRole('link', { name: 'Roles History' }).click()
+    await expect(page.getByRole('heading', { name: 'Roles History' })).toBeVisible()
+    await expect(page.getByText("This page isn't built yet.")).toBeVisible()
+    await shot(page, testInfo, 'admin-menu')
+
+    await sidebar.getByRole('link', { name: 'Salary' }).click()
+    await expect(page.getByRole('heading', { name: 'Salary' })).toBeVisible()
+
+    await sidebar.getByRole('link', { name: 'Customer Touch' }).click()
+    await expect(page).toHaveURL(/\/admin\/customer-touch$/)
+    await expect(page.getByRole('button', { name: /New|Add/ }).first()).toBeVisible()
+  })
+
+  // Read-only: the reports are searched, nothing is saved.
+  test('the reports cover every head: grouped sections, one feed with a Head filter, any stock ID', async ({ page }, testInfo) => {
+    await signInToAdminConsole(page)
+    const sidebar = page.getByRole('navigation').first()
+
+    await sidebar.getByRole('link', { name: 'Items OB CB' }).click()
+    await expect(page.getByRole('heading', { name: 'Items OB & CB' })).toBeVisible()
+    await expect(page.locator('#report_head')).toBeVisible()
+    // One section per head, each with its own export.
+    await expect(page.getByRole('button', { name: 'Export CSV' }).first()).toBeVisible()
+    expect(await page.getByRole('button', { name: 'Export CSV' }).count()).toBeGreaterThan(1)
+    await expect(page.getByText(/Showing \d+ of \d+ movements/).first()).toBeVisible()
+    await shot(page, testInfo, 'admin-items-obcb')
+
+    await sidebar.getByRole('link', { name: 'Consolidated Report' }).click()
+    await expect(page.getByRole('heading', { name: 'Consolidated Report' })).toBeVisible()
+    await expect(page.getByText('Outward movements').first()).toBeVisible()
+    await shot(page, testInfo, 'admin-consolidated')
+
+    await sidebar.getByRole('link', { name: 'One Day Action Report' }).click()
+    await expect(page.getByRole('heading', { name: 'One Day Action' })).toBeVisible()
+    await expect(page.locator('#report_head')).toBeVisible()
+    await shot(page, testInfo, 'admin-one-day-action')
+
+    await sidebar.getByRole('link', { name: 'ID Wise' }).click()
+    await expect(page).toHaveURL(/\/admin\/id-wise-report$/)
+    await expect(page.getByRole('columnheader', { name: 'Print' })).toHaveCount(0)
+  })
+
   test('the Roles page lists the roles', async ({ page }, testInfo) => {
     await signInToAdminConsole(page)
     await page.getByRole('link', { name: 'Roles' }).click()

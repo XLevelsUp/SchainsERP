@@ -57,6 +57,9 @@ export interface ConsolidatedResult {
 }
 
 export interface ConsolidatedQuery {
+  // Admin console only (2026-11-24): the head the report is for. The app
+  // takes the head from the signed-in user and never sends it.
+  head_id?: number
   // Send exactly one of these. Unlike items-obcb's single prefixed
   // `employee_id`, this endpoint takes plain numeric ids and decides which
   // party a bare value means from which key was present.

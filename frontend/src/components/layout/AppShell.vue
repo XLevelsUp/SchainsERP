@@ -2,15 +2,19 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { navItems, visibleNavItems } from '@/lib/nav'
+import { buildNavItems, visibleNavItems } from '@/lib/nav'
+import { api } from '@/lib/api'
+import { useCompanyName } from '@/lib/companyName'
 import { APP_NAME } from '@/lib/constants'
 import AppSidebar from './AppSidebar.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
+// Heads the company group in the menu (the `company_name` setting).
+const companyName = useCompanyName(api)
 
 // Only what the signed-in user's permissions allow (lib/appPermissions.ts).
-const visibleNav = computed(() => visibleNavItems(navItems, auth.can))
+const visibleNav = computed(() => visibleNavItems(buildNavItems(companyName.value), auth.can))
 
 // auth.logout() revokes the token server-side before clearing the local
 // session, and never rejects — so the redirect below always runs.

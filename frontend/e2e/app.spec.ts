@@ -25,7 +25,32 @@ test.describe('signed in', () => {
     await page.locator('#app_password').fill(appCredentials.password)
     await page.getByRole('button', { name: 'Sign in' }).click()
     await expect(page).not.toHaveURL(/\/login/)
-    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+
+    // The agreed order (2026-11-24); Phone Book only with its permission,
+    // everything else under More, the company group named from the setting.
+    const sidebar = page.getByRole('navigation').first()
+    await expect(sidebar.getByRole('button', { name: 'NIHAA JEWELS' })).toBeVisible()
+    const top = (await sidebar.locator(':scope > a, :scope > div > button').allInnerTexts()).map((t) => t.trim())
+    expect(top.filter((t) => t !== 'Phone Book')).toEqual([
+      'Stocks',
+      'Cash Management',
+      'Consolidated Report',
+      'Items OB CB',
+      'One Day Action Report',
+      'NIHAA JEWELS',
+      'ID Wise',
+      'More',
+    ])
+
+    await sidebar.getByRole('button', { name: 'NIHAA JEWELS' }).click()
+    await sidebar.getByRole('link', { name: 'Customer FITEM' }).click()
+    await expect(page).toHaveURL(/\/company\/customer-fitem$/)
+    await expect(page.getByText("This page isn't built yet.")).toBeVisible()
+
+    // More opens itself while one of its pages (e.g. the Dashboard) is open.
+    const more = sidebar.getByRole('button', { name: 'More', exact: true })
+    if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click()
+    await expect(sidebar.getByRole('link', { name: 'Dashboard' })).toBeVisible()
     await shot(page, testInfo, 'app-signed-in')
   })
 })

@@ -32,6 +32,18 @@ Agreed with the user on 2026-11-21. Applies to all work in this repository, fron
   * Phones: exactly 10 digits, unique in the phone book.
   * The app's Phone Book page reads the same list, read-only (`is_phone_book_need_shown`).
 * **Head Employee Mappings** and **My account** (login password and special password).
+* **Stock reports for every head** (2026-11-24): ID Wise, One Day Action, Consolidated, Items OB CB, reusing the heads' screens with a console data source (`/admin/reports/*`, `AdminReportController`).
+  * Items OB CB and Consolidated are grouped by head: one section per head, each with its own paging and export, plus a Head filter. The figures are exactly as that head sees them.
+  * One Day Action shows every head's entries in one feed, with a Head filter. ID Wise opens any stock ID; the per-row receipt print is hidden in the console.
+* **Customer Touch** is also managed from the console (heads keep theirs in the app).
+
+## Side menus (agreed 2026-11-24)
+
+* **App:** Stocks, Cash Management, Consolidated Report, Items OB CB, One Day Action Report, *company group*, ID Wise, Phone Book. Every other screen is in **More** at the bottom.
+* **Console:** Roles, Phone Book, Users, ID Wise, One Day Action Report, Consolidated Report, Items OB CB, *company group*, Customer Touch, Salary, then Head Employee Mappings and My account.
+* **Company group** (both logins): headed with the `company_name` system setting (NIHAA JEWELS; heads can change it in System Settings). Children: Roles History, Customers, Employees, Retailers, Customer FITEM.
+* **Not built yet:** the company group's pages and the console's Salary open `ComingSoonView`; build each when its screens come.
+* The menus live in `lib/nav.ts` (`buildNavItems`, `companyGroup`, `COMPANY_PAGES`) and `admin/lib/nav.ts` (`buildAdminNavItems`).
 * Other setup screens (items, fitem boxes, customer touch, banks, cash categories, system settings, system logs) stay with heads in the app. **Each page prompt decides** whether a screen belongs in the console or the app; move it then.
 
 ## A different form for each role

@@ -15,7 +15,7 @@ import { adminSession } from '@/lib/authSession'
 | app routes (App\Support\AdminAccess).
 |--------------------------------------------------------------------------
 */
-const ADMIN_BASE_URL = `${API_BASE_URL}/admin`
+export const ADMIN_BASE_URL = `${API_BASE_URL}/admin`
 
 export const adminApi = createApiClient({ baseUrl: ADMIN_BASE_URL, session: adminSession })
 

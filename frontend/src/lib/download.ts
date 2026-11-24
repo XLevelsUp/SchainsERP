@@ -1,5 +1,5 @@
 import { API_BASE_URL, ApiError } from './api'
-import { appSession } from './authSession'
+import { appSession, type AuthSessionStore } from './authSession'
 
 /*
 |--------------------------------------------------------------------------
@@ -22,6 +22,12 @@ import { appSession } from './authSession'
 | saving an error page as a .csv.
 |--------------------------------------------------------------------------
 */
+
+/** Which API and session a download uses (the app's, or the admin console's). */
+export interface DownloadRealm {
+  baseUrl: string
+  session: AuthSessionStore<unknown>
+}
 
 // Content-Disposition wins when the server sends one: the two report
 // endpoints name their own files (history_items_obcb.csv, etc.) and that
@@ -57,14 +63,20 @@ async function errorFrom(response: Response): Promise<ApiError> {
  *
  * @param path     API path below the v1 base, e.g. `/stock/reports/items-obcb/export`.
  * @param fallback Filename to use when the response carries no Content-Disposition.
+ * @param realm    Which API and session to use: the app's by default; the
+ *                 admin console passes its own base URL and session.
  */
-export async function downloadFile(path: string, fallback: string): Promise<void> {
-  // The report exports are app routes, so they use the app session.
-  const token = appSession.getToken()
+export async function downloadFile(
+  path: string,
+  fallback: string,
+  realm: DownloadRealm = { baseUrl: API_BASE_URL, session: appSession },
+): Promise<void> {
+  const session = realm.session
+  const token = session.getToken()
 
   let response: Response
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${realm.baseUrl}${path}`, {
       method: 'GET',
       headers: {
         // Not application/json: this response is a CSV stream. Laravel still
@@ -79,8 +91,8 @@ export async function downloadFile(path: string, fallback: string): Promise<void
   }
 
   if (response.status === 401 && token) {
-    appSession.clear()
-    appSession.notifyUnauthorized()
+    session.clear()
+    session.notifyUnauthorized()
     throw new ApiError('Your session has expired. Please sign in again.', 401)
   }
 

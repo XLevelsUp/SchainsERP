@@ -37,6 +37,9 @@ export interface ItemsObcbRow {
 }
 
 export interface ItemsObcbQuery {
+  // Admin console only (2026-11-24): the head the report is for. The app
+  // takes the head from the signed-in user and never sends it.
+  head_id?: number
   // "user_<id>" or "retailer_<id>". A bare number is parsed as a USER id, so
   // a retailer must carry the prefix — see getItemsObcbReport's parser.
   employee_id?: string

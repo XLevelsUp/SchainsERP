@@ -44,18 +44,7 @@ class StockDetailsController extends Controller
             $filters['is_export'] = true;
             $result = $this->reportService->getItemsObcbReport($filters, $headId);
 
-            $records = $result['details']['records'] ?? [];
-
-            return response()->streamDownload(function () use ($records) {
-                $file = fopen('php://output', 'w');
-                if (count($records) > 0) {
-                    fputcsv($file, array_keys((array)$records[0]));
-                    foreach ($records as $row) {
-                        fputcsv($file, (array)$row);
-                    }
-                }
-                fclose($file);
-            }, 'history_items_obcb.csv');
+            return \App\Support\ReportCsv::itemsObcb($result);
 
         } catch (\Throwable $e) {
             Log::error('StockDetailsController::exportHistoryItemsObcb failed', ['error' => $e->getMessage()]);
@@ -75,32 +64,7 @@ class StockDetailsController extends Controller
             $filters['is_export'] = true;
             $result = $this->reportService->getConsolidatedReport($filters, $headId);
 
-            $outRecords = $result['out_details']['records'] ?? [];
-            $inRecords = $result['in_details']['records'] ?? [];
-
-            return response()->streamDownload(function () use ($outRecords, $inRecords) {
-                $file = fopen('php://output', 'w');
-                
-                if (count($outRecords) > 0) {
-                    fputcsv($file, ['TYPE']);
-                    fputcsv($file, ['OUT_RECORDS']);
-                    fputcsv($file, array_keys((array)$outRecords[0]));
-                    foreach ($outRecords as $row) {
-                        fputcsv($file, (array)$row);
-                    }
-                }
-
-                if (count($inRecords) > 0) {
-                    fputcsv($file, []);
-                    fputcsv($file, ['TYPE']);
-                    fputcsv($file, ['IN_RECORDS']);
-                    fputcsv($file, array_keys((array)$inRecords[0]));
-                    foreach ($inRecords as $row) {
-                        fputcsv($file, (array)$row);
-                    }
-                }
-                fclose($file);
-            }, 'consolidated_report.csv');
+            return \App\Support\ReportCsv::consolidated($result);
 
         } catch (\Throwable $e) {
             Log::error('StockDetailsController::exportConsolidatedReport failed', ['error' => $e->getMessage()]);
