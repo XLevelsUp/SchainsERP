@@ -34,10 +34,15 @@ describe('the side menus (2026-11-24)', () => {
       ['Retailers', '/company/retailers'],
       ['Customer FITEM', '/company/customer-fitem'],
     ])
-    // Nothing became unreachable.
+    // Nothing became unreachable; Items moved to the console (2026-11-24).
     expect(group(items, 'More').children.map((c) => c.to)).toEqual(
-      expect.arrayContaining(['/', '/items', '/system-settings', '/customer-touch', '/metal-live', '/orders']),
+      expect.arrayContaining(['/', '/system-settings', '/customer-touch', '/metal-live', '/orders']),
     )
+  })
+
+  it('no longer offers Items in the app', () => {
+    const more = group(buildNavItems('X'), 'More')
+    expect(more.children.map((c) => c.to)).not.toContain('/items')
   })
 
   it('still hides Phone Book without its permission', () => {
@@ -58,6 +63,7 @@ describe('the side menus (2026-11-24)', () => {
       'Items OB CB',
       'NIHAA JEWELS',
       'Customer Touch',
+      'Items',
       'Salary',
       'Head Employee Mappings',
       'My account',

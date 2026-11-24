@@ -40,11 +40,15 @@ Agreed with the user on 2026-11-21. Applies to all work in this repository, fron
 ## Side menus (agreed 2026-11-24)
 
 * **App:** Stocks, Cash Management, Consolidated Report, Items OB CB, One Day Action Report, *company group*, ID Wise, Phone Book. Every other screen is in **More** at the bottom.
-* **Console:** Roles, Phone Book, Users, ID Wise, One Day Action Report, Consolidated Report, Items OB CB, *company group*, Customer Touch, Salary, then Head Employee Mappings and My account.
+* **Console:** Roles, Phone Book, Users, ID Wise, One Day Action Report, Consolidated Report, Items OB CB, *company group*, Customer Touch, Items, Salary, then Head Employee Mappings and My account.
 * **Company group** (both logins): headed with the `company_name` system setting (NIHAA JEWELS; heads can change it in System Settings). Children: Roles History, Customers, Employees, Retailers, Customer FITEM.
 * **Not built yet:** the company group's pages and the console's Salary open `ComingSoonView`; build each when its screens come.
 * The menus live in `lib/nav.ts` (`buildNavItems`, `companyGroup`, `COMPANY_PAGES`) and `admin/lib/nav.ts` (`buildAdminNavItems`).
-* Other setup screens (items, fitem boxes, customer touch, banks, cash categories, system settings, system logs) stay with heads in the app. **Each page prompt decides** whether a screen belongs in the console or the app; move it then.
+* **Items** (2026-11-24): in the console only. Heads read items (`GET /items`, every dropdown) but can't change them.
+  * Columns follow the legacy list: Item Name, Item Touch, Is Need Fitem Shown, Is Active, Orders No.
+  * **Orders No** (`items.order_no`) is unique, 1 or more; a new item gets the next free number. `GET /items` sorts by it (then name), so **every item dropdown and list follows it**. Don't re-sort items in the browser.
+  * An item still used anywhere (users' items, stock, history) can't be deleted, because deleting would cascade into balances and history. Switch it off instead.
+* Other setup screens (fitem boxes, customer touch, banks, cash categories, system settings, system logs) stay with heads in the app. **Each page prompt decides** whether a screen belongs in the console or the app; move it then.
 
 ## A different form for each role
 

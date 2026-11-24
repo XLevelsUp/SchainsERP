@@ -110,7 +110,8 @@ class AdminAccessTest extends TestCase
         $this->getJson('/api/v1/roles')->assertOk();
         $this->getJson('/api/v1/settings')->assertOk();
 
-        $this->postJson('/api/v1/items', ['item_name' => 'X'])->assertStatus(403);
+        // Items are changed in the admin console only (2026-11-24).
+        $this->postJson('/api/v1/items', ['item_name' => 'X'])->assertStatus(405);
         // Roles are created in the admin console only.
         $this->postJson('/api/v1/roles', ['role' => 'HEAD'])->assertStatus(405);
         $this->postJson('/api/v1/settings', ['setting_key' => 'k', 'setting_value' => [1]])->assertStatus(403);
@@ -120,12 +121,13 @@ class AdminAccessTest extends TestCase
         $this->postJson('/api/v1/user-details', $this->newUserPayload($this->customerRole->id, 'c1'))->assertStatus(403);
     }
 
-    public function test_heads_manage_items_settings_and_the_audit_log_in_the_app(): void
+    public function test_heads_read_items_and_manage_settings_and_the_audit_log_in_the_app(): void
     {
         $this->signInAs($this->head);
 
-        // Past the gate: validation decides from here.
-        $this->postJson('/api/v1/items', [])->assertStatus(422);
+        // Items moved to the admin console (2026-11-24); heads still read them.
+        $this->postJson('/api/v1/items', [])->assertStatus(405);
+        $this->getJson('/api/v1/items')->assertOk();
         // Roles moved to the admin console; heads still read them.
         $this->getJson('/api/v1/roles')->assertOk();
         $this->postJson('/api/v1/roles', ['role' => 'X'])->assertStatus(405);
@@ -285,10 +287,10 @@ class AdminAccessTest extends TestCase
     {
         $this->signInToAdminConsoleAs($this->admin);
 
-        // Items are a read-only lookup for the Users form. Roles can be
-        // created and viewed, never edited or deleted.
+        // Items are managed here since 2026-11-24 (the Items page). Roles can
+        // be created and viewed, never edited or deleted.
         $this->getJson('/api/v1/admin/items')->assertOk();
-        $this->postJson('/api/v1/admin/items', [])->assertStatus(405);
+        $this->postJson('/api/v1/admin/items', [])->assertStatus(422)->assertJsonValidationErrors(['item_name']);
         $this->putJson('/api/v1/admin/roles/' . $this->headRole->id, ['role' => 'X'])->assertStatus(405);
         $this->deleteJson('/api/v1/admin/roles/' . $this->headRole->id)->assertStatus(405);
         $this->getJson('/api/v1/admin/system-logs')->assertStatus(404);

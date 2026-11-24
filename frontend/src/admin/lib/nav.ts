@@ -3,6 +3,7 @@ import {
   BookUser,
   CalendarClock,
   ChartBar,
+  Gem,
   Hand,
   HandCoins,
   KeyRound,
@@ -31,6 +32,8 @@ export function buildAdminNavItems(companyName: string): NavItem[] {
     { type: 'link', label: 'Items OB CB', to: '/admin/items-obcb-report', icon: ChartBar },
     companyGroup(companyName, '/admin'),
     { type: 'link', label: 'Customer Touch', to: '/admin/customer-touch', icon: Hand },
+    // The Items page (2026-11-24), console only.
+    { type: 'link', label: 'Items', to: '/admin/items', icon: Gem },
     { type: 'link', label: 'Salary', to: '/admin/salary', icon: HandCoins },
     { type: 'link', label: 'Head Employee Mappings', to: '/admin/head-employee-mappings', icon: Network },
     { type: 'link', label: 'My account', to: '/admin/account', icon: KeyRound },

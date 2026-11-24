@@ -20,7 +20,8 @@ const router = createRouter({
       meta: { realm: 'app', requiresAuth: true },
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
-        { path: 'items', name: 'items', component: () => import('@/views/ItemsView.vue') },
+        // Items are managed in the admin console only (2026-11-24); heads read
+        // them through every item dropdown.
         {
           path: 'fitem-boxes',
           name: 'fitem-boxes',

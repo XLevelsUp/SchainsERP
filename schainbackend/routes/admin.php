@@ -147,6 +147,13 @@ Route::middleware(['auth:admin', 'admin.session', 'admin.audit'])->group(functio
     // Read-only lookups for the Users form's item and customer touch pickers;
     // heads manage both lists in the app.
     Route::get('items', [ItemController::class, 'index'])->name('items.index');
+    // The Items page lives in the console only (2026-11-24): create, edit and
+    // delete items, including the order number every item dropdown follows.
+    // The app reads items (GET /items) but no longer changes them.
+    Route::post('items', [ItemController::class, 'store'])->name('items.store');
+    Route::get('items/{item}', [ItemController::class, 'show'])->whereNumber('item')->name('items.show');
+    Route::match(['put', 'patch'], 'items/{item}', [ItemController::class, 'update'])->whereNumber('item')->name('items.update');
+    Route::delete('items/{item}', [ItemController::class, 'destroy'])->whereNumber('item')->name('items.destroy');
     Route::get('customer-touch', [CustomerTouchController::class, 'index'])->name('customer-touch.index');
     // Customer Touch is also managed from the console (2026-11-24); heads keep
     // theirs in the app.

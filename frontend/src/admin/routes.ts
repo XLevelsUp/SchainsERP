@@ -45,6 +45,7 @@ export const adminRoutes: RouteRecordRaw[] = [
         component: () => import('./views/reports/AdminReportPage.vue'),
         props: { report },
       })),
+      { path: 'items', name: 'admin-items', component: () => import('./views/ItemsView.vue') },
       {
         path: 'customer-touch',
         name: 'admin-customer-touch',

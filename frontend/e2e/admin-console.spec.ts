@@ -246,7 +246,7 @@ test.describe('signed in', () => {
     const top = (await sidebar.locator(':scope > a, :scope > div > button').allInnerTexts()).map((t) => t.trim())
     expect(top).toEqual([
       'Roles', 'Phone Book', 'Users', 'ID Wise', 'One Day Action Report', 'Consolidated Report', 'Items OB CB',
-      'NIHAA JEWELS', 'Customer Touch', 'Salary', 'Head Employee Mappings', 'My account',
+      'NIHAA JEWELS', 'Customer Touch', 'Items', 'Salary', 'Head Employee Mappings', 'My account',
     ])
 
     await sidebar.getByRole('button', { name: 'NIHAA JEWELS' }).click()
@@ -295,9 +295,51 @@ test.describe('signed in', () => {
     await expect(page.getByRole('columnheader', { name: 'Print' })).toHaveCount(0)
   })
 
+  // Read-only: the modal is opened, checked and closed.
+  test('the Items page lists items by Orders No, and dropdowns follow it', async ({ page }, testInfo) => {
+    await signInToAdminConsole(page)
+    const sidebar = page.getByRole('navigation').first()
+    await sidebar.getByRole('link', { name: 'Items', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Items', exact: true })).toBeVisible()
+    for (const header of ['Item Name', 'Item Touch', 'Is Need Fitem Shown', 'Is Active', 'Orders No', 'Actions']) {
+      await expect(page.getByRole('columnheader', { name: header, exact: true })).toBeVisible()
+    }
+    await expect(page.getByText(/Showing \d+–\d+ of \d+ items/)).toBeVisible()
+
+    // Rows run in Orders No order.
+    const rows = page.locator('tbody tr')
+    const orders = (await rows.locator('td:nth-child(5)').allInnerTexts()).map((t) => Number(t.trim()))
+    expect(orders.length).toBeGreaterThan(1)
+    expect(orders).toEqual([...orders].sort((a, b) => a - b))
+    const names = await rows.locator('td:nth-child(1)').allInnerTexts()
+    await shot(page, testInfo, 'admin-items')
+
+    // The modal suggests the next number and refuses one already taken.
+    await page.getByRole('button', { name: 'New item', exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.locator('#item_order_no')).toHaveValue(String(Math.max(...orders) + 1))
+    await dialog.locator('#item_name').fill('zz never saved')
+    await dialog.locator('#item_order_no').fill(String(orders[0]))
+    await dialog.getByRole('button', { name: 'Save' }).click()
+    await expect(dialog.getByText('already has this order number.')).toBeVisible()
+    await shot(page, testInfo, 'admin-items-modal')
+    await dialog.getByRole('button', { name: 'Close', exact: true }).last().click()
+    await expect(dialog).toBeHidden()
+
+    // An item dropdown elsewhere lists the items in the same order.
+    await sidebar.getByRole('link', { name: 'Items OB CB' }).click()
+    // The items list loads with the page: wait until the field has them.
+    await expect(page.getByText(/Showing \d+ of \d+ movements/).first()).toBeVisible()
+    await page.getByRole('button', { name: /All items/ }).click()
+    await expect(page.getByRole('listbox').getByRole('option').first()).toBeVisible()
+    const options = (await page.getByRole('listbox').getByRole('option').allInnerTexts()).map((t) => t.trim())
+    expect(options.slice(0, 3)).toEqual(names.slice(0, 3).map((n) => n.trim()))
+  })
+
   test('the Roles page lists the roles', async ({ page }, testInfo) => {
     await signInToAdminConsole(page)
-    await page.getByRole('link', { name: 'Roles' }).click()
+    await page.getByRole('link', { name: 'Roles', exact: true }).click()
+    await expect(page).toHaveURL(/\/admin\/roles$/)
     await expect(page.getByRole('heading', { name: 'Roles', exact: true })).toBeVisible()
     await expect(page.getByRole('cell', { name: 'HEAD', exact: true })).toBeVisible()
     await shot(page, testInfo, 'admin-roles')
@@ -306,7 +348,8 @@ test.describe('signed in', () => {
   // Read-only: the prompt is opened and cancelled, so no role changes.
   test('a role status asks for the special password before switching', async ({ page }, testInfo) => {
     await signInToAdminConsole(page)
-    await page.getByRole('link', { name: 'Roles' }).click()
+    await page.getByRole('link', { name: 'Roles', exact: true }).click()
+    await expect(page).toHaveURL(/\/admin\/roles$/)
     await page.getByRole('button', { name: 'Deactivate HEAD' }).click()
 
     const dialog = page.getByRole('dialog')

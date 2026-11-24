@@ -9,6 +9,11 @@ export interface Item {
   mtouch: number | null
   is_barcode: boolean
   is_no_barcode: boolean
+  // The legacy "Orders No" (2026-11-24): the order items appear in, in every
+  // item dropdown and list (GET /items is sorted by it). Unique, 1 or more.
+  order_no: number
 }
 
-export type ItemFormValues = Omit<Item, 'item_id' | 'added_at'>
+// The Items page's form (admin console). order_no null = the next free
+// number (the backend assigns it).
+export type ItemFormValues = Omit<Item, 'item_id' | 'added_at' | 'order_no'> & { order_no: number | null }

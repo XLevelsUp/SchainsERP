@@ -23,6 +23,27 @@ fixed, struck through, with what changed — this file is the record.
 **Backend baseline:** `982afd78` (PR #53) plus our own uncommitted backend
 fixes below. Since 2026-11-06 we own the backend too.
 
+### Items page in the console, with Orders No (2026-11-24)
+
+- **Placement (user's decision):** the Items page moved to the admin console (menu: after Customer Touch). The app's Items page, route and More entry were removed, along with the app's item write routes (`items` added to the admin-owned list). Heads still read `GET /items`.
+- **Orders No** (`items.order_no`, migration `2026_11_24_000300`, **applied on Aiven**):
+  - Unique, 1 or more, required. A new item gets the next free number: in `ItemController::store`, and in the model for anything else that creates items (seeders, tests).
+  - `GET /items` sorts by `order_no`, then name, so every item dropdown follows it with no client re-sort. The stock screen's `mapped_only` list too.
+- **Aiven data (user's list):**
+  - 1 Metal, 2 GOLD, 3 FITEM, 4 FITEM(75%), 5 FITEM(H MADE), 6 STONE, 7 ENAMAL, then 8 GMS Metal … 14 new item.
+  - **Created** FITEM (91.7), FITEM(75%) (75.1), FITEM(H MADE) (91.7), all three Need Fitem Shown = Yes; STONE (0) and ENAMAL (0). Default touch was set to the same as item touch.
+- **Page** (`admin/views/ItemsView.vue`):
+  - Legacy columns: Item Name, Item Touch, Is Need Fitem Shown, Is Active (both switch from the list), Orders No, view/edit/delete.
+  - Column filters, 20 a page or Show all, CSV export.
+  - The modal has Orders No (next number suggested; one already taken is refused) plus the touch and barcode fields.
+- **Delete guard:** deleting an item cascades into `users_items_mappings` and nine history tables, so `destroy` now refuses an item that is still referenced anywhere ("switch it off instead").
+- **Tests:**
+  - Backend: new `ItemOrderTest` (4 tests); `AdminAccessTest` updated for the move.
+  - Vitest: `items.spec.ts`; `nav.spec.ts` updated.
+  - Playwright: the Items page plus a dropdown following the order; the Roles tests use exact link names.
+  - Run: backend 137/137, Vitest 41/41, vue-tsc and build clean, Playwright 16/16.
+  - Postgres: create without a number got 15; a duplicate was refused; delete of Metal was refused (in use); the app got the order and a 405 on POST. The `zz item` and its 3 log rows were removed.
+
 ### Side menus rearranged; reports, Customer Touch and placeholders in the console (2026-11-24)
 
 - **App menu:** Stocks, Cash Management, Consolidated Report, Items OB CB, One Day Action Report, NIHAA JEWELS (group), ID Wise, Phone Book (permission). Everything else is under **More** (user's decision), so nothing is unreachable.

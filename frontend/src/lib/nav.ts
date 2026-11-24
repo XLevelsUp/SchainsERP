@@ -1,6 +1,5 @@
 import {
   LayoutDashboard,
-  Gem,
   Package,
   Users,
   Hand,
@@ -93,12 +92,11 @@ export function buildNavItems(companyName: string): NavItem[] {
       type: 'group',
       label: 'More',
       icon: MoreHorizontal,
-      // Users, Head Employee Mappings and Roles are in the admin console
-      // (admin/lib/nav.ts).
+      // Users, Head Employee Mappings, Roles and Items are in the admin
+      // console (admin/lib/nav.ts).
       children: [
         { type: 'link', label: 'Dashboard', to: '/', icon: LayoutDashboard },
         { type: 'link', label: 'Clients', to: '/clients', icon: Users },
-        { type: 'link', label: 'Items', to: '/items', icon: Gem },
         { type: 'link', label: 'Fitem Boxes', to: '/fitem-boxes', icon: Package },
         { type: 'link', label: 'System Settings', to: '/system-settings', icon: SlidersHorizontal },
         { type: 'link', label: 'Customer Touch', to: '/customer-touch', icon: Hand },

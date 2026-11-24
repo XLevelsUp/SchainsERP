@@ -66,7 +66,8 @@ Route::prefix('v1')->group(function () {
             ->name('user-details.store');
         Route::middleware('head.only')->group(function () use ($adminResources) {
             // Changed only in the admin console (routes/admin.php).
-            $adminOwned = ['user-details', 'roles', 'head-employee-mappings', 'cash-head-employee-mappings'];
+            // Items too (2026-11-24): the Items page is in the console only.
+            $adminOwned = ['user-details', 'roles', 'items', 'head-employee-mappings', 'cash-head-employee-mappings'];
             foreach ($adminResources as $name => $controller) {
                 if (!in_array($name, $adminOwned, true)) {
                     Route::apiResource($name, $controller)->except(['index', 'show']);

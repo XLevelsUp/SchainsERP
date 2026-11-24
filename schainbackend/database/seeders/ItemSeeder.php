@@ -32,6 +32,8 @@ class ItemSeeder extends Seeder
                     'is_active'    => true,
                     'default_touch'=> 91.6,
                     'item_touch'   => 91.6,
+                    // Next free order number (2026-11-24).
+                    'order_no'     => ((int) DB::table('items')->max('order_no')) + 1,
                 ]);
             } catch (\Exception $e) {
                 // If PK conflict due to sequence issue, reset sequence and retry
@@ -42,6 +44,8 @@ class ItemSeeder extends Seeder
                         'is_active'    => true,
                         'default_touch'=> 91.6,
                         'item_touch'   => 91.6,
+                        // Next free order number (2026-11-24).
+                        'order_no'     => ((int) DB::table('items')->max('order_no')) + 1,
                     ]);
                 }
             }
