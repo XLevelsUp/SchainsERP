@@ -204,20 +204,17 @@ class ReportController extends Controller
             return $denied;
         }
 
+        if ($invalid = \App\Support\OneDayActionFilters::invalid($request)) {
+            return $invalid;
+        }
+
         try {
             // The token's user. This used to read an X-User-ID header and fall
             // back to user 1 without it (BACKEND_TODO §7).
             $headId = $this->actingUserId($request);
-            $filters = $request->all();
 
-            // Default to today if no date provided
-            if (empty($filters['from_date']) && empty($filters['target_date'])) {
-                $filters['from_date'] = date('Y-m-d');
-            } elseif (!empty($filters['target_date'])) {
-                $filters['from_date'] = $filters['target_date']; // Map it for the service
-            }
-
-            $result = $reportService->getOneDayActionReport($filters, $headId);
+            // Stock and cash sections, defaulting to today.
+            $result = $reportService->getOneDayActionReport(\App\Support\OneDayActionFilters::from($request), $headId);
 
             return response()->json([
                 'success' => true,

@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\BankDetailController;
 use App\Http\Controllers\Api\SaleGoldController;
 use App\Http\Controllers\Api\PurchaseGoldController;
 use App\Http\Controllers\Api\StockDetailsController;
+use App\Http\Controllers\Api\ItemHistoryReportController;
 use App\Http\Controllers\Api\CashToGoldController;
 use App\Http\Controllers\Api\GoldToCashController;
 use App\Http\Controllers\Api\CashCategoryController;
@@ -199,4 +200,12 @@ Route::prefix('v1/stock')->middleware(['auth:api', 'app.session'])->group(functi
     Route::get('reports/consolidated/export', [StockDetailsController::class, 'exportConsolidatedReport']);
     Route::get('reports/consolidated', [StockDetailsController::class, 'getConsolidatedReport']);
     Route::get('reports/id-wise', [StockDetailsController::class, 'getIdWiseReport']);
+
+    // The history of Item Change / Item Conversion (2026-11-25): the user's
+    // own records, plus a head's mapped employees'. Each needs the
+    // permission of its Stocks page feature.
+    Route::get('reports/item-changes', [ItemHistoryReportController::class, 'itemChanges'])
+        ->middleware('user.permission:is_item_change_need_shown');
+    Route::get('reports/item-conversion-groups', [ItemHistoryReportController::class, 'conversionGroups'])
+        ->middleware('user.permission:is_item_conversion_need_shown');
 });

@@ -3,10 +3,14 @@ import type {
   ConsolidatedResult,
   IdWiseReportResult,
   Item,
+  ItemChangeResult,
+  ItemConversionGroupResult,
+  ItemHistoryQuery,
   ItemsObcbQuery,
   ItemsObcbResult,
   OneDayActionQuery,
   OneDayActionResult,
+  Role,
   UserDetailListItem,
 } from '@/types'
 
@@ -37,6 +41,19 @@ export interface ConsolidatedSource extends Lookups {
 
 export interface OneDayActionSource extends Lookups {
   fetch: (query: OneDayActionQuery) => Promise<OneDayActionResult>
+  // The Role filter (2026-11-25).
+  loadRoles: () => Promise<Role[]>
+}
+
+// Item Change History / Item Conversion Group History (2026-11-25).
+export interface ItemChangeHistorySource {
+  fetch: (query: ItemHistoryQuery) => Promise<ItemChangeResult>
+  loadItems: () => Promise<Item[]>
+}
+
+export interface ItemConversionGroupSource {
+  fetch: (query: ItemHistoryQuery) => Promise<ItemConversionGroupResult>
+  loadItems: () => Promise<Item[]>
 }
 
 export interface IdWiseSource {

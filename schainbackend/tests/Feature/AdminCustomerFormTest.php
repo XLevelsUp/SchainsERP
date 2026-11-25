@@ -115,6 +115,23 @@ class AdminCustomerFormTest extends TestCase
         $this->postJson('/api/v1/login', ['user_name' => 'Mahalaxmi N', 'password' => 'known-pass'])->assertStatus(401);
     }
 
+    public function test_a_blank_mailing_name_follows_the_user_name(): void
+    {
+        $this->signInToAdminConsoleAs($this->admin);
+
+        // The customer form has no Name, so the console used to send a blank
+        // mailing name, which store() rejected as required (2026-11-25).
+        $this->postJson('/api/v1/admin/user-details', $this->customerPayload(['mailing_name' => '']))
+            ->assertStatus(201);
+        $this->assertSame('Mahalaxmi N', UserDetail::where('user_name', 'Mahalaxmi N')->value('mailing_name'));
+
+        // One typed in is kept.
+        $this->postJson('/api/v1/admin/user-details', $this->customerPayload([
+            'user_name' => 'Ravi S', 'phone_no' => '0970000003', 'system_id' => 'SYS_RAVI', 'mailing_name' => 'RAVI (CHENNAI)',
+        ]))->assertStatus(201);
+        $this->assertSame('RAVI (CHENNAI)', UserDetail::where('user_name', 'Ravi S')->value('mailing_name'));
+    }
+
     public function test_the_name_follows_the_user_name_only_when_it_changes(): void
     {
         $customer = UserDetail::create([

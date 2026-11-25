@@ -47,6 +47,8 @@ export function makeEmptyUserForm(): UserDetailFormValues {
     per_day_salary: '',
     report_password: '',
     additional_phone_no: '',
+    alloy_value: '0',
+    is_outside_vendor: false,
   }
 }
 
@@ -100,6 +102,8 @@ export function userToForm(user: UserDetail): UserDetailFormValues {
     per_day_salary:
       user.per_day_salary === null || user.per_day_salary === undefined ? '' : String(user.per_day_salary),
     additional_phone_no: user.additional_phone_no ?? '',
+    alloy_value: user.alloy_value === null || user.alloy_value === undefined ? '0' : String(Number(user.alloy_value)),
+    is_outside_vendor: Boolean(user.is_outside_vendor),
   }
 }
 
@@ -182,12 +186,11 @@ export function addDefaultPrimaryItem(
   }
 }
 
-// Every section, for when the profiles couldn't be loaded: the full form,
-// which is what a role without its own profile gets anyway. The backend
-// still enforces the real profile on save.
+// Every section the form knows.
 export const ALL_USER_FORM_SECTIONS: UserFormSection[] = [
   'contact',
   'additional_phone',
+  'employee',
   'remarks',
   'customer_comments',
   'heads',
@@ -206,6 +209,14 @@ export const ALL_USER_FORM_SECTIONS: UserFormSection[] = [
   'flags',
 ]
 
+// Sections that belong to one role, kept off the full form (fixed
+// 2026-11-25: an EMPLOYEE showed Head users next to Head lists). Same list
+// as UserFormProfiles::ROLE_ONLY_SECTIONS.
+export const ROLE_ONLY_SECTIONS: UserFormSection[] = ['head_users', 'additional_phone', 'employee']
+
+// For when the profiles couldn't be loaded: the full form, which is what a
+// role without its own profile gets anyway. The backend still enforces the
+// real profile on save.
 export const FULL_USER_FORM_PROFILE: UserFormProfile = {
   role: null,
   is_default: true,
@@ -215,7 +226,7 @@ export const FULL_USER_FORM_PROFILE: UserFormProfile = {
   default_primary_item: null,
   default_flags: [],
   joining_date_defaults_to_today: false,
-  sections: ALL_USER_FORM_SECTIONS,
+  sections: ALL_USER_FORM_SECTIONS.filter((s) => !ROLE_ONLY_SECTIONS.includes(s)),
   flags: USER_FEATURE_FLAG_KEYS,
 }
 

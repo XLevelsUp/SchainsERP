@@ -110,6 +110,20 @@ const router = createRouter({
           name: 'one-day-action',
           component: () => import('@/views/OneDayActionView.vue'),
         },
+        // The history of the Stocks page's Item Conversion / Item Change
+        // (2026-11-25), each behind its feature's permission.
+        {
+          path: 'item-conversion-group-history',
+          name: 'item-conversion-group-history',
+          meta: { permission: 'is_item_conversion_need_shown' },
+          component: () => import('@/views/ItemConversionGroupHistoryView.vue'),
+        },
+        {
+          path: 'item-change-history',
+          name: 'item-change-history',
+          meta: { permission: 'is_item_change_need_shown' },
+          component: () => import('@/views/ItemChangeHistoryView.vue'),
+        },
         {
           path: 'daywise-grand',
           name: 'daywise-grand',

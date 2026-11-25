@@ -28,6 +28,7 @@ final class UserFormProfiles
     public const SECTIONS = [
         'contact',           // address, signature, mailing name
         'additional_phone',  // "Additional Phone No" (SALARY)
+        'employee',          // "Alloy Value", "Is Outside Vendor" (EMPLOYEE)
         'remarks',
         'customer_comments',
         'heads',             // the heads a user reports to (stock)
@@ -53,6 +54,7 @@ final class UserFormProfiles
      */
     public const SECTION_INPUTS = [
         'additional_phone' => ['additional_phone_no'],
+        'employee' => ['alloy_value', 'is_outside_vendor'],
         'remarks' => ['remarks'],
         'customer_comments' => ['customer_commants'],
         'heads' => ['head_mappings'],
@@ -110,6 +112,25 @@ final class UserFormProfiles
      * user's joining date starts as today. Both are form defaults only.
      */
     private const PROFILES = [
+        // The legacy employee user form (2026-11-25). Employees don't sign in
+        // (user's decision, like the legacy form); no permission switches.
+        'EMPLOYEE' => [
+            'lock_role_on_edit' => false,
+            'signs_in' => false,
+            'default_category' => 'BOTH',
+            'default_primary_item' => 'GOLD',
+            'joining_date_defaults_to_today' => true,
+            'sections' => [
+                'heads',
+                'items',
+                'balances',
+                'image',
+                'joining_date',
+                'employee',
+            ],
+            'flags' => [],
+        ],
+
         // The legacy salary user form (2026-11-23). Salary people are records
         // for wages and tracking: they don't sign in.
         'SALARY' => [
@@ -225,6 +246,25 @@ final class UserFormProfiles
         ],
     ];
 
+    /**
+     * Sections that belong to one role and so stay off the full form a role
+     * without a profile gets (fixed 2026-11-25: an EMPLOYEE showed Head users
+     * next to Head lists):
+     *  - head_users: a head's links to other heads (HEAD only);
+     *  - additional_phone: the SALARY form's extra phone (SALARY only, agreed
+     *    2026-11-23);
+     *  - employee: the EMPLOYEE form's Alloy Value and Is Outside Vendor
+     *    (2026-11-25).
+     * A role's own profile can still list them.
+     */
+    public const ROLE_ONLY_SECTIONS = ['head_users', 'additional_phone', 'employee'];
+
+    /** The full form: every section except the role-only ones. */
+    public static function defaultSections(): array
+    {
+        return array_values(array_diff(self::SECTIONS, self::ROLE_ONLY_SECTIONS));
+    }
+
     /** The resolved profile for a role name; DEFAULT when it has none. */
     public static function forRoleName(?string $roleName): array
     {
@@ -241,7 +281,7 @@ final class UserFormProfiles
                 'default_primary_item' => null,
                 'default_flags' => [],
                 'joining_date_defaults_to_today' => false,
-                'sections' => self::SECTIONS,
+                'sections' => self::defaultSections(),
                 'flags' => self::FLAG_KEYS,
             ];
         }
@@ -288,8 +328,13 @@ final class UserFormProfiles
      */
     public static function disallowedInputs(array $profile): array
     {
+        // The full form takes every permission and section except the
+        // role-only ones (ROLE_ONLY_SECTIONS).
         if ($profile['is_default']) {
-            return [];
+            return array_merge(...array_map(
+                fn (string $section) => self::SECTION_INPUTS[$section] ?? [],
+                self::ROLE_ONLY_SECTIONS,
+            ));
         }
 
         $drop = array_values(array_diff(self::FLAG_KEYS, $profile['flags']));

@@ -75,6 +75,9 @@ export interface UserDetail extends Partial<UserFeatureFlags> {
   aadhar_number?: string | null
   // SALARY form (2026-11-23): optional, 10 digits, unique across both phones.
   additional_phone_no?: string | null
+  // EMPLOYEE form (2026-11-25). alloy_value comes back as a decimal string.
+  alloy_value?: string | number | null
+  is_outside_vendor?: boolean
   // The report password itself is never sent back.
   has_report_password?: boolean
   added_at?: string
@@ -254,6 +257,9 @@ export interface UserDetailFormValues extends UserFeatureFlags {
   per_day_salary?: string
   // SALARY form (2026-11-23). '' = none.
   additional_phone_no?: string
+  // EMPLOYEE form (2026-11-25). '' = 0.
+  alloy_value?: string
+  is_outside_vendor?: boolean
   // A new user's opening balances, filled in the console's modals and sent
   // with the create request (2026-11-24). Never sent on update.
   opening_balances?: OpeningBalanceInput[]

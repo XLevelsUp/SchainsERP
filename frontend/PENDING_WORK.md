@@ -23,6 +23,40 @@ fixed, struck through, with what changed — this file is the record.
 **Backend baseline:** `982afd78` (PR #53) plus our own uncommitted backend
 fixes below. Since 2026-11-06 we own the backend too.
 
+### Admin console — EMPLOYEE user form (2026-11-25)
+
+Built from the legacy employee form.
+
+- **Profile** (`UserFormProfiles::EMPLOYEE`):
+  - No sign-in (user's decision): no Name or Password, the name follows the user name, a random password is set. Existing employees such as Employee One keep their current password.
+  - Defaults: BOTH, GOLD as the primary item, joining date today.
+  - Sections: Head lists, items with Grams/Purity, balances with GRAMS/PURITY/CASH/RTGS, image, joining date, and the new employee section.
+  - No permission switches. Existing employees' saved switches are untouched; the form doesn't send changes to them.
+- **New columns** (migration `2026_11_25_000000`, **applied on Aiven**, defaults for existing rows):
+  - `alloy_value`: decimal(12,3), default 0, 0 or more. Stored and shown only; no calculation uses it yet.
+  - `is_outside_vendor`: boolean, default No. Separate from the `is_outside_need_to_shown` permission.
+- **Removed from the EMPLOYEE form** (were on the full form): cash heads, customer comments and touches, contact, remarks, profile picture, Aadhar, salary, report password, billable/deleted, 43 switches.
+- **Tests:**
+  - Backend: new `AdminEmployeeFormTest` (3 tests). The full-form tests now use PURCHASE as their role without a profile (`AdminUserFormTest`, `AdminHeadFormTest`, `AdminFullFormTest`); `AdminAccessTest` updated.
+  - Vitest: updated. Playwright: the EMPLOYEE form.
+  - Run: backend 147/147, Vitest 48/48, vue-tsc and build clean, Playwright 18/18.
+  - Postgres: `zz_emp2` was created with name and mailing name following the user name, BOTH, GOLD primary, alloy 2.500, outside vendor Yes, and act-as-head dropped. The sent password couldn't sign in; alloy -3 was refused. It, its contact and 2 log rows were removed.
+- **Parallel work:** another session is reworking One Day Action at the same time (`OneDayActionFilters`, `ReportService`, `AdminReportController`, `e2e/support.ts`). Not part of this change.
+
+### Fixed: the full user form showed HEAD's Head users (2026-11-25)
+
+- **Bug:** the EMPLOYEE form (and any role without its own profile, which gets the full form) showed **Head users** under Head lists, plus SALARY's Additional phone no.
+- **Cause:** the full form was "every section". When Head users became HEAD-only (2026-11-23) and Additional phone was added for SALARY only, neither was taken off it. The backend also accepted Head users for those roles, which would have saved an employee as a head.
+- **Fix:**
+  - `UserFormProfiles::ROLE_ONLY_SECTIONS` (head_users, additional_phone) are left out of the default profile, and their input is dropped on save.
+  - The frontend fallback (`FULL_USER_FORM_PROFILE`) matches.
+  - No data needed fixing on Aiven: no non-HEAD heads, and no additional phones outside SALARY.
+- **Tests:**
+  - Backend: new `AdminFullFormTest`; `AdminUserFormTest` updated.
+  - Vitest and Playwright: the EMPLOYEE form.
+  - Run: backend 139/139, Vitest 41/41, vue-tsc and build clean, Playwright 17/17.
+  - Postgres: a `zz_emp` employee was saved under head #6 only, never as a head, with no additional phone. It, its contact and 2 log rows were removed.
+
 ### Items page in the console, with Orders No (2026-11-24)
 
 - **Placement (user's decision):** the Items page moved to the admin console (menu: after Customer Touch). The app's Items page, route and More entry were removed, along with the app's item write routes (`items` added to the admin-owned list). Heads still read `GET /items`.

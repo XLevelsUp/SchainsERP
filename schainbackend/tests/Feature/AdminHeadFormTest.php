@@ -37,7 +37,9 @@ class AdminHeadFormTest extends TestCase
         parent::setUp();
 
         $this->headRole = Role::create(['role' => 'HEAD']);
-        $this->employeeRole = Role::create(['role' => 'EMPLOYEE']);
+        // A role without its own profile (the full form). EMPLOYEE has its own
+        // since 2026-11-25, so PURCHASE stands in.
+        $this->employeeRole = Role::create(['role' => 'PURCHASE']);
         $this->adminRole = Role::create(['role' => 'ADMIN']);
         $customerRole = Role::create(['role' => 'CUSTOMER']);
 

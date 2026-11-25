@@ -65,3 +65,70 @@ export async function pick(page: Page, selectId: string, option: string) {
   await page.locator(`#${selectId}`).click()
   await page.getByRole('option', { name: option, exact: true }).click()
 }
+
+/**
+ * One Day Action (2026-11-25), in both logins: the legacy filters, today by
+ * default, and the two sections with their totals.
+ */
+export async function expectOneDayActionPage(page: Page) {
+  for (const id of ['oda_user', 'oda_item', 'oda_stock_type', 'oda_given_by', 'oda_given_to', 'oda_role']) {
+    await expect(page.locator(`#${id}`)).toBeVisible()
+  }
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  await expect(page.locator('#oda_from_date')).toHaveValue(today)
+  await expect(page.locator('#oda_to_date')).toHaveValue('')
+
+  // Both sections start closed, their Totals showing.
+  const stockToggle = page.getByRole('button', { name: /^Stock Report/ })
+  const cashToggle = page.getByRole('button', { name: /^Cash Management Report/ })
+  for (const toggle of [stockToggle, cashToggle]) {
+    await expect(toggle).toContainText(/Total: \d+/)
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  }
+  await expect(page.getByRole('columnheader', { name: 'Stock ID' })).toBeHidden()
+  await expect(page.getByRole('columnheader', { name: 'Txn ID' })).toBeHidden()
+
+  // Each opens on its own and closes again.
+  await stockToggle.click()
+  await expect(stockToggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByRole('columnheader', { name: 'Stock ID' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Txn ID' })).toBeHidden()
+  await cashToggle.click()
+  await expect(page.getByRole('columnheader', { name: 'Txn ID' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Category' })).toBeVisible()
+  await stockToggle.click()
+  await expect(page.getByRole('columnheader', { name: 'Stock ID' })).toBeHidden()
+  await stockToggle.click()
+}
+
+/** Today as a date input holds it (local time). */
+export function todayInput(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Item Change History / Item Conversion Group History (2026-11-25), in both
+ * logins: Item and From / To Date filters, the current month by default,
+ * then a search over the whole history (read-only). `prefix` is the page's
+ * field prefix.
+ */
+export async function expectItemHistoryPage(page: Page, prefix: 'ich' | 'icg') {
+  await expect(page.locator(`#${prefix}_item`)).toBeVisible()
+  await expect(page.locator(`#${prefix}_from_date`)).toHaveValue(`${todayInput().slice(0, 8)}01`)
+  await expect(page.locator(`#${prefix}_to_date`)).toHaveValue(todayInput())
+
+  await page.locator(`#${prefix}_from_date`).fill('2026-01-01')
+  await page.locator(`#${prefix}_to_date`).fill(todayInput())
+  const search = page.getByRole('button', { name: 'Search', exact: true })
+  await search.click()
+  await expect(search).toBeEnabled()
+}
+
+/** The number in a "Label: 12" badge. */
+export async function badgeCount(page: Page, label: string): Promise<number> {
+  const badge = page.getByText(new RegExp(`^\\s*${label}: \\d+\\s*$`))
+  await expect(badge).toBeVisible()
+  return Number((await badge.innerText()).replace(/\D/g, ''))
+}

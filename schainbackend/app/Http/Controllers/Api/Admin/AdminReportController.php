@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\StockDetails;
 use App\Rules\HeadUser;
+use App\Services\ItemHistoryReportService;
 use App\Services\ReportService;
+use App\Support\ItemHistoryFilters;
+use App\Support\OneDayActionFilters;
 use App\Support\ReportCsv;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -60,19 +63,45 @@ class AdminReportController extends Controller
         ));
     }
 
-    /** All heads unless head_id narrows it to one. Defaults to today, like the app. */
+    /**
+     * All heads unless head_id narrows it to one. Stock and cash sections,
+     * defaulting to today, like the app.
+     */
     public function oneDayAction(Request $request): JsonResponse
     {
-        return $this->respond($request, false, 'One day action report fetched successfully.', function (?int $headId) use ($request) {
-            $filters = $request->all();
-            if (empty($filters['from_date']) && empty($filters['target_date'])) {
-                $filters['from_date'] = date('Y-m-d');
-            } elseif (!empty($filters['target_date'])) {
-                $filters['from_date'] = $filters['target_date'];
-            }
+        if ($invalid = OneDayActionFilters::invalid($request)) {
+            return $invalid;
+        }
 
-            return $this->reports->getOneDayActionReport($filters, $headId);
-        });
+        return $this->respond($request, false, 'One day action report fetched successfully.',
+            fn (?int $headId) => $this->reports->getOneDayActionReport(OneDayActionFilters::from($request), $headId));
+    }
+
+    /**
+     * Item Change History (2026-11-25): every user's changes, or one head's
+     * (its own and its mapped employees') when head_id is given.
+     */
+    public function itemChanges(Request $request, ItemHistoryReportService $history): JsonResponse
+    {
+        if ($invalid = ItemHistoryFilters::invalid($request)) {
+            return $invalid;
+        }
+
+        return $this->respond($request, false, 'Item change history fetched successfully.',
+            fn (?int $headId) => $history->itemChanges(
+                ItemHistoryFilters::from($request), $headId === null ? null : $history->scopeFor($headId)));
+    }
+
+    /** Item Conversion Group History (2026-11-25), grouped by item pair; scope as itemChanges. */
+    public function itemConversionGroups(Request $request, ItemHistoryReportService $history): JsonResponse
+    {
+        if ($invalid = ItemHistoryFilters::invalid($request)) {
+            return $invalid;
+        }
+
+        return $this->respond($request, false, 'Item conversion group history fetched successfully.',
+            fn (?int $headId) => $history->conversionGroups(
+                ItemHistoryFilters::from($request), $headId === null ? null : $history->scopeFor($headId)));
     }
 
     public function idWise(Request $request): JsonResponse

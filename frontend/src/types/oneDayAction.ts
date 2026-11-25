@@ -1,73 +1,45 @@
-// GET /report/one-day-action — PR #37, testing doc §47.
+// GET /report/one-day-action (app) and /admin/reports/one-day-action
+// (console): ReportService::getOneDayActionReport.
 //
-// A single day's stock movements and cash transactions merged into one
-// feed, replacing the legacy Yii2 "One Day Action" screen.
-//
-// PR #46 (2026-09-22, backend commit 60b3816) rewrote the response contract.
-// What changed, all verified against ReportService::getOneDayActionReport:
-//
-//  1. The endpoint is now scoped to a head. `$headId` (from `X-User-ID`,
-//     defaulting to 1 if the header is absent — see reportApi.ts) is ANDed
-//     into both queries as `given_by = headId OR given_to = headId` /
-//     `sender_id = headId OR recipient_id = headId`. Previously it accepted
-//     the parameter and never used it (PENDING_WORK.md #22, now fixed) —
-//     the caller MUST send X-User-ID now, or every result is scoped to
-//     user 1 instead of the signed-in head.
-//  2. Cash rows now carry the amount in `amount`, not `grams`. `grams` is
-//     `null` on CASH rows and `amount` is `null` on STOCK rows (#24, fixed).
-//  3. `added_at` is "YYYY-MM-DD HH:mm:ss" like every other endpoint, or the
-//     literal "-" when the source timestamp was null. No more bespoke
-//     "DD-MM-YYYY" parsing (#25, fixed).
-//  4. Pagination is now applied to the combined, globally-sorted dataset
-//     instead of per-source-then-concatenated, so `records` arrives in
-//     final order and pages append cleanly (#23, fixed). `total_stock_count`
-//     / `total_cash_count` are unchanged; `page_no`/`page_size` were
-//     replaced by a `pagination` object.
+// 2026-11-25: the legacy screen's two sections, Stock Report and Cash
+// Management Report, each with its own total and paging (it used to be one
+// merged feed). Today by default; the app scopes to the signed-in head, the
+// console to `head_id` or every head.
 
-export type OneDayActionRecordType = 'STOCK' | 'CASH'
+export type OneDayActionSectionName = 'stock' | 'cash'
 
 export interface OneDayActionQuery {
-  // Admin console only (2026-11-24): the head the report is for. The app
-  // takes the head from the signed-in user and never sends it.
+  // Admin console only: the head the report is for; left out, every head.
   head_id?: number
-  // Defaults to today server-side when omitted. `to_date` defaults to
-  // whatever `from_date` is, making the single-day case the default.
+  // Default to today server-side; a missing `to_date` means one day.
   from_date?: string
   to_date?: string
-  // Filters `added_by` — who *keyed* the entry, not who the gold or cash
-  // moved between. Labelled "Entered by" in the UI for that reason.
+  // "User": who keyed the entry (`added_by`), in both sections.
   employee_id?: number
-  retailer_id?: number
-  // entry_type: NORMAL | SALES | HEADTOHEAD | the cash-converter types.
-  stocktype?: string
-  // stock_type: IN | OUT. On cash rows the backend maps this onto its own
-  // IN/OUT type groups instead.
+  // Stock section only (cash has no item).
+  item_id?: number
+  // "Stock Type". On cash, IN = the Receive group, OUT = the Pay group.
   type?: 'IN' | 'OUT'
-  // Matches either side of the transfer.
-  given_by_given_to?: number
   given_by?: number
   given_to?: number
-  item_id?: number
+  // Either party has this role.
+  role_id?: number
+  // Only this section comes back (a section's Load More).
+  section?: OneDayActionSectionName
   page_no?: number
+  // 1–1000.
   page_size?: number
 }
 
-export interface OneDayActionRow {
-  // stock_id for STOCK rows, txn_id for CASH rows — the two can collide,
-  // so never key a list on this alone.
+export interface OneDayActionStockRow {
   id: number
-  record_type: OneDayActionRecordType
   entry_type: string
   stock_type: string
-  // Resolved names, already "-" when the relation is missing.
+  // Resolved names, "-" when the relation is missing.
   given_by: string
   given_to: string
-  // Always the literal "CASH" on cash rows.
   item_name: string
-  // Grams on STOCK rows, null on CASH rows.
   grams: number | string | null
-  // Rupee amount on CASH rows, null on STOCK rows.
-  amount: number | string | null
   touch: number | string | null
   purity: number | string | null
   waste_total: number | string | null
@@ -79,6 +51,23 @@ export interface OneDayActionRow {
   is_hided: number
 }
 
+export interface OneDayActionCashRow {
+  id: number
+  // cash_txn_details.type: INCOME, EXPENSE, SALE_GOLD, ...
+  type: string
+  flow: 'IN' | 'OUT'
+  given_by: string
+  given_to: string
+  category_name: string | null
+  amount: number | string | null
+  // CASH_ON_HAND | BANK (older rows may say CASH).
+  payment_method: string | null
+  bank_name: string | null
+  remarks: string | null
+  added_by: number | null
+  added_at: string
+}
+
 export interface OneDayActionPagination {
   current_page: number
   per_page: number
@@ -86,11 +75,14 @@ export interface OneDayActionPagination {
   total_pages: number
 }
 
-export interface OneDayActionResult {
-  // Still counted per source, even though the rows themselves are now one
-  // combined, globally-paginated list.
-  total_stock_count: number
-  total_cash_count: number
-  records: OneDayActionRow[]
+export interface OneDayActionSection<Row> {
+  total_count: number
+  records: Row[]
   pagination: OneDayActionPagination
+}
+
+// Both sections, unless `section` asked for one.
+export interface OneDayActionResult {
+  stock?: OneDayActionSection<OneDayActionStockRow>
+  cash?: OneDayActionSection<OneDayActionCashRow>
 }

@@ -586,6 +586,9 @@ function validate(): boolean {
       fieldErrors.aadhar_number = 'Aadhar number must be 20 characters or fewer.'
     }
   }
+  if (has('employee') && (form.alloy_value ?? '').trim() && !/^\d+(\.\d{1,3})?$/.test((form.alloy_value ?? '').trim())) {
+    fieldErrors.alloy_value = 'Alloy value must be a number of 0 or more with up to 3 decimals.'
+  }
   if (has('salary') && form.per_day_salary) {
     const salary = Number(form.per_day_salary)
     if (!Number.isFinite(salary) || salary < 0) fieldErrors.per_day_salary = 'Per day salary must be a positive amount.'
@@ -1181,6 +1184,24 @@ const errorFor = (prefix: string) =>
           </div>
         </section>
 
+
+        <!-- EMPLOYEE form (2026-11-25): Alloy Value, Is Outside Vendor -->
+        <section v-if="has('employee')" class="grid gap-4 border-t border-slate-200 pt-5 sm:grid-cols-2 lg:grid-cols-4">
+          <BaseInput
+            id="user_alloy_value"
+            v-model="form.alloy_value"
+            label="Alloy value"
+            inputmode="decimal"
+            placeholder="0"
+            :error="fieldErrors.alloy_value"
+          />
+          <BaseSelect
+            id="user_outside_vendor"
+            v-model="form.is_outside_vendor"
+            label="Is outside vendor"
+            :options="salaryOptions"
+          />
+        </section>
 
         <!-- Account (full form) -->
         <section v-if="has('account')" class="flex flex-wrap gap-6 border-t border-slate-200 pt-5">

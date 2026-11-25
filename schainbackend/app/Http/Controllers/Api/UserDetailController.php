@@ -49,6 +49,10 @@ class UserDetailController extends Controller
             'is_item_change_need_shown' => 'sometimes|boolean',
             'is_item_conversion_need_shown' => 'sometimes|boolean',
             'is_phone_book_need_shown' => 'sometimes|boolean',
+
+            // EMPLOYEE form (2026-11-25).
+            'alloy_value' => ['nullable', 'numeric', 'min:0', 'max:999999999', 'regex:/^\d+(\.\d{1,3})?$/'],
+            'is_outside_vendor' => 'sometimes|boolean',
         ];
     }
 
@@ -66,6 +70,9 @@ class UserDetailController extends Controller
         'phone_no.unique' => 'Another user already has this phone number.',
         'additional_phone_no.regex' => 'Additional phone number must be exactly 10 digits.',
         'additional_phone_no.unique' => 'Another user already has this phone number.',
+        'alloy_value.regex' => 'Alloy value must be a number of 0 or more with up to 3 decimals.',
+        'alloy_value.min' => 'Alloy value must be a number of 0 or more with up to 3 decimals.',
+        'alloy_value.numeric' => 'Alloy value must be a number of 0 or more with up to 3 decimals.',
     ];
 
     /*
@@ -216,6 +223,14 @@ class UserDetailController extends Controller
             if ($request->exists($flag)) {
                 $data[$flag] = $request->boolean($flag);
             }
+        }
+
+        // EMPLOYEE form (2026-11-25). Blank alloy value = 0.
+        if ($request->exists('alloy_value')) {
+            $data['alloy_value'] = $request->input('alloy_value') ?? 0;
+        }
+        if ($request->exists('is_outside_vendor')) {
+            $data['is_outside_vendor'] = $request->boolean('is_outside_vendor');
         }
 
         // Blank keeps the current one.

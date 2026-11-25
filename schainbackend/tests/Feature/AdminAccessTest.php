@@ -261,13 +261,14 @@ class AdminAccessTest extends TestCase
         $this->signInToAdminConsoleAs($this->admin);
 
         $this->putJson('/api/v1/admin/user-details/' . $this->employee->user_id, [
-            'name' => 'Renamed',
             'user_name' => 'employee_a',
             'address' => 'Test',
             'phone_no' => '9200000002',
-            'category_name' => 'BOTH',
+            'category_name' => 'PURITY',
         ])->assertOk();
-        $this->assertSame('Renamed', $this->employee->fresh()->name);
+        // Employees have no Name of their own since 2026-11-25 (it follows the
+        // user name); the category is on their form.
+        $this->assertSame('PURITY', $this->employee->fresh()->category_name);
     }
 
     public function test_wrong_special_passwords_lock_the_check(): void

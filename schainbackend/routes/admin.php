@@ -138,6 +138,10 @@ Route::middleware(['auth:admin', 'admin.session', 'admin.audit'])->group(functio
         Route::get('consolidated', [AdminReportController::class, 'consolidated'])->name('consolidated');
         Route::get('one-day-action', [AdminReportController::class, 'oneDayAction'])->name('one-day-action');
         Route::get('id-wise', [AdminReportController::class, 'idWise'])->name('id-wise');
+        // Item Change / Item Conversion history (2026-11-25): every user's,
+        // or one head's (with its mapped employees) when head_id is given.
+        Route::get('item-changes', [AdminReportController::class, 'itemChanges'])->name('item-changes');
+        Route::get('item-conversion-groups', [AdminReportController::class, 'itemConversionGroups'])->name('item-conversion-groups');
     });
 
     // System settings, read-only here (e.g. company_name for the menu); heads

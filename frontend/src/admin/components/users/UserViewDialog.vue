@@ -122,6 +122,16 @@ const money = (value: number | string | null | undefined) =>
           <dt class="text-xs text-slate-500">Joining date</dt>
           <dd class="text-slate-900">{{ user.joining_date ?? '—' }}</dd>
         </div>
+        <template v-if="has('employee')">
+          <div>
+            <dt class="text-xs text-slate-500">Alloy value</dt>
+            <dd class="text-slate-900 tabular-nums">{{ Number(user.alloy_value ?? 0) }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-slate-500">Is outside vendor</dt>
+            <dd class="text-slate-900">{{ user.is_outside_vendor ? 'Yes' : 'No' }}</dd>
+          </div>
+        </template>
         <div>
           <dt class="text-xs text-slate-500">Added</dt>
           <dd class="text-slate-900">{{ formatDateTime(user.added_at) }}</dd>

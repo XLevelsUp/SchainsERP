@@ -10,6 +10,7 @@ import type { CategoryName, UserFeatureFlagKey } from './userDetail'
 export type UserFormSection =
   | 'contact' // address, signature, mailing name
   | 'additional_phone' // "Additional Phone No" (SALARY, 2026-11-23)
+  | 'employee' // "Alloy Value", "Is Outside Vendor" (EMPLOYEE, 2026-11-25)
   | 'remarks'
   | 'customer_comments'
   | 'heads' // the heads a user reports to (stock)

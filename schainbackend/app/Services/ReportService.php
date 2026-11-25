@@ -1042,223 +1042,173 @@ class ReportService
     }
 
     /**
-     * Get One Day Action Report combining Stock and Cash details
+     * One Day Action: the day's stock movements and cash transactions, as two
+     * sections with their own totals and paging (2026-11-25, legacy screen's
+     * "Stock Report" and "Cash Management Report").
+     *
+     * $headId scopes both sections to entries the head is a party to; null
+     * is the admin console's all-heads view. `section` (stock | cash) returns
+     * only that section, for its Load More. Filters: OneDayActionFilters.
      */
     public function getOneDayActionReport(array $filters, ?int $headId): array
     {
-        $employeeId = $filters['employee_id'] ?? null;
-        $fromDate = $filters['from_date'] ?? date('Y-m-d');
-        $toDate = $filters['to_date'] ?? $fromDate;
-        $stockType = $filters['stocktype'] ?? null; // e.g. NORMAL, SALES, HEADTOHEAD
-        $type = $filters['type'] ?? null; // e.g. IN, OUT
-        $givenByGivenTo = $filters['given_by_given_to'] ?? null;
-        $givenBy = $filters['given_by'] ?? null;
-        $givenTo = $filters['given_to'] ?? null;
-        $retailerId = $filters['retailer_id'] ?? null;
-        $itemId = $filters['item_id'] ?? null;
-        $pageNo = $filters['page_no'] ?? 1;
-        $pageSize = $filters['page_size'] ?? 500;
+        $fromDate = ($filters['from_date'] ?? null) ?: date('Y-m-d');
+        $toDate = ($filters['to_date'] ?? null) ?: $fromDate;
+        $pageNo = max(1, (int) ($filters['page_no'] ?? 1));
+        $pageSize = max(1, (int) ($filters['page_size'] ?? 500));
+        $section = $filters['section'] ?? null;
 
-        $userId = null;
-        if ($employeeId) {
-            $userId = (int) $employeeId;
+        $result = [];
+        if ($section !== 'cash') {
+            $result['stock'] = $this->paginateSection(
+                $this->oneDayStockQuery($filters, $headId, $fromDate, $toDate),
+                $pageNo, $pageSize, fn (StockDetails $stock) => $this->oneDayStockRow($stock),
+            );
+        }
+        if ($section !== 'stock') {
+            $result['cash'] = $this->paginateSection(
+                $this->oneDayCashQuery($filters, $headId, $fromDate, $toDate),
+                $pageNo, $pageSize, fn (\App\Models\CashTxnDetail $cash) => $this->oneDayCashRow($cash),
+            );
         }
 
-        // ==========================================
-        // 1. Fetch Stock Details (NORMAL, SALES, HEADTOHEAD, and Cash Converters)
-        // ==========================================
-        $stockQuery = StockDetails::with(['item', 'toItem', 'givenBy', 'givenTo'])
+        return $result;
+    }
+
+    /** Cash types that bring cash to the head (Receive group); the rest send it out. */
+    private const CASH_IN_TYPES = ['INCOME', 'SALE_GOLD', 'CASH_TO_GOLD', 'AUTO_ENTRY', 'IN_CASH_CONVERTER'];
+    private const CASH_OUT_TYPES = ['EXPENSE', 'PURCHASE_GOLD', 'GOLD_TO_CASH', 'OUT_CASH_CONVERTER'];
+
+    private function oneDayStockQuery(array $filters, ?int $headId, string $fromDate, string $toDate): Builder
+    {
+        $query = StockDetails::with(['item', 'givenBy', 'givenTo'])
             ->whereIn('entry_type', [
-                'NORMAL', 'SALES', 'HEADTOHEAD', 
-                'OUT_CASH_CONVERTER', 'IN_CASH_CONVERTER', 
-                'GOLDCASHCONVERSION', 'CashToGold'
-            ]);
+                'NORMAL', 'SALES', 'HEADTOHEAD',
+                'OUT_CASH_CONVERTER', 'IN_CASH_CONVERTER',
+                'GOLDCASHCONVERSION', 'CashToGold',
+            ])
+            ->whereDate('added_at', '>=', $fromDate)
+            ->whereDate('added_at', '<=', $toDate);
 
-        if ($userId) {
-            $stockQuery->where('added_by', $userId);
+        if (!empty($filters['stocktype'])) {
+            $query->where('entry_type', $filters['stocktype']);
+        }
+        if (!empty($filters['type'])) {
+            $query->where('stock_type', $filters['type']);
+        }
+        if (!empty($filters['retailer_id'])) {
+            $query->where('retailer_id', (int) $filters['retailer_id']);
+        }
+        if (!empty($filters['item_id'])) {
+            $itemId = (int) $filters['item_id'];
+            $query->where(fn ($q) => $q->where('item_id', $itemId)->orWhere('to_item_id', $itemId));
         }
 
-        if ($stockType) {
-            $stockQuery->where('entry_type', $stockType);
+        $this->applyOneDayParties($query, $filters, $headId, 'given_by', 'given_to');
+
+        return $query->orderByDesc('added_at')->orderByDesc('stock_id');
+    }
+
+    private function oneDayCashQuery(array $filters, ?int $headId, string $fromDate, string $toDate): Builder
+    {
+        $query = \App\Models\CashTxnDetail::with(['givenByUser', 'givenToUser', 'category', 'bank'])
+            ->whereDate('created_at', '>=', $fromDate)
+            ->whereDate('created_at', '<=', $toDate);
+
+        // Stock Type on cash: IN = the Receive group, OUT = the Pay group.
+        if (($filters['type'] ?? null) === 'IN') {
+            $query->whereIn('type', self::CASH_IN_TYPES);
+        } elseif (($filters['type'] ?? null) === 'OUT') {
+            $query->whereIn('type', self::CASH_OUT_TYPES);
         }
 
-        if ($type) {
-            $stockQuery->where('stock_type', $type);
-        }
+        $this->applyOneDayParties($query, $filters, $headId, 'sender_id', 'recipient_id');
 
-        if ($givenByGivenTo) {
-            $stockQuery->where(function ($q) use ($givenByGivenTo) {
-                $q->where('given_by', $givenByGivenTo)
-                  ->orWhere('given_to', $givenByGivenTo);
-            });
-        }
-        
-        if ($givenBy) {
-            $stockQuery->where('given_by', $givenBy);
-        }
+        return $query->orderByDesc('created_at')->orderByDesc('txn_id');
+    }
 
-        if ($givenTo) {
-            $stockQuery->where('given_to', $givenTo);
+    /** User (entered by), Given By, Given To, Role and the head scope; same for both sections. */
+    private function applyOneDayParties(Builder $query, array $filters, ?int $headId, string $from, string $to): void
+    {
+        if (!empty($filters['employee_id'])) {
+            $query->where('added_by', (int) $filters['employee_id']);
         }
-
-        if ($retailerId) {
-            $stockQuery->where('retailer_id', $retailerId);
+        if (!empty($filters['given_by'])) {
+            $query->where($from, (int) $filters['given_by']);
         }
-
-        if ($itemId) {
-            $stockQuery->where(function ($q) use ($itemId) {
-                $q->where('item_id', $itemId)
-                  ->orWhere('to_item_id', $itemId);
-            });
+        if (!empty($filters['given_to'])) {
+            $query->where($to, (int) $filters['given_to']);
         }
-
-        // Apply strict Head Scoping (Issue #22). Null only for the admin
-        // console's all-heads view (2026-11-24): every head's entries.
+        if (!empty($filters['given_by_given_to'])) {
+            $party = (int) $filters['given_by_given_to'];
+            $query->where(fn ($q) => $q->where($from, $party)->orWhere($to, $party));
+        }
+        // Role: either party has it.
+        if (!empty($filters['role_id'])) {
+            $withRole = UserDetail::query()->select('user_id')->where('role_id', (int) $filters['role_id']);
+            $query->where(fn ($q) => $q->whereIn($from, $withRole)->orWhereIn($to, clone $withRole));
+        }
         if ($headId !== null) {
-            $stockQuery->where(function ($q) use ($headId) {
-                $q->where('given_by', $headId)
-                  ->orWhere('given_to', $headId);
-            });
+            $query->where(fn ($q) => $q->where($from, $headId)->orWhere($to, $headId));
         }
+    }
 
-        // Date Filter (Specific Day or Range)
-        $toDate = $filters['to_date'] ?? $fromDate;
-        if ($fromDate === $toDate) {
-            $stockQuery->whereDate('added_at', $fromDate);
-        } else {
-            $stockQuery->whereDate('added_at', '>=', $fromDate)
-                       ->whereDate('added_at', '<=', $toDate);
-        }
-
-        $stockTotalCount = $stockQuery->count();
-        // Issue #23: Fetch all and paginate later
-        $stockRecords = $stockQuery->orderBy('stock_id', 'desc')->get();
-
-        // Map Stock Details to consistent array output
-        $formattedStockRecords = $stockRecords->map(function ($stock) {
-            return [
-                'id' => $stock->stock_id,
-                'record_type' => 'STOCK',
-                'entry_type' => $stock->entry_type,
-                'stock_type' => $stock->stock_type,
-                'given_by' => $stock->givenBy ? $stock->givenBy->name : '-',
-                'given_to' => $stock->givenTo ? $stock->givenTo->name : '-',
-                'item_name' => $stock->item ? $stock->item->item_name : '-',
-                'grams' => $stock->grams,
-                'amount' => null,
-                'touch' => $stock->touch,
-                'purity' => $stock->purity,
-                'waste_total' => $stock->waste_total,
-                'waste_value' => $stock->waste_value,
-                'remarks' => $stock->remarks,
-                'added_by' => $stock->added_by,
-                'added_at' => $stock->added_at ? $stock->added_at->format('Y-m-d H:i:s') : '-',
-                'is_hided' => $stock->is_hided
-            ];
-        });
-
-        // ==========================================
-        // 2. Fetch Cash Txn Details
-        // ==========================================
-        $cashQuery = \App\Models\CashTxnDetail::with(['givenByUser', 'givenToUser']);
-
-        if ($fromDate === $toDate) {
-            $cashQuery->whereDate('created_at', $fromDate);
-        } else {
-            $cashQuery->whereDate('created_at', '>=', $fromDate)
-                      ->whereDate('created_at', '<=', $toDate);
-        }
-
-        if ($userId) {
-            $cashQuery->where('added_by', $userId);
-        }
-
-        if ($type) {
-            if ($type === 'OUT') {
-                $cashQuery->whereIn('type', ['EXPENSE', 'PURCHASE_GOLD', 'GOLD_TO_CASH', 'OUT_CASH_CONVERTER']);
-            } elseif ($type === 'IN') {
-                $cashQuery->whereIn('type', ['INCOME', 'SALE_GOLD', 'CASH_TO_GOLD', 'AUTO_ENTRY', 'IN_CASH_CONVERTER']);
-            } else {
-                $cashQuery->where('type', $type);
-            }
-        }
-
-        if ($givenByGivenTo) {
-            $cashQuery->where(function ($q) use ($givenByGivenTo) {
-                $q->where('sender_id', $givenByGivenTo)
-                  ->orWhere('recipient_id', $givenByGivenTo);
-            });
-        }
-        
-        if ($givenBy) {
-            $cashQuery->where('sender_id', $givenBy);
-        }
-
-        if ($givenTo) {
-            $cashQuery->where('recipient_id', $givenTo);
-        }
-
-        // Apply strict Head Scoping (Issue #22); null = all heads (admin).
-        if ($headId !== null) {
-            $cashQuery->where(function ($q) use ($headId) {
-                $q->where('sender_id', $headId)
-                  ->orWhere('recipient_id', $headId);
-            });
-        }
-
-        $cashTotalCount = $cashQuery->count();
-        // Issue #23: Fetch all and paginate later
-        $cashRecords = $cashQuery->orderBy('txn_id', 'desc')->get();
-
-        // Map Cash Details to consistent array output
-        $formattedCashRecords = $cashRecords->map(function ($cash) {
-            $mappedStockType = in_array($cash->type, ['INCOME', 'SALE_GOLD', 'CASH_TO_GOLD', 'AUTO_ENTRY', 'IN_CASH_CONVERTER']) ? 'IN' : 'OUT';
-            
-            return [
-                'id' => $cash->txn_id,
-                'record_type' => 'CASH',
-                'entry_type' => 'CASH', // standard
-                'stock_type' => $mappedStockType, // IN/OUT
-                'given_by' => $cash->givenByUser ? $cash->givenByUser->name : '-',
-                'given_to' => $cash->givenToUser ? $cash->givenToUser->name : '-',
-                'item_name' => 'CASH',
-                'grams' => null, 
-                'amount' => $cash->amount, // Fixed Issue #24
-                'touch' => null,
-                'purity' => null,
-                'waste_total' => null,
-                'waste_value' => null,
-                'remarks' => $cash->remarks,
-                'added_by' => $cash->added_by,
-                'added_at' => $cash->created_at ? $cash->created_at->format('Y-m-d H:i:s') : '-',
-                'is_hided' => 0
-            ];
-        });
-
-        // Combine logic
-        $combinedRecords = $formattedStockRecords->concat($formattedCashRecords);
-        // Sort combined by added_at desc
-        $combinedRecords = $combinedRecords->sortByDesc(function ($item) {
-            if ($item['added_at'] === '-') return 0;
-            return \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $item['added_at'])->timestamp;
-        })->values();
-
-        // Issue #23: Paginate the combined dataset mathematically correctly
-        $totalRecords = $combinedRecords->count();
-        $paginatedRecords = $combinedRecords->slice(($pageNo - 1) * $pageSize, $pageSize)->values();
+    private function paginateSection(Builder $query, int $pageNo, int $pageSize, callable $map): array
+    {
+        $total = (clone $query)->count();
+        $records = $query->forPage($pageNo, $pageSize)->get()->map($map)->values();
 
         return [
-            'total_stock_count' => $stockTotalCount,
-            'total_cash_count' => $cashTotalCount,
-            'records' => $paginatedRecords, // Replaced separate lists with the slice
+            'total_count' => $total,
+            'records' => $records,
             'pagination' => [
-                'current_page' => (int)$pageNo,
-                'per_page' => (int)$pageSize,
-                'total_items' => $totalRecords,
-                'total_pages' => ceil($totalRecords / $pageSize),
-            ]
+                'current_page' => $pageNo,
+                'per_page' => $pageSize,
+                'total_items' => $total,
+                'total_pages' => (int) ceil($total / $pageSize),
+            ],
         ];
     }
+
+    private function oneDayStockRow(StockDetails $stock): array
+    {
+        return [
+            'id' => $stock->stock_id,
+            'entry_type' => $stock->entry_type,
+            'stock_type' => $stock->stock_type,
+            'given_by' => $stock->givenBy?->name ?? '-',
+            'given_to' => $stock->givenTo?->name ?? '-',
+            'item_name' => $stock->item?->item_name ?? '-',
+            'grams' => $stock->grams,
+            'touch' => $stock->touch,
+            'purity' => $stock->purity,
+            'waste_total' => $stock->waste_total,
+            'waste_value' => $stock->waste_value,
+            'remarks' => $stock->remarks,
+            'added_by' => $stock->added_by,
+            'added_at' => $stock->added_at ? $stock->added_at->format('Y-m-d H:i:s') : '-',
+            'is_hided' => $stock->is_hided,
+        ];
+    }
+
+    private function oneDayCashRow(\App\Models\CashTxnDetail $cash): array
+    {
+        return [
+            'id' => $cash->txn_id,
+            'type' => $cash->type,
+            'flow' => in_array($cash->type, self::CASH_IN_TYPES, true) ? 'IN' : 'OUT',
+            'given_by' => $cash->givenByUser?->name ?? '-',
+            'given_to' => $cash->givenToUser?->name ?? '-',
+            'category_name' => $cash->category?->category_name,
+            'amount' => $cash->amount,
+            'payment_method' => $cash->payment_method,
+            'bank_name' => $cash->bank?->account_name,
+            'remarks' => $cash->remarks,
+            'added_by' => $cash->added_by,
+            'added_at' => $cash->created_at ? $cash->created_at->format('Y-m-d H:i:s') : '-',
+        ];
+    }
+
     public function getDaywiseGrandReport(array $filters, int $headId): array
     {
         $fromDate = !empty($filters['from_date']) ? $filters['from_date'] : null;

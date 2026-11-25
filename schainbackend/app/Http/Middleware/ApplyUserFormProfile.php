@@ -78,6 +78,13 @@ class ApplyUserFormProfile
                 $input['password'] = Str::random(40);
             }
 
+            // store() requires a mailing name and the column is NOT NULL, but
+            // this form has no Name to default it from: a blank one follows
+            // the user name too.
+            if (trim((string) ($input['mailing_name'] ?? '')) === '' && $userName !== '') {
+                $input['mailing_name'] = $userName;
+            }
+
             $request->replace($input);
         }
 

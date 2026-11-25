@@ -34,13 +34,21 @@ Agreed with the user on 2026-11-21. Applies to all work in this repository, fron
 * **Head Employee Mappings** and **My account** (login password and special password).
 * **Stock reports for every head** (2026-11-24): ID Wise, One Day Action, Consolidated, Items OB CB, reusing the heads' screens with a console data source (`/admin/reports/*`, `AdminReportController`).
   * Items OB CB and Consolidated are grouped by head: one section per head, each with its own paging and export, plus a Head filter. The figures are exactly as that head sees them.
-  * One Day Action shows every head's entries in one feed, with a Head filter. ID Wise opens any stock ID; the per-row receipt print is hidden in the console.
+  * One Day Action covers every head, with a Head filter (empty = all heads). ID Wise opens any stock ID; the per-row receipt print is hidden in the console.
+* **One Day Action** (2026-11-25), in both logins: two sections like the legacy screen, **Stock Report** and **Cash Management Report**, each with its Total and its own Load More (`section=stock|cash`). Both sections start closed (the header shows the Total). Today by default; empty To Date = one day.
+  * Filters as on the legacy screen: User (entered by, `added_by`), Items (stock only), Stock Type IN/OUT (on cash: the Receive / Pay groups), Given By, Given To, Role (either party has it, `role_id`). Rules: `App\Support\OneDayActionFilters`.
+  * Export: one CSV of both sections with a Section column; pages not loaded yet are fetched first.
+* **Item Conversion Group History** and **Item Change History** (2026-11-25), in both logins: what the Stocks page's Item Conversion (`gold_conversions` + alloys) and Item Change (`item_change_history`) recorded. `ItemHistoryReportService`; app `GET /stock/reports/item-conversion-groups|item-changes`, console `/admin/reports/…`.
+  * Neither table stores who did it: the user is `given_by` on the OUT stock row (both features only work on the user's own stock), which also gives the remarks. The automatic "Item … from: <id>" remark is shown as none.
+  * App: the signed-in user's own records plus a head's mapped employees' (`scopeFor`). Each page needs its feature's permission (`is_item_conversion_need_shown` / `is_item_change_need_shown`), on the route and the menu link. Console: every user, or a head (with its employees) via the Head filter.
+  * Conversions are **grouped by item pair** (source → target), pairs in Orders No order, each group with its count and totals, foldable, its conversions newest first (alloys, bill no). Changes: one row each, newest first, totals over the whole search.
+  * Filters: Item (either side), From / To Date (the pages open on the current month, 1st to today, agreed 2026-11-25; the endpoints alone default to today; empty To Date = one day). Stock IDs link to ID Wise, which now opens `?stock_id=`.
 * **Customer Touch** is also managed from the console (heads keep theirs in the app).
 
 ## Side menus (agreed 2026-11-24)
 
-* **App:** Stocks, Cash Management, Consolidated Report, Items OB CB, One Day Action Report, *company group*, ID Wise, Phone Book. Every other screen is in **More** at the bottom.
-* **Console:** Roles, Phone Book, Users, ID Wise, One Day Action Report, Consolidated Report, Items OB CB, *company group*, Customer Touch, Items, Salary, then Head Employee Mappings and My account.
+* **App:** Stocks, Cash Management, Consolidated Report, Items OB CB, One Day Action Report, Item Conversion Group History, Item Change History (2026-11-25, each with its permission), *company group*, ID Wise, Phone Book. Every other screen is in **More** at the bottom.
+* **Console:** Roles, Phone Book, Users, ID Wise, One Day Action Report, Item Conversion Group History, Item Change History, Consolidated Report, Items OB CB, *company group*, Customer Touch, Items, Salary, then Head Employee Mappings and My account.
 * **Company group** (both logins): headed with the `company_name` system setting (NIHAA JEWELS; heads can change it in System Settings). Children: Roles History, Customers, Employees, Retailers, Customer FITEM.
 * **Not built yet:** the company group's pages and the console's Salary open `ComingSoonView`; build each when its screens come.
 * The menus live in `lib/nav.ts` (`buildNavItems`, `companyGroup`, `COMPANY_PAGES`) and `admin/lib/nav.ts` (`buildAdminNavItems`).
@@ -55,12 +63,13 @@ Agreed with the user on 2026-11-21. Applies to all work in this repository, fron
 * `App\Support\UserFormProfiles` is the single source of truth. It maps a role name to the form sections and permission flags that role allows.
 * The console draws the form from `GET /api/v1/admin/user-form-profiles`.
 * `ApplyUserFormProfile` enforces the profile on save.
-* A role without a profile gets the full form.
-* **Profiles so far: ADMIN, HEAD, CUSTOMER and SALARY.** Add one entry per role as the user specifies it.
+* A role without a profile gets the full form: every section except the role-only ones (`ROLE_ONLY_SECTIONS`: HEAD's Head users, SALARY's Additional phone, EMPLOYEE's Alloy value / Is outside vendor). Their input is dropped on save too (fixed 2026-11-25).
+* **Profiles so far: ADMIN, HEAD, CUSTOMER, SALARY and EMPLOYEE.** Add one entry per role as the user specifies it. PURCHASE and the other roles still get the full form.
 * A profile can also set `signs_in: false` (no Name or Password on the form; the name follows the user name and a random password is set), `default_category` and `default_primary_item` (what a new user starts with), `default_flags` (permissions a new user starts with on) and `joining_date_defaults_to_today`. On create, the defaults follow a role change (`applyRoleDefaults` in `admin/lib/userForm.ts`).
   * CUSTOMER: no sign-in, PURITY, GOLD. Customers are records for tracking, not accounts.
   * SALARY: no sign-in, GRAMS, GOLD, salary person YES, joining date today, plus an Additional phone no.
   * HEAD: category BOTH and GOLD as the primary item (2026-11-24).
+  * EMPLOYEE (2026-11-25): the legacy employee form. No sign-in, BOTH, GOLD, joining date today; Head lists, items, balances, image, joining date, plus **Alloy value** (`alloy_value`, 0 or more, 3 decimals, stored only) and **Is outside vendor** (`is_outside_vendor`, separate from the "Show outside" permission). No permission switches; existing employees keep their saved switches.
   * The GOLD item exists on Aiven since 2026-11-24 (item #9, created with the table defaults: default touch 92, item touch 0). Item rows on the form: the item and Primary can be changed; grams and purity stay read-only, because transactions keep them.
 * **Opening balance updates** (2026-11-24): the only manual way to change a user's balances.
   * The buttons: Grams / Purity on each item row, and GRAMS / PURITY / CASH / RTGS on the balances. The modal has Remarks, Previous, Value and Closing, where closing = previous + value (negative reduces).

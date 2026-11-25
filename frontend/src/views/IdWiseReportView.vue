@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Printer } from 'lucide-vue-next'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
@@ -140,6 +141,18 @@ watch(stockIdInput, () => {
 
 onBeforeUnmount(() => {
   if (autoSearchTimer) clearTimeout(autoSearchTimer)
+})
+
+// ?stock_id= opens that stock at once (2026-11-25: the stock ID links on
+// Item Change / Item Conversion Group History).
+const route = useRoute()
+onMounted(async () => {
+  const fromQuery = route.query.stock_id
+  if (typeof fromQuery !== 'string' || !/^\d+$/.test(fromQuery)) return
+  stockIdInput.value = fromQuery
+  // Let the input watcher run first, then search now instead of after its delay.
+  await nextTick()
+  submitSearch()
 })
 
 function printReport() {

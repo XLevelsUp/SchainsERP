@@ -9,7 +9,11 @@ const REPORT_PATHS = {
   consolidated: 'consolidated-report',
   'one-day-action': 'one-day-action',
   'id-wise': 'id-wise-report',
+  'item-conversion-groups': 'item-conversion-group-history',
+  'item-changes': 'item-change-history',
 } as const
+
+export type AdminReport = keyof typeof REPORT_PATHS
 
 // The admin console's screens, all under /admin. Admins create users,
 // assign them to heads and create roles (agreed 2026-11-20); everything
@@ -39,7 +43,8 @@ export const adminRoutes: RouteRecordRaw[] = [
       { path: 'roles', name: 'admin-roles', component: () => import('./views/RolesView.vue') },
       { path: 'phone-book', name: 'admin-phone-book', component: () => import('./views/PhoneBookView.vue') },
       // The heads' stock reports, for every head (2026-11-24).
-      ...(['items-obcb', 'consolidated', 'one-day-action', 'id-wise'] as const).map((report) => ({
+      // Item Conversion / Item Change history added 2026-11-25.
+      ...(Object.keys(REPORT_PATHS) as AdminReport[]).map((report) => ({
         path: REPORT_PATHS[report],
         name: `admin-${report}`,
         component: () => import('./views/reports/AdminReportPage.vue'),

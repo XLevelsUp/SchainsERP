@@ -8,7 +8,9 @@ import {
   HandCoins,
   KeyRound,
   Network,
+  Repeat,
   ShieldCheck,
+  Shuffle,
   UserCog,
 } from 'lucide-vue-next'
 import { companyGroup } from '@/lib/nav'
@@ -16,7 +18,8 @@ import type { NavItem } from '@/types/nav'
 
 /**
  * The admin console's sidebar, in the order agreed on 2026-11-24: Roles,
- * Phone Book, Users, ID Wise, One Day Action Report, Consolidated Report,
+ * Phone Book, Users, ID Wise, One Day Action Report, (2026-11-25) Item
+ * Conversion Group History, Item Change History, Consolidated Report,
  * Items OB CB, the company group, Customer Touch, Salary — then Head
  * Employee Mappings and My account. Salary and the company group's pages
  * aren't built yet (ComingSoonView).
@@ -28,6 +31,14 @@ export function buildAdminNavItems(companyName: string): NavItem[] {
     { type: 'link', label: 'Users', to: '/admin/users', icon: UserCog },
     { type: 'link', label: 'ID Wise', to: '/admin/id-wise-report', icon: ArrowUpDown },
     { type: 'link', label: 'One Day Action Report', to: '/admin/one-day-action', icon: CalendarClock },
+    // Every head's Item Conversion / Item Change history (2026-11-25).
+    {
+      type: 'link',
+      label: 'Item Conversion Group History',
+      to: '/admin/item-conversion-group-history',
+      icon: Shuffle,
+    },
+    { type: 'link', label: 'Item Change History', to: '/admin/item-change-history', icon: Repeat },
     { type: 'link', label: 'Consolidated Report', to: '/admin/consolidated-report', icon: ChartBar },
     { type: 'link', label: 'Items OB CB', to: '/admin/items-obcb-report', icon: ChartBar },
     companyGroup(companyName, '/admin'),

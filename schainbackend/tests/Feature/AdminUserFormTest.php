@@ -47,7 +47,9 @@ class AdminUserFormTest extends TestCase
         parent::setUp();
 
         $this->headRole = Role::create(['role' => 'HEAD']);
-        $this->employeeRole = Role::create(['role' => 'EMPLOYEE']);
+        // A role without its own profile (the full form). EMPLOYEE has its own
+        // since 2026-11-25, so PURCHASE stands in.
+        $this->employeeRole = Role::create(['role' => 'PURCHASE']);
         $this->adminRole = Role::create(['role' => 'ADMIN']);
 
         $this->head = $this->makeUser('head_a', $this->headRole->id, '9400000001');
@@ -145,7 +147,14 @@ class AdminUserFormTest extends TestCase
         // A role without its own profile keeps the full form.
         $employee = $data['by_role_id'][(string) $this->employeeRole->id];
         $this->assertTrue($employee['is_default']);
-        $this->assertSame($data['sections'], $employee['sections']);
+        // Every section except the role-only ones (HEAD's Head users, SALARY's
+        // Additional phone, EMPLOYEE's alloy / outside vendor): 2026-11-25.
+        $this->assertSame(
+            array_values(array_diff($data['sections'], ['head_users', 'additional_phone', 'employee'])),
+            $employee['sections'],
+        );
+        $this->assertNotContains('head_users', $employee['sections']);
+        $this->assertContains('heads', $employee['sections']);
         $this->assertSame($data['flags'], $employee['flags']);
     }
 

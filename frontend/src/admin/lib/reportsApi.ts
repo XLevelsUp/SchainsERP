@@ -1,5 +1,6 @@
 import type { ApiResponse } from '@/lib/api'
 import { adminSession } from '@/lib/authSession'
+import { createItemHistoryApi } from '@/lib/itemHistory'
 import { createStockReportsApi } from '@/lib/stockReportsApi'
 import type { OneDayActionQuery, OneDayActionResult } from '@/types'
 import { ADMIN_BASE_URL, adminApi } from './adminApi'
@@ -22,6 +23,10 @@ function buildQuery(params: OneDayActionQuery): string {
   const s = qs.toString()
   return s ? `?${s}` : ''
 }
+
+// Item Change / Item Conversion history (2026-11-25): every user's, or one
+// head's (with its mapped employees) when head_id is given.
+export const adminItemHistoryApi = createItemHistoryApi(adminApi, '/reports')
 
 export const adminOneDayActionApi = {
   get: (params: OneDayActionQuery) =>

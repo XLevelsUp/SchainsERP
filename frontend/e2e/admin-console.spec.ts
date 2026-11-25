@@ -1,5 +1,13 @@
 import { expect, test } from '@playwright/test'
-import { adminCredentials, pick, shot, signInToAdminConsole } from './support'
+import {
+  adminCredentials,
+  badgeCount,
+  expectItemHistoryPage,
+  expectOneDayActionPage,
+  pick,
+  shot,
+  signInToAdminConsole,
+} from './support'
 
 // The admin console: its own sign-in, the Users list, the role-driven user
 // form and the Roles page. Read-only — the form is opened and cancelled.
@@ -139,6 +147,45 @@ test.describe('signed in', () => {
   })
 
   // Read-only: the form is opened and cancelled.
+  test('the EMPLOYEE form follows the legacy one: no sign-in, BOTH, GOLD, today, alloy value, outside vendor', async ({ page }, testInfo) => {
+    await signInToAdminConsole(page)
+    await page.getByRole('button', { name: 'New user' }).click()
+    await pick(page, 'user_role', 'EMPLOYEE')
+    await expect(page.getByText('EMPLOYEE form', { exact: false })).toBeVisible()
+
+    // No sign-in: no Name or Password.
+    await expect(page.locator('#user_full_name')).toHaveCount(0)
+    await expect(page.locator('#user_password')).toHaveCount(0)
+    // Defaults.
+    await expect(page.locator('#user_category')).toContainText('Both')
+    const itemsSection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Items', exact: true }) })
+    await expect(itemsSection.getByRole('button', { name: /^GOLD/ })).toBeVisible()
+    await expect(itemsSection.getByRole('checkbox', { name: 'Primary' })).toBeChecked()
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    await expect(page.locator('#user_joining_date')).toHaveValue(today)
+    await expect(page.locator('#user_alloy_value')).toHaveValue('0')
+    await expect(page.locator('#user_outside_vendor')).toContainText('No')
+
+    for (const label of ['Head lists', 'Balances', 'Image']) {
+      await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+    // Not on the legacy employee form.
+    for (const label of ['Head users', 'Cash heads', 'Customer comments', 'Customer touches', 'Aadhar number', 'Salary person', 'Report password', 'Permissions']) {
+      await expect(page.getByText(label, { exact: true })).toHaveCount(0)
+    }
+    await expect(page.locator('#user_additional_phone')).toHaveCount(0)
+
+    // Alloy value: a number of 0 or more, up to 3 decimals.
+    await page.locator('#user_alloy_value').fill('1.2345')
+    await page.getByRole('button', { name: 'Create user' }).click()
+    await expect(page.getByText('Alloy value must be a number of 0 or more with up to 3 decimals.').first()).toBeVisible()
+    await page.locator('#user_alloy_value').fill('0')
+    await shot(page, testInfo, 'admin-user-form-employee')
+    await page.getByRole('button', { name: 'Cancel' }).click()
+  })
+
+  // Read-only: the form is opened and cancelled.
   test('the CUSTOMER form: no name or password, PURITY by default, its six switches', async ({ page }, testInfo) => {
     await signInToAdminConsole(page)
     await page.getByRole('button', { name: 'New user' }).click()
@@ -245,7 +292,8 @@ test.describe('signed in', () => {
     await expect(sidebar.getByRole('button', { name: 'NIHAA JEWELS' })).toBeVisible()
     const top = (await sidebar.locator(':scope > a, :scope > div > button').allInnerTexts()).map((t) => t.trim())
     expect(top).toEqual([
-      'Roles', 'Phone Book', 'Users', 'ID Wise', 'One Day Action Report', 'Consolidated Report', 'Items OB CB',
+      'Roles', 'Phone Book', 'Users', 'ID Wise', 'One Day Action Report', 'Item Conversion Group History',
+      'Item Change History', 'Consolidated Report', 'Items OB CB',
       'NIHAA JEWELS', 'Customer Touch', 'Items', 'Salary', 'Head Employee Mappings', 'My account',
     ])
 
@@ -286,13 +334,67 @@ test.describe('signed in', () => {
     await shot(page, testInfo, 'admin-consolidated')
 
     await sidebar.getByRole('link', { name: 'One Day Action Report' }).click()
-    await expect(page.getByRole('heading', { name: 'One Day Action' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'One Day Action Report' })).toBeVisible()
     await expect(page.locator('#report_head')).toBeVisible()
+    await expectOneDayActionPage(page)
     await shot(page, testInfo, 'admin-one-day-action')
 
     await sidebar.getByRole('link', { name: 'ID Wise' }).click()
     await expect(page).toHaveURL(/\/admin\/id-wise-report$/)
     await expect(page.getByRole('columnheader', { name: 'Print' })).toHaveCount(0)
+  })
+
+  // Read-only: the reports are searched, nothing is saved.
+  test('the item history pages cover every head, and a stock ID opens ID Wise', async ({ page }, testInfo) => {
+    await signInToAdminConsole(page)
+    const sidebar = page.getByRole('navigation').first()
+
+    await sidebar.getByRole('link', { name: 'Item Change History' }).click()
+    await expect(page).toHaveURL(/\/admin\/item-change-history$/)
+    await expect(page.getByRole('heading', { name: 'Item Change History' })).toBeVisible()
+    await expect(page.locator('#report_head')).toBeVisible()
+    await expectItemHistoryPage(page, 'ich')
+    const changes = await badgeCount(page, 'Total')
+    for (const name of [
+      'Date', 'User', 'From Item → To Item', 'Grams', 'From Touch', 'Req. Touch',
+      'From Purity', 'To Purity', 'Remarks', 'Stock IDs (Out / In)',
+    ]) {
+      await expect(page.getByRole('columnheader', { name, exact: true })).toBeVisible()
+    }
+    await shot(page, testInfo, 'admin-item-change-history')
+
+    // A stock ID opens that stock in ID Wise.
+    if (changes > 0) {
+      const link = page.getByRole('link', { name: /^\d+$/ }).first()
+      const stockId = (await link.innerText()).trim()
+      await link.click()
+      await expect(page).toHaveURL(new RegExp(`/admin/id-wise-report\\?stock_id=${stockId}$`))
+      await expect(page.getByRole('columnheader', { name: 'Entry Type' })).toBeVisible()
+      await expect(page.getByRole('cell', { name: stockId, exact: true }).first()).toBeVisible()
+      await shot(page, testInfo, 'admin-item-change-to-id-wise')
+    }
+
+    await sidebar.getByRole('link', { name: 'Item Conversion Group History' }).click()
+    await expect(page).toHaveURL(/\/admin\/item-conversion-group-history$/)
+    await expect(page.getByRole('heading', { name: 'Item Conversion Group History' })).toBeVisible()
+    await expect(page.locator('#report_head')).toBeVisible()
+    await expectItemHistoryPage(page, 'icg')
+    await badgeCount(page, 'Conversions')
+    if ((await badgeCount(page, 'Groups')) > 0) {
+      // Each group (an item pair) folds away and opens again.
+      const toggle = page.getByRole('button', { name: /→.*conversions?/ }).first()
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      await expect(page.getByRole('columnheader', { name: 'Converted Grams' }).first()).toBeVisible()
+      await expect(page.getByRole('columnheader', { name: 'Alloys' }).first()).toBeVisible()
+      await expect(page.getByRole('columnheader', { name: 'Bill No' }).first()).toBeVisible()
+      await toggle.click()
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      await toggle.click()
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    } else {
+      await expect(page.getByText('No item conversions for these filters.')).toBeVisible()
+    }
+    await shot(page, testInfo, 'admin-item-conversion-group-history')
   })
 
   // Read-only: the modal is opened, checked and closed.

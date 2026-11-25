@@ -2,12 +2,14 @@ import { onMounted, ref } from 'vue'
 import type {
   ConsolidatedSource,
   IdWiseSource,
+  ItemChangeHistorySource,
+  ItemConversionGroupSource,
   ItemsObcbSource,
   OneDayActionSource,
   ReportHead,
 } from '@/lib/reportSources'
-import { itemsApi, userDetailsApi } from './resources'
-import { adminOneDayActionApi, adminStockReportsApi } from './reportsApi'
+import { itemsApi, rolesApi, userDetailsApi } from './resources'
+import { adminItemHistoryApi, adminOneDayActionApi, adminStockReportsApi } from './reportsApi'
 
 // The report screens' data in the admin console (2026-11-24): every user in
 // the party pickers, and the /admin/reports routes.
@@ -31,7 +33,18 @@ export const adminConsolidatedSource: ConsolidatedSource = {
 
 export const adminOneDayActionSource: OneDayActionSource = {
   fetch: adminOneDayActionApi.get,
+  loadRoles: () => rolesApi.list(),
   ...lookups,
+}
+
+export const adminItemChangeHistorySource: ItemChangeHistorySource = {
+  fetch: adminItemHistoryApi.getItemChanges,
+  loadItems: lookups.loadItems,
+}
+
+export const adminItemConversionGroupSource: ItemConversionGroupSource = {
+  fetch: adminItemHistoryApi.getConversionGroups,
+  loadItems: lookups.loadItems,
 }
 
 export const adminIdWiseSource: IdWiseSource = {

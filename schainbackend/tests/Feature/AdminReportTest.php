@@ -82,12 +82,12 @@ class AdminReportTest extends TestCase
         $this->signInToAdminConsoleAs($this->admin);
 
         $all = $this->getJson('/api/v1/admin/reports/one-day-action')->assertOk()->json('data');
-        $ids = collect($all['records'] ?? $all['combined_records'] ?? [])->pluck('id')->filter()->all();
+        $ids = collect($all['stock']['records'])->pluck('id')->all();
         $this->assertContains($fromA->stock_id, $ids);
         $this->assertContains($fromB->stock_id, $ids);
 
         $onlyA = $this->getJson('/api/v1/admin/reports/one-day-action?head_id=' . $this->headA->user_id)->assertOk()->json('data');
-        $idsA = collect($onlyA['records'] ?? $onlyA['combined_records'] ?? [])->pluck('id')->filter()->all();
+        $idsA = collect($onlyA['stock']['records'])->pluck('id')->all();
         $this->assertContains($fromA->stock_id, $idsA);
         $this->assertNotContains($fromB->stock_id, $idsA);
 

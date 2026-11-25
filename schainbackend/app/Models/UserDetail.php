@@ -107,6 +107,9 @@ class UserDetail extends Model
         'is_phone_book_need_shown',
         // SALARY user form (2026-11-23).
         'additional_phone_no',
+        // EMPLOYEE user form (2026-11-25).
+        'alloy_value',
+        'is_outside_vendor',
         'grams_grand_total',
         'purity_grand_total',
         'rak_cash_balance',
@@ -165,6 +168,7 @@ class UserDetail extends Model
         'is_item_change_need_shown' => 'boolean',
         'is_item_conversion_need_shown' => 'boolean',
         'is_phone_book_need_shown' => 'boolean',
+        'is_outside_vendor' => 'boolean',
 
         'is_act_as_head_enabled' => 'boolean',
 

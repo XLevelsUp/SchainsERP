@@ -39,7 +39,8 @@ function toPayload(form: UserDetailFormValues, includePassword = true) {
     proff: form.proff.trim() || '-',
     role_id: form.role_id,
     system_id: form.system_id.trim() || newSystemId(),
-    mailing_name: form.mailing_name.trim() || form.name,
+    // Roles that don't sign in (CUSTOMER, SALARY) have no Name on the form.
+    mailing_name: form.mailing_name.trim() || form.name.trim() || form.user_name.trim(),
     customer_commants: form.customer_commants || null,
     category_name: form.category_name,
     is_active: form.is_active,
@@ -92,6 +93,9 @@ function toPayload(form: UserDetailFormValues, includePassword = true) {
   if (form.per_day_salary !== undefined) payload.per_day_salary = form.per_day_salary === '' ? null : form.per_day_salary
   // SALARY form (2026-11-23).
   if (form.additional_phone_no !== undefined) payload.additional_phone_no = form.additional_phone_no.trim() || null
+  // EMPLOYEE form (2026-11-25); other roles' saves drop them server-side.
+  if (form.alloy_value !== undefined) payload.alloy_value = form.alloy_value.trim() === '' ? 0 : form.alloy_value.trim()
+  if (form.is_outside_vendor !== undefined) payload.is_outside_vendor = form.is_outside_vendor
   // A new user's opening balances (2026-11-24); only when there are some,
   // since sending the key at all asks for the special password.
   if (form.opening_balances?.length) {

@@ -25,6 +25,8 @@ import {
   History,
   Store,
   UserRound,
+  Shuffle,
+  Repeat,
 } from 'lucide-vue-next'
 import type { AppPermission } from '@/types'
 import type { NavGroup, NavItem } from '@/types/nav'
@@ -68,7 +70,8 @@ export function companyGroup(companyName: string, base: '' | '/admin'): NavGroup
 
 /**
  * The app's sidebar, in the order agreed on 2026-11-24: Stocks, Cash
- * Management, Consolidated Report, Items OB CB, One Day Action Report, the
+ * Management, Consolidated Report, Items OB CB, One Day Action Report,
+ * (2026-11-25) Item Conversion Group History and Item Change History, the
  * company group, ID Wise, Phone Book. Every other screen sits in "More" at
  * the bottom, so nothing becomes unreachable.
  */
@@ -79,6 +82,22 @@ export function buildNavItems(companyName: string): NavItem[] {
     { type: 'link', label: 'Consolidated Report', to: '/consolidated-report', icon: ChartBar },
     { type: 'link', label: 'Items OB CB', to: '/items-obcb-report', icon: ChartBar },
     { type: 'link', label: 'One Day Action Report', to: '/one-day-action', icon: CalendarClock },
+    // 2026-11-25: the Stocks page's Item Conversion / Item Change history,
+    // each shown with its feature's permission.
+    {
+      type: 'link',
+      label: 'Item Conversion Group History',
+      to: '/item-conversion-group-history',
+      icon: Shuffle,
+      permission: 'is_item_conversion_need_shown',
+    },
+    {
+      type: 'link',
+      label: 'Item Change History',
+      to: '/item-change-history',
+      icon: Repeat,
+      permission: 'is_item_change_need_shown',
+    },
     companyGroup(companyName, ''),
     { type: 'link', label: 'ID Wise', to: '/id-wise-report', icon: ArrowUpDown },
     {

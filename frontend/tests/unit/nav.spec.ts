@@ -22,6 +22,8 @@ describe('the side menus (2026-11-24)', () => {
       'Consolidated Report',
       'Items OB CB',
       'One Day Action Report',
+      'Item Conversion Group History',
+      'Item Change History',
       'NIHAA JEWELS',
       'ID Wise',
       'Phone Book',
@@ -51,6 +53,24 @@ describe('the side menus (2026-11-24)', () => {
     expect(labels(visibleNavItems(buildNavItems('X'), () => true))).toContain('Phone Book')
   })
 
+  it('shows each item history page only with its Stocks page feature (2026-11-25)', () => {
+    const shown = (granted: string[]) =>
+      labels(visibleNavItems(buildNavItems('X'), (p) => granted.includes(p))).filter((l) => l.startsWith('Item '))
+    expect(shown([])).toEqual([])
+    expect(shown(['is_item_conversion_need_shown'])).toEqual(['Item Conversion Group History'])
+    expect(shown(['is_item_change_need_shown'])).toEqual(['Item Change History'])
+    expect(shown(['is_item_conversion_need_shown', 'is_item_change_need_shown'])).toEqual([
+      'Item Conversion Group History',
+      'Item Change History',
+    ])
+    // The console's links have no permission: admins see every head's.
+    const admin = buildAdminNavItems('X').filter((i) => i.label.startsWith('Item ') && i.type === 'link')
+    expect(admin.map((i) => (i.type === 'link' ? [i.to, i.permission] : []))).toEqual([
+      ['/admin/item-conversion-group-history', undefined],
+      ['/admin/item-change-history', undefined],
+    ])
+  })
+
   it('orders the admin menu as agreed, with Salary and the company group', () => {
     const items = buildAdminNavItems('NIHAA JEWELS')
     expect(labels(items)).toEqual([
@@ -59,6 +79,8 @@ describe('the side menus (2026-11-24)', () => {
       'Users',
       'ID Wise',
       'One Day Action Report',
+      'Item Conversion Group History',
+      'Item Change History',
       'Consolidated Report',
       'Items OB CB',
       'NIHAA JEWELS',

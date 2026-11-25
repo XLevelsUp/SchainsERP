@@ -63,6 +63,11 @@ describe('the CUSTOMER profile', () => {
     })
     expect(FULL_USER_FORM_PROFILE.signs_in).toBe(true)
     expect(FULL_USER_FORM_PROFILE.default_category).toBeNull()
+    // The full form has no role-only sections (fixed 2026-11-25).
+    expect(FULL_USER_FORM_PROFILE.sections).not.toContain('head_users')
+    expect(FULL_USER_FORM_PROFILE.sections).not.toContain('additional_phone')
+    expect(FULL_USER_FORM_PROFILE.sections).not.toContain('employee')
+    expect(FULL_USER_FORM_PROFILE.sections).toContain('heads')
   })
 })
 
